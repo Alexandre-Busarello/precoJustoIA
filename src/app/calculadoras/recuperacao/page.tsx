@@ -1,16 +1,16 @@
 import { Metadata } from "next"
 import { Suspense } from "react"
-import { RecoveryCalculatorClient } from "../../../components/recovery-calculator-client"
-import { Card, CardContent } from "@/components/ui/card"
-import { Calculator, TrendingDown, Target, DollarSign } from "lucide-react"
+import { RecoveryCalculatorClient } from "@/components/recovery-calculator-client"
+import { PageHeader } from "@/components/page-header"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const BASE_URL = "https://precojusto.ai"
 const PAGE_URL = `${BASE_URL}/calculadoras/recuperacao`
 
 export const metadata: Metadata = {
-  title: "Calculadora de Recuperação Grátis | Aporte Ideal para Recuperar Prejuízo em Ações | Preço Justo AI",
+  title: "Calculadora de recuperação: aporte para recuperar prejuízo em ações",
   description:
-    "Calculadora de recuperação gratuita e sem cadastro. Descubra quantas ações comprar para recuperar prejuízo ou sair com lucro. Calcule o aporte ideal para preço médio em ações da B3.",
+    "Calculadora de recuperação gratuita e sem cadastro. Simule quantas ações adicionar e qual aporte seria necessário para empatar ou sair com lucro em uma ação da B3.",
   keywords: [
     "calculadora recuperação",
     "calculadora recuperação ações",
@@ -25,9 +25,9 @@ export const metadata: Metadata = {
     "calculadora investimentos grátis",
   ],
   openGraph: {
-    title: "Calculadora de Recuperação Grátis | Aporte Ideal para Recuperar Prejuízo | Preço Justo AI",
+    title: "Calculadora de recuperação de prejuízo em ações",
     description:
-      "Calcule o aporte ideal para recuperar prejuízo ou lucrar em ações. Ferramenta gratuita e sem cadastro.",
+      "Simule o aporte necessário para recuperar prejuízo em ações. Gratuita e sem cadastro.",
     type: "website",
     url: PAGE_URL,
     siteName: "Preço Justo AI",
@@ -35,11 +35,11 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Calculadora de Recuperação Grátis | Preço Justo AI",
-    description: "Calcule o aporte ideal para recuperar prejuízo ou sair com lucro em ações.",
+    title: "Calculadora de recuperação",
+    description: "Simule o aporte necessário para empatar ou sair com lucro em ações.",
   },
   alternates: {
-    canonical: PAGE_URL,
+    canonical: "/calculadoras/recuperacao",
   },
   robots: {
     index: true,
@@ -51,125 +51,75 @@ export const metadata: Metadata = {
   },
 }
 
+const steps = [
+  { title: "Informe sua posição", text: "Preço médio, quantidade e cotação atual da ação." },
+  { title: "Defina o cenário", text: "Quanto o ativo pode subir e com quanto de lucro você quer sair." },
+  { title: "Veja a simulação", text: "Quantas ações adicionar, o aporte e o novo preço médio." },
+]
+
+const faqs = [
+  {
+    q: "O que é a calculadora de recuperação?",
+    a: "Uma simulação de quantas ações você precisaria adicionar à posição para empatar ou sair com lucro, considerando uma alta do ativo. Ela também mostra a matemática da perda: uma queda de 50% exige alta de 100% para empatar.",
+  },
+  {
+    q: "Como o aporte é calculado?",
+    a: "Você informa preço médio, quantidade e cotação atual, e define a alta considerada e o lucro desejado. A calculadora mostra quantas ações adicionar, o aporte e o novo preço médio.",
+  },
+  {
+    q: "A calculadora é gratuita?",
+    a: "Sim. Sem cadastro, você faz 2 cálculos; com conta gratuita, 3 por mês; no Premium, o uso é ilimitado.",
+  },
+]
+
 export default function RecoveryCalculatorPage() {
   return (
-    <div className="container mx-auto px-4 py-8 lg:py-12">
-      <div className="text-center mb-8 lg:mb-12">
-        <div className="inline-flex items-center gap-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full px-4 py-2 mb-4">
-          <Calculator className="w-4 h-4" />
-          <span className="text-sm font-semibold">Ferramenta Gratuita</span>
-        </div>
-        <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-          Calculadora de{" "}
-          <span className="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
-            Recuperação
-          </span>
-        </h1>
-        <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto mb-6">
-          Descubra quanto aportar para recuperar seu prejuízo ou sair com lucro.
-          Desmistifique a matemática da perda e planeje sua estratégia.
-        </p>
-      </div>
+    <div className="container mx-auto max-w-6xl space-y-10 px-4 py-6 sm:py-8">
+      <PageHeader
+        breadcrumb={[{ label: "Calculadoras", href: "/calculadoras" }, { label: "Recuperação" }]}
+        title="Calculadora de recuperação"
+        description="Quantas ações adicionar, e com qual aporte, para empatar ou sair com lucro se o ativo subir."
+      />
 
-      <div className="max-w-2xl mx-auto mb-12">
-        <Suspense
-          fallback={
-            <Card>
-              <CardContent className="py-12">
-                <div className="text-center text-muted-foreground">
-                  Carregando calculadora...
-                </div>
-              </CardContent>
-            </Card>
-          }
-        >
-          <RecoveryCalculatorClient />
-        </Suspense>
-      </div>
+      <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+        <RecoveryCalculatorClient />
+      </Suspense>
 
-      <div className="max-w-4xl mx-auto mt-16">
-        <h2 className="text-2xl font-bold text-center mb-8">
-          Como funciona a Calculadora de Recuperação?
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-4">
-                  <TrendingDown className="w-6 h-6 text-emerald-600" />
+      <div className="grid gap-10 lg:grid-cols-2">
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">Como funciona</h2>
+          <ol className="space-y-4">
+            {steps.map((step, index) => (
+              <li key={step.title} className="flex gap-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-xs font-medium tabular-nums text-muted-foreground">
+                  {index + 1}
+                </span>
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">{step.title}</h3>
+                  <p className="text-sm leading-6 text-muted-foreground">{step.text}</p>
                 </div>
-                <h3 className="font-semibold mb-2">1. Informe seus dados</h3>
-                <p className="text-sm text-muted-foreground">
-                  Preço médio, quantidade e preço atual da ação em queda
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4">
-                  <Target className="w-6 h-6 text-blue-600" />
-                </div>
-                <h3 className="font-semibold mb-2">2. Defina a estratégia</h3>
-                <p className="text-sm text-muted-foreground">
-                  Quanto o ativo pode subir e com quanto de lucro quer sair
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mb-4">
-                  <DollarSign className="w-6 h-6 text-purple-600" />
-                </div>
-                <h3 className="font-semibold mb-2">3. Veja o plano</h3>
-                <p className="text-sm text-muted-foreground">
-                  Quantas ações comprar e quanto investir para atingir sua meta
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+              </li>
+            ))}
+          </ol>
+        </section>
 
-      {/* FAQ Section - SEO e Rich Snippets */}
-      <div className="max-w-4xl mx-auto mt-16">
-        <h2 className="text-2xl md:text-3xl font-bold text-center mb-8">
-          Perguntas Frequentes
-        </h2>
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="pt-6">
-              <h3 className="font-semibold mb-2">O que é a Calculadora de Recuperação?</h3>
-              <p className="text-sm text-muted-foreground">
-                É uma ferramenta que calcula quantas ações você precisa comprar para recuperar seu prejuízo
-                ou sair com lucro, considerando uma alta esperada do ativo. Desmistifica a matemática da
-                perda (ex: caiu 50%, precisa subir 100% para empatar).
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <h3 className="font-semibold mb-2">Como funciona o cálculo do aporte ideal?</h3>
-              <p className="text-sm text-muted-foreground">
-                Você informa preço médio, quantidade atual e preço de mercado. Define quanto o ativo pode
-                subir e com quanto de lucro quer sair. A calculadora mostra quantas ações comprar e quanto
-                investir para atingir sua meta.
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <h3 className="font-semibold mb-2">A calculadora é gratuita?</h3>
-              <p className="text-sm text-muted-foreground">
-                Sim! A calculadora é gratuita e não requer cadastro para os primeiros usos. Você pode
-                usar de forma anônima ou criar uma conta para mais usos mensais.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <section className="space-y-2">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">Perguntas frequentes</h2>
+          <div className="divide-y divide-border border-y border-border">
+            {faqs.map((faq) => (
+              <details key={faq.q} className="group">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 py-3 text-sm font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+                  {faq.q}
+                  <span aria-hidden="true" className="text-muted-foreground">
+                    <span className="group-open:hidden">+</span>
+                    <span className="hidden group-open:inline">−</span>
+                  </span>
+                </summary>
+                <p className="pb-4 text-sm leading-6 text-muted-foreground">{faq.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
       </div>
 
       {/* Structured Data - WebApplication */}
@@ -179,9 +129,9 @@ export default function RecoveryCalculatorPage() {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "WebApplication",
-            name: "Calculadora de Recuperação",
+            name: "Calculadora de recuperação",
             description:
-              "Calcule o aporte ideal para recuperar prejuízo ou lucrar em ações. Descubra quantas ações comprar para empatar ou sair com lucro.",
+              "Simule o aporte necessário para empatar ou sair com lucro em uma ação.",
             url: PAGE_URL,
             applicationCategory: "FinanceApplication",
             operatingSystem: "Web",
@@ -208,25 +158,9 @@ export default function RecoveryCalculatorPage() {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "HowTo",
-            name: "Como usar a Calculadora de Recuperação",
-            description: "Aprenda a calcular o aporte ideal para recuperar prejuízo em ações",
-            step: [
-              {
-                "@type": "HowToStep",
-                name: "Informe seus dados",
-                text: "Preço médio, quantidade e preço atual da ação em queda",
-              },
-              {
-                "@type": "HowToStep",
-                name: "Defina a estratégia",
-                text: "Quanto o ativo pode subir e com quanto de lucro quer sair",
-              },
-              {
-                "@type": "HowToStep",
-                name: "Veja o plano",
-                text: "Quantas ações comprar e quanto investir para atingir sua meta",
-              },
-            ],
+            name: "Como usar a calculadora de recuperação",
+            description: "Como simular o aporte necessário para recuperar prejuízo em ações",
+            step: steps.map((step) => ({ "@type": "HowToStep", name: step.title, text: step.text })),
           }),
         }}
       />
@@ -238,32 +172,11 @@ export default function RecoveryCalculatorPage() {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "FAQPage",
-            mainEntity: [
-              {
-                "@type": "Question",
-                name: "O que é a Calculadora de Recuperação?",
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: "É uma ferramenta que calcula quantas ações você precisa comprar para recuperar seu prejuízo ou sair com lucro, considerando uma alta esperada do ativo. Desmistifica a matemática da perda (ex: caiu 50%, precisa subir 100% para empatar).",
-                },
-              },
-              {
-                "@type": "Question",
-                name: "Como funciona o cálculo do aporte ideal?",
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: "Você informa preço médio, quantidade atual e preço de mercado. Define quanto o ativo pode subir e com quanto de lucro quer sair. A calculadora mostra quantas ações comprar e quanto investir para atingir sua meta.",
-                },
-              },
-              {
-                "@type": "Question",
-                name: "A calculadora é gratuita?",
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: "Sim! A calculadora é gratuita e não requer cadastro para os primeiros usos. Você pode usar de forma anônima ou criar uma conta para mais usos mensais.",
-                },
-              },
-            ],
+            mainEntity: faqs.map((faq) => ({
+              "@type": "Question",
+              name: faq.q,
+              acceptedAnswer: { "@type": "Answer", text: faq.a },
+            })),
           }),
         }}
       />

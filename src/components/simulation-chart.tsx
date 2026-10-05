@@ -1,18 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  ReferenceLine
-} from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+/**
+ * Comparação mês a mês das estratégias Sniper (chart-1) e Híbrida (chart-3).
+ * Patrimônio investido em linha cheia, saldo devedor tracejado; break-even em cinza.
+ */
+
+import { useMemo, useState } from 'react'
+import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { formatBRL, formatCompact, formatNumber } from '@/lib/format'
+import { SectionHeader } from '@/components/ui/section-header'
 
 interface MonthlyDataPoint {
   month: number
@@ -28,338 +24,162 @@ interface SimulationChartProps {
   hybridBreakEven?: number | null
 }
 
-export function SimulationChart({
-  sniperData,
-  hybridData,
-  sniperBreakEven,
-  hybridBreakEven
-}: SimulationChartProps) {
-  // Estado para controlar visibilidade das linhas
-  const [visibleLines, setVisibleLines] = useState({
-    sniperDebt: true,
-    sniperInvested: true,
-    hybridDebt: true,
-    hybridInvested: true,
-    sniperBreakEven: true,
-    hybridBreakEven: true
-  })
+type SeriesKey = 'sniperInvested' | 'sniperDebt' | 'hybridInvested' | 'hybridDebt'
 
-  // Combinar dados para o gráfico
-  // IMPORTANTE: Usar os meses reais dos dados, não preencher com zeros
-  // Criar um mapa de meses para facilitar a combinação
-  const monthMap = new Map<number, {
-    sniperDebt?: number
-    sniperInvested?: number
-    sniperNetWorth?: number
-    hybridDebt?: number
-    hybridInvested?: number
-    hybridNetWorth?: number
-  }>()
-  
-  // Adicionar dados do Sniper
-  sniperData.forEach(snapshot => {
-    const existing = monthMap.get(snapshot.month) || {}
-    monthMap.set(snapshot.month, {
-      ...existing,
-      sniperDebt: snapshot.debtBalance,
-      sniperInvested: snapshot.investedBalance,
-      sniperNetWorth: snapshot.netWorth
-    })
-  })
-  
-  // Adicionar dados do Híbrido
-  hybridData.forEach(snapshot => {
-    const existing = monthMap.get(snapshot.month) || {}
-    monthMap.set(snapshot.month, {
-      ...existing,
-      hybridDebt: snapshot.debtBalance,
-      hybridInvested: snapshot.investedBalance,
-      hybridNetWorth: snapshot.netWorth
-    })
-  })
-  
-  // Converter para array ordenado por mês
-  // IMPORTANTE: Usar undefined ao invés de null para valores ausentes (Recharts não renderiza null corretamente)
-  // IMPORTANTE: Filtrar meses onde nenhuma estratégia tem dados para evitar pontos vazios
-  const chartData = Array.from(monthMap.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([month, data]) => ({
-      month,
-      sniperDebt: data.sniperDebt,
-      sniperInvested: data.sniperInvested,
-      sniperNetWorth: data.sniperNetWorth,
-      hybridDebt: data.hybridDebt,
-      hybridInvested: data.hybridInvested,
-      hybridNetWorth: data.hybridNetWorth
-    }))
-    // Remover pontos onde ambas as estratégias não têm dados (evitar pontos vazios no final)
-    .filter((d, index, array) => {
-      // Manter todos os pontos até o último ponto válido de qualquer estratégia
-      const hasSniperData = d.sniperDebt !== undefined || d.sniperInvested !== undefined
-      const hasHybridData = d.hybridDebt !== undefined || d.hybridInvested !== undefined
-      
-      // Se este ponto não tem dados de nenhuma estratégia, verificar se há pontos válidos depois
-      if (!hasSniperData && !hasHybridData) {
-        const hasFutureData = array.slice(index + 1).some(future => 
-          (future.sniperDebt !== undefined || future.sniperInvested !== undefined) ||
-          (future.hybridDebt !== undefined || future.hybridInvested !== undefined)
-        )
-        // Se não há dados futuros válidos, remover este ponto (é um ponto vazio no final)
-        return hasFutureData
-      }
-      
-      return true
-    })
-  
-  // DEBUG: Log dos últimos dados do gráfico
-  if (chartData.length > 0) {
-    const lastFew = chartData.slice(-5)
-    console.log('\n=== DEBUG GRÁFICO - ÚLTIMOS 5 PONTOS ===')
-    lastFew.forEach((d, i) => {
-      console.log(`[${i + 1}] Mês ${d.month}:`)
-      console.log(`  Híbrido Investido: ${d.hybridInvested ?? 'undefined'}`)
-      console.log(`  Híbrido Dívida: ${d.hybridDebt ?? 'undefined'}`)
-      console.log(`  Sniper Investido: ${d.sniperInvested ?? 'undefined'}`)
-      console.log(`  Sniper Dívida: ${d.sniperDebt ?? 'undefined'}`)
-    })
-    console.log(`Total de pontos no gráfico: ${chartData.length}`)
-    console.log(`=== FIM DEBUG GRÁFICO ===\n`)
-  }
+const SERIES: Array<{ key: SeriesKey; label: string; color: string; dashed: boolean }> = [
+  { key: 'sniperInvested', label: 'Sniper, investido', color: 'var(--chart-1)', dashed: false },
+  { key: 'sniperDebt', label: 'Sniper, saldo devedor', color: 'var(--chart-1)', dashed: true },
+  { key: 'hybridInvested', label: 'Híbrido, investido', color: 'var(--chart-3)', dashed: false },
+  { key: 'hybridDebt', label: 'Híbrido, saldo devedor', color: 'var(--chart-3)', dashed: true },
+]
 
-  // Encontrar o valor máximo para determinar se usa escala de mil
-  // IMPORTANTE: Ignorar valores undefined (ausentes) ao invés de tratá-los como 0
-  const allValues = chartData.flatMap(d => [
-    d.sniperDebt,
-    d.sniperInvested,
-    d.hybridDebt,
-    d.hybridInvested
-  ]).filter((v): v is number => v != null && v !== undefined && isFinite(v) && v >= 0)
-  
-  const maxValue = allValues.length > 0 ? Math.max(...allValues) : 0
-  const minValue = allValues.length > 0 ? Math.min(...allValues) : 0
-  const useThousandScale = maxValue > 100000
-  
-  // Calcular domínio do Y-axis com margem de 5%
-  const yAxisDomain: [number, number] = [
-    Math.max(0, minValue * 0.95),
-    maxValue * 1.05
-  ]
+const AXIS_TICK = { fontSize: 12, fill: 'var(--muted-foreground)' } as const
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value)
-  }
+/** Eixo Y curto, em reais: "250 mil", "1,2 mi". */
+function formatAxis(value: number): string {
+  if (Math.abs(value) >= 1e6) return formatCompact(value)
+  if (Math.abs(value) >= 1e3) return `${formatNumber(value / 1e3, { digits: 0 })} mil`
+  return formatNumber(value, { digits: 0 })
+}
 
-  // Formatação do eixo Y: mostra em "mil" quando > 100.000
-  const formatYAxis = (value: number) => {
-    // Se usar escala de mil e valor >= 1000, converter
-    if (useThousandScale && value >= 1000) {
-      const thousands = value / 1000
-      // Formatar como número inteiro quando possível, caso contrário com 1 decimal
-      if (thousands % 1 === 0) {
-        return `${thousands} mil`
-      } else {
-        // Arredondar para 1 decimal máximo
-        return `${Math.round(thousands * 10) / 10} mil`
-      }
-    }
-    // Para valores menores que 1000, mostrar normalmente
-    return value.toString()
-  }
+type ChartRow = { month: number } & Partial<Record<SeriesKey, number>>
 
-  // Toggle de visibilidade de linha
-  const toggleLine = (lineKey: keyof typeof visibleLines) => {
-    setVisibleLines(prev => ({
-      ...prev,
-      [lineKey]: !prev[lineKey]
-    }))
-  }
-
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-3 border rounded-lg shadow-lg text-sm">
-          <p className="font-semibold mb-2">Mês {payload[0].payload.month}</p>
-          {payload
-            .filter((entry: any) => visibleLines[entry.dataKey as keyof typeof visibleLines] !== false)
-            .map((entry: any, index: number) => {
-              const label = entry.dataKey.includes('Debt')
-                ? 'Saldo Devedor'
-                : entry.dataKey.includes('Invested')
-                ? 'Patrimônio Investido'
-                : 'Patrimônio Líquido'
-              
-              const strategy = entry.dataKey.includes('sniper') ? 'Sniper' : 'Híbrido'
-              
-              return (
-                <p key={index} style={{ color: entry.color }} className="text-sm">
-                  {strategy} - {label}: {formatCurrency(entry.value)}
-                </p>
-              )
-            })}
-        </div>
-      )
-    }
-    return null
-  }
-
-  // Componente de legenda customizado e clicável
-  const CustomLegend = (props: any) => {
-    const { payload } = props
-    
-    // Definir cores e estilos para cada linha
-    const lineConfigs = [
-      { key: 'sniperDebt', name: 'Sniper - Saldo Devedor', color: '#ef4444', dashed: false },
-      { key: 'sniperInvested', name: 'Sniper - Patrimônio Investido', color: '#3b82f6', dashed: false },
-      { key: 'hybridDebt', name: 'Híbrido - Saldo Devedor', color: '#f97316', dashed: true },
-      { key: 'hybridInvested', name: 'Híbrido - Patrimônio Investido', color: '#10b981', dashed: true },
-      ...(sniperBreakEven ? [{ key: 'sniperBreakEven', name: 'Break-even Sniper', color: '#9333ea', dashed: true }] : []),
-      ...(hybridBreakEven ? [{ key: 'hybridBreakEven', name: 'Break-even Híbrido', color: '#4f46e5', dashed: true }] : [])
-    ]
-    
-    return (
-      <div className="flex flex-wrap gap-3 sm:gap-4 justify-center mt-4 mb-2 px-2">
-        {lineConfigs.map((config, index) => {
-          const isVisible = visibleLines[config.key as keyof typeof visibleLines] !== false
-          return (
-            <div
-              key={config.key}
-              onClick={() => toggleLine(config.key as keyof typeof visibleLines)}
-              className="flex items-center gap-2 cursor-pointer hover:opacity-70 transition-opacity select-none"
-              style={{ opacity: isVisible ? 1 : 0.4 }}
-            >
-              <div
-                className="w-4 h-0.5"
-                style={{
-                  backgroundColor: config.color,
-                  borderStyle: config.dashed ? 'dashed' : 'solid',
-                  borderWidth: config.dashed ? '1px' : '0',
-                  borderColor: config.color
-                }}
-              />
-              <span className="text-xs sm:text-sm whitespace-nowrap">{config.name}</span>
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
+function SimulationTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: Array<{ dataKey?: string; value?: number }>
+  label?: number
+}) {
+  if (!active || !payload || payload.length === 0) return null
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Comparação de Estratégias</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="w-full h-[400px] sm:h-[500px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 5, right: 5, left: useThousandScale ? 5 : 10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-              dataKey="month"
-              label={{ value: 'Mês', position: 'insideBottom', offset: -5 }}
-              tick={{ fontSize: 12 }}
-            />
-            <YAxis
-              label={{ value: useThousandScale ? 'Valor (mil R$)' : 'Valor (R$)', angle: -90, position: 'insideLeft', style: { fontSize: '11px' } }}
-              tickFormatter={formatYAxis}
-              tick={{ fontSize: 10 }}
-              width={useThousandScale ? 65 : 75}
-              interval="preserveStartEnd"
-              domain={yAxisDomain}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend content={<CustomLegend />} />
-            
-            {/* Linha de Break-even Sniper */}
-            {sniperBreakEven && (
-              <ReferenceLine
-                x={sniperBreakEven}
-                stroke="#9333ea"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                strokeOpacity={visibleLines.sniperBreakEven ? 1 : 0}
-                label={visibleLines.sniperBreakEven ? { value: 'Break-even Sniper', position: 'top', fontSize: 10 } : undefined}
-              />
-            )}
-            
-            {/* Linha de Break-even Híbrido */}
-            {hybridBreakEven && (
-              <ReferenceLine
-                x={hybridBreakEven}
-                stroke="#4f46e5"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                strokeOpacity={visibleLines.hybridBreakEven ? 1 : 0}
-                label={visibleLines.hybridBreakEven ? { value: 'Break-even Híbrido', position: 'top', fontSize: 10 } : undefined}
-              />
-            )}
-            
-            {/* Estratégia Sniper */}
-            <Line
-              type="monotone"
-              dataKey="sniperDebt"
-              stroke="#ef4444"
-              strokeWidth={2}
-              strokeOpacity={visibleLines.sniperDebt ? 1 : 0}
-              name="Sniper - Saldo Devedor"
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="sniperInvested"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              strokeOpacity={visibleLines.sniperInvested ? 1 : 0}
-              name="Sniper - Patrimônio Investido"
-              dot={false}
-            />
-            
-            {/* Estratégia Híbrida */}
-            <Line
-              type="monotone"
-              dataKey="hybridDebt"
-              stroke="#f97316"
-              strokeWidth={2}
-              strokeDasharray="5 5"
-              strokeOpacity={visibleLines.hybridDebt ? 1 : 0}
-              name="Híbrido - Saldo Devedor"
-              dot={false}
-              connectNulls={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="hybridInvested"
-              stroke="#10b981"
-              strokeWidth={2}
-              strokeDasharray="5 5"
-              strokeOpacity={visibleLines.hybridInvested ? 1 : 0}
-              name="Híbrido - Patrimônio Investido"
-              dot={false}
-              connectNulls={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-        </div>
-        
-        <div className="mt-4 text-sm">
-          <p className="font-semibold mb-2 text-center">Clique nas legendas para mostrar/ocultar linhas</p>
-          <div className="text-center text-muted-foreground text-xs">
-            <p>Break-even: Ponto onde o Patrimônio Investido supera o Saldo Devedor</p>
-            {sniperBreakEven && (
-              <p className="mt-1">Sniper: Mês {sniperBreakEven}</p>
-            )}
-            {hybridBreakEven && (
-              <p className="mt-1">Híbrido: Mês {hybridBreakEven}</p>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+      <p className="mb-1 text-muted-foreground">Mês {label}</p>
+      {SERIES.map((series) => {
+        const entry = payload.find((p) => p.dataKey === series.key)
+        if (!entry || typeof entry.value !== 'number') return null
+        return (
+          <p key={series.key} className="flex justify-between gap-4">
+            <span>{series.label}</span>
+            <span className="font-medium tabular-nums">{formatBRL(entry.value, { digits: 0 })}</span>
+          </p>
+        )
+      })}
+    </div>
   )
 }
 
+function LegendSwatch({ color, dashed }: { color: string; dashed: boolean }) {
+  return (
+    <svg width="16" height="8" aria-hidden="true">
+      <line x1="0" x2="16" y1="4" y2="4" stroke={color} strokeWidth="2" strokeDasharray={dashed ? '4 3' : undefined} />
+    </svg>
+  )
+}
+
+export function SimulationChart({ sniperData, hybridData, sniperBreakEven, hybridBreakEven }: SimulationChartProps) {
+  const [hidden, setHidden] = useState<Set<SeriesKey>>(new Set())
+
+  const chartData = useMemo(() => {
+    const rows = new Map<number, ChartRow>()
+    const put = (month: number, patch: Partial<ChartRow>) => rows.set(month, { ...(rows.get(month) ?? { month }), ...patch })
+    sniperData.forEach((p) => put(p.month, { sniperDebt: p.debtBalance, sniperInvested: p.investedBalance }))
+    hybridData.forEach((p) => put(p.month, { hybridDebt: p.debtBalance, hybridInvested: p.investedBalance }))
+    return Array.from(rows.values()).sort((a, b) => a.month - b.month)
+  }, [sniperData, hybridData])
+
+  const toggle = (key: SeriesKey) =>
+    setHidden((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+
+  return (
+    <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+      <SectionHeader
+        title="Comparação das estratégias"
+        description="Break-even é o mês em que o patrimônio investido supera o saldo devedor."
+      />
+
+      <div role="group" aria-label="Séries do gráfico" className="flex flex-wrap gap-2">
+        {SERIES.map((series) => (
+          <button
+            key={series.key}
+            type="button"
+            aria-pressed={!hidden.has(series.key)}
+            onClick={() => toggle(series.key)}
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 text-xs text-muted-foreground transition-colors hover:text-foreground aria-pressed:text-foreground aria-[pressed=false]:opacity-50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring md:min-h-8"
+          >
+            <LegendSwatch color={series.color} dashed={series.dashed} />
+            {series.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="h-72 w-full sm:h-96">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid stroke="var(--border)" vertical={false} />
+            <XAxis
+              dataKey="month"
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={24}
+              tickFormatter={(value: number) => `${value}`}
+            />
+            <YAxis
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={false}
+              width={56}
+              tickFormatter={formatAxis}
+            />
+            <Tooltip cursor={{ stroke: 'var(--border)' }} content={<SimulationTooltip />} />
+            {sniperBreakEven ? (
+              <ReferenceLine
+                x={sniperBreakEven}
+                stroke="var(--chart-2)"
+                strokeDasharray="4 3"
+                label={{ value: 'Break-even Sniper', position: 'insideTopRight', fontSize: 11, fill: 'var(--muted-foreground)' }}
+              />
+            ) : null}
+            {hybridBreakEven ? (
+              <ReferenceLine
+                x={hybridBreakEven}
+                stroke="var(--chart-2)"
+                strokeDasharray="4 3"
+                label={{ value: 'Break-even Híbrido', position: 'insideTopLeft', fontSize: 11, fill: 'var(--muted-foreground)' }}
+              />
+            ) : null}
+            {SERIES.map((series) => (
+              <Line
+                key={series.key}
+                type="monotone"
+                dataKey={series.key}
+                name={series.label}
+                stroke={series.color}
+                strokeWidth={series.dashed ? 1.5 : 2}
+                strokeDasharray={series.dashed ? '5 4' : undefined}
+                hide={hidden.has(series.key)}
+                dot={false}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Valores em reais; eixo horizontal em meses.
+        {sniperBreakEven ? ` Break-even Sniper no mês ${sniperBreakEven}.` : ''}
+        {hybridBreakEven ? ` Break-even Híbrido no mês ${hybridBreakEven}.` : ''}
+      </p>
+    </section>
+  )
+}

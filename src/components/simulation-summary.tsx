@@ -1,274 +1,133 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+/**
+ * Resumo da simulação: qual estratégia termina com maior patrimônio líquido e a comparação lado a lado.
+ */
+
+import { formatBRL, formatNumber, formatPct } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
-import { TrendingUp, TrendingDown, DollarSign, Calendar, Target } from 'lucide-react'
+import { SectionHeader } from '@/components/ui/section-header'
+import { Stat } from '@/components/ui/stat'
+
+interface StrategyResults {
+  breakEvenMonth: number | null
+  finalDebtBalance: number
+  finalInvestedBalance: number
+  finalNetWorth: number
+  totalInterestPaid: number
+  totalInvestmentContribution: number
+  totalInvestmentReturn: number
+  totalMonths: number
+}
 
 interface SimulationSummaryProps {
-  sniperResults: {
-    breakEvenMonth: number | null
-    finalDebtBalance: number
-    finalInvestedBalance: number
-    finalNetWorth: number
-    totalInterestPaid: number
-    totalInvestmentContribution: number
-    totalInvestmentReturn: number
-    totalMonths: number
-  }
-  hybridResults: {
-    breakEvenMonth: number | null
-    finalDebtBalance: number
-    finalInvestedBalance: number
-    finalNetWorth: number
-    totalInterestPaid: number
-    totalInvestmentContribution: number
-    totalInvestmentReturn: number
-    totalMonths: number
-  }
+  sniperResults: StrategyResults
+  hybridResults: StrategyResults
+  /** Rentabilidade anual considerada, como fração. */
   rentabilityRate: number
 }
 
-export function SimulationSummary({
-  sniperResults,
-  hybridResults,
-  rentabilityRate
-}: SimulationSummaryProps) {
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value)
-  }
+const ROWS: Array<{ label: string; value: (r: StrategyResults) => string }> = [
+  { label: 'Patrimônio líquido final', value: (r) => formatBRL(r.finalNetWorth) },
+  { label: 'Patrimônio investido', value: (r) => formatBRL(r.finalInvestedBalance) },
+  { label: 'Saldo devedor final', value: (r) => formatBRL(r.finalDebtBalance) },
+  { label: 'Juros pagos', value: (r) => formatBRL(r.totalInterestPaid) },
+  { label: 'Total aportado', value: (r) => formatBRL(r.totalInvestmentContribution) },
+  { label: 'Rendimento dos investimentos', value: (r) => formatBRL(r.totalInvestmentReturn) },
+  {
+    label: 'Break-even',
+    value: (r) => (r.breakEvenMonth ? `Mês ${formatNumber(r.breakEvenMonth, { digits: 0 })}` : 'Não atingido'),
+  },
+  { label: 'Duração simulada', value: (r) => `${formatNumber(r.totalMonths, { digits: 0 })} meses` },
+]
 
-  const formatNumber = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value)
-  }
-
-  // Determinar qual estratégia é melhor financeiramente
-  const sniperBetter = sniperResults.finalNetWorth > hybridResults.finalNetWorth
-  const interestSaved = hybridResults.totalInterestPaid - sniperResults.totalInterestPaid
+export function SimulationSummary({ sniperResults, hybridResults, rentabilityRate }: SimulationSummaryProps) {
+  const sniperAhead = sniperResults.finalNetWorth >= hybridResults.finalNetWorth
+  const leader = sniperAhead ? 'Sniper' : 'Híbrida'
   const netWorthDifference = Math.abs(sniperResults.finalNetWorth - hybridResults.finalNetWorth)
+  const interestDifference = hybridResults.totalInterestPaid - sniperResults.totalInterestPaid
+  const breakEvenGap =
+    sniperResults.breakEvenMonth && hybridResults.breakEvenMonth
+      ? hybridResults.breakEvenMonth - sniperResults.breakEvenMonth
+      : null
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Target className="h-5 w-5 text-primary" />
-          Resumo Comparativo das Estratégias
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Estratégia Recomendada */}
-        <div className={`p-4 rounded-lg border-2 ${
-          sniperBetter 
-            ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' 
-            : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800'
-        }`}>
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className={`h-5 w-5 ${sniperBetter ? 'text-green-600' : 'text-blue-600'}`} />
-            <h3 className="font-semibold text-lg">
-              {sniperBetter ? 'Estratégia Sniper Recomendada' : 'Estratégia Híbrida Recomendada'}
-            </h3>
-            <Badge variant={sniperBetter ? 'default' : 'secondary'}>
-              Melhor Patrimônio Líquido
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {sniperBetter ? (
-              <>
-                A estratégia <strong>Sniper</strong> resulta em um patrimônio líquido final de{' '}
-                <strong>{formatCurrency(sniperResults.finalNetWorth)}</strong>, que é{' '}
-                <strong>{formatCurrency(netWorthDifference)}</strong> maior que a estratégia Híbrida.
-                Além disso, você economiza <strong>{formatCurrency(interestSaved)}</strong> em juros pagos.
-              </>
-            ) : (
-              <>
-                A estratégia <strong>Híbrida</strong> resulta em um patrimônio líquido final de{' '}
-                <strong>{formatCurrency(hybridResults.finalNetWorth)}</strong>, que é{' '}
-                <strong>{formatCurrency(netWorthDifference)}</strong> maior que a estratégia Sniper.
-                No entanto, você paga <strong>{formatCurrency(interestSaved)}</strong> a mais em juros.
-              </>
-            )}
-          </p>
-        </div>
+    <section className="space-y-5 rounded-lg border border-border bg-card p-4 sm:p-5">
+      <SectionHeader
+        title="Resumo da simulação"
+        description={`Rentabilidade considerada para os investimentos: ${formatPct(rentabilityRate)} ao ano.`}
+      />
 
-        {/* Comparação Detalhada */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Estratégia Sniper */}
-          <Card className="border-2">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <div className="w-3 h-3 bg-red-500 rounded-full" />
-                Estratégia Sniper
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Patrimônio Líquido Final</span>
-                <span className={`font-semibold ${sniperBetter ? 'text-green-600' : ''}`}>
-                  {formatCurrency(sniperResults.finalNetWorth)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Patrimônio Investido</span>
-                <span className="font-medium">{formatCurrency(sniperResults.finalInvestedBalance)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Saldo Devedor Final</span>
-                <span className="font-medium">{formatCurrency(sniperResults.finalDebtBalance)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total de Juros Pagos</span>
-                <span className="font-medium text-red-600">
-                  {formatCurrency(sniperResults.totalInterestPaid)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Break-even</span>
-                <span className="font-medium">
-                  {sniperResults.breakEvenMonth 
-                    ? `Mês ${formatNumber(sniperResults.breakEvenMonth)}`
-                    : 'N/A'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Investido</span>
-                <span className="font-medium">{formatCurrency(sniperResults.totalInvestmentContribution)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Retorno dos Investimentos</span>
-                <span className="font-medium text-green-600">
-                  {formatCurrency(sniperResults.totalInvestmentReturn)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Stat
+          label="Maior patrimônio líquido"
+          value={`Estratégia ${leader}`}
+          caption={`${formatBRL(netWorthDifference)} acima da outra`}
+          size="sm"
+        />
+        <Stat
+          label="Diferença em juros pagos"
+          value={formatBRL(Math.abs(interestDifference))}
+          caption={interestDifference >= 0 ? 'a menos com a Sniper' : 'a menos com a Híbrida'}
+          size="sm"
+        />
+        <Stat
+          label="Break-even"
+          value={
+            breakEvenGap === null
+              ? '—'
+              : breakEvenGap === 0
+                ? 'Mesmo mês'
+                : `${formatNumber(Math.abs(breakEvenGap), { digits: 0 })} meses antes`
+          }
+          caption={breakEvenGap === null ? 'não atingido nas duas' : breakEvenGap > 0 ? 'com a Sniper' : breakEvenGap < 0 ? 'com a Híbrida' : undefined}
+          size="sm"
+        />
+      </div>
 
-          {/* Estratégia Híbrida */}
-          <Card className="border-2">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <div className="w-3 h-3 bg-green-500 rounded-full" />
-                Estratégia Híbrida
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Patrimônio Líquido Final</span>
-                <span className={`font-semibold ${!sniperBetter ? 'text-green-600' : ''}`}>
-                  {formatCurrency(hybridResults.finalNetWorth)}
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full text-sm">
+          <caption className="sr-only">Comparação entre as estratégias Sniper e Híbrida</caption>
+          <thead className="bg-surface text-xs text-muted-foreground">
+            <tr className="border-b border-border">
+              <th scope="col" className="h-9 px-3 text-left font-medium">
+                Indicador
+              </th>
+              <th scope="col" className="h-9 px-3 text-right font-medium">
+                <span className="inline-flex items-center gap-1.5">
+                  Sniper {sniperAhead && <Badge variant="brand">Maior PL</Badge>}
                 </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Patrimônio Investido</span>
-                <span className="font-medium">{formatCurrency(hybridResults.finalInvestedBalance)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Saldo Devedor Final</span>
-                <span className="font-medium">{formatCurrency(hybridResults.finalDebtBalance)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total de Juros Pagos</span>
-                <span className="font-medium text-red-600">
-                  {formatCurrency(hybridResults.totalInterestPaid)}
+              </th>
+              <th scope="col" className="h-9 px-3 text-right font-medium">
+                <span className="inline-flex items-center gap-1.5">
+                  Híbrida {!sniperAhead && <Badge variant="brand">Maior PL</Badge>}
                 </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Break-even</span>
-                <span className="font-medium">
-                  {hybridResults.breakEvenMonth 
-                    ? `Mês ${formatNumber(hybridResults.breakEvenMonth)}`
-                    : 'Não atingido'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Investido</span>
-                <span className="font-medium">{formatCurrency(hybridResults.totalInvestmentContribution)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Retorno dos Investimentos</span>
-                <span className="font-medium text-green-600">
-                  {formatCurrency(hybridResults.totalInvestmentReturn)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {ROWS.map((row) => (
+              <tr key={row.label} className="h-10 border-b border-border last:border-0">
+                <th scope="row" className="px-3 text-left font-normal text-muted-foreground">
+                  {row.label}
+                </th>
+                <td className="px-3 text-right whitespace-nowrap tabular-nums">{row.value(sniperResults)}</td>
+                <td className="px-3 text-right whitespace-nowrap tabular-nums">{row.value(hybridResults)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-        {/* Insights */}
-        <div className="border-t pt-4 space-y-3">
-          <h4 className="font-semibold flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-primary" />
-            Insights Financeiros
-          </h4>
-          
-          {/* Economia de Juros */}
-          {interestSaved > 0 && (
-            <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
-              <p className="text-sm">
-                <strong className="text-green-700 dark:text-green-300">
-                  Economia de Juros com Sniper:
-                </strong>{' '}
-                <span className="text-green-600 dark:text-green-400">
-                  {formatCurrency(interestSaved)}
-                </span>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                A estratégia Sniper economiza esta quantia em juros pagos comparada à estratégia Híbrida.
-                {sniperResults.finalInvestedBalance < hybridResults.finalInvestedBalance && (
-                  <>
-                    {' '}Embora o patrimônio investido final seja menor, a economia em juros compensa essa diferença,
-                    resultando em um patrimônio líquido maior.
-                  </>
-                )}
-              </p>
-            </div>
-          )}
-
-          {/* Explicação sobre acumular menos */}
-          {sniperResults.finalInvestedBalance < hybridResults.finalInvestedBalance && sniperResults.finalNetWorth > hybridResults.finalNetWorth && (
-            <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-sm">
-                <strong className="text-blue-700 dark:text-blue-300">
-                  Por que acumular menos pode ser melhor?
-                </strong>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                A estratégia Sniper acumula menos patrimônio investido ({formatCurrency(sniperResults.finalInvestedBalance)} vs {formatCurrency(hybridResults.finalInvestedBalance)}),
-                mas resulta em um <strong>patrimônio líquido maior</strong> ({formatCurrency(sniperResults.finalNetWorth)} vs {formatCurrency(hybridResults.finalNetWorth)}).
-                Isso acontece porque ao quitar a dívida mais rápido, você economiza {formatCurrency(interestSaved)} em juros,
-                compensando a diferença de investimento. O importante é o <strong>patrimônio líquido final</strong>, não apenas o investido.
-              </p>
-            </div>
-          )}
-
-          {/* Comparação de Break-even */}
-          {sniperResults.breakEvenMonth && hybridResults.breakEvenMonth && (
-            <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
-              <p className="text-sm">
-                <strong className="text-purple-700 dark:text-purple-300">
-                  Break-even Point:
-                </strong>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                A estratégia <strong>Sniper</strong> atinge o break-even no mês {formatNumber(sniperResults.breakEvenMonth)},
-                enquanto a estratégia <strong>Híbrida</strong> atinge no mês {formatNumber(hybridResults.breakEvenMonth)}.
-                {sniperResults.breakEvenMonth < hybridResults.breakEvenMonth ? (
-                  <> A estratégia Sniper atinge a liberdade financeira técnica {formatNumber(hybridResults.breakEvenMonth - sniperResults.breakEvenMonth)} meses antes.</>
-                ) : (
-                  <> A estratégia Híbrida atinge a liberdade financeira técnica {formatNumber(sniperResults.breakEvenMonth - hybridResults.breakEvenMonth)} meses antes.</>
-                )}
-              </p>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+      {sniperAhead && sniperResults.finalInvestedBalance < hybridResults.finalInvestedBalance && (
+        <p className="text-sm leading-6 text-muted-foreground">
+          A Sniper termina com menos patrimônio investido, mas com patrimônio líquido maior: quitar a dívida antes evita{' '}
+          {formatBRL(interestDifference)} em juros, o que compensa a diferença de aportes.
+        </p>
+      )}
+      <p className="text-xs leading-5 text-muted-foreground">
+        Simulação matemática com as premissas informadas. Não é recomendação de investimento.
+      </p>
+    </section>
   )
 }
-

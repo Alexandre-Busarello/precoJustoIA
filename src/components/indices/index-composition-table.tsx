@@ -1,146 +1,99 @@
 /**
- * Tabela de Composição do Índice
- * Lista ativos com blur para usuários Free
+ * Composição do índice. Usuários sem Premium recebem só os 3 primeiros ativos (o restante nem chega ao cliente).
  */
 
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { CompanyLogo } from '@/components/company-logo';
-import { usePremiumStatus } from '@/hooks/use-premium-status';
-import { Lock } from 'lucide-react';
 import Link from 'next/link';
+import { Lock } from 'lucide-react';
+import { CompanyLogo } from '@/components/company-logo';
+import { Button } from '@/components/ui/button';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { SectionHeader } from '@/components/ui/section-header';
+import { formatPct } from '@/lib/format';
 
 interface CompositionAsset {
   ticker: string;
   name: string;
   logoUrl: string | null;
   sector: string | null;
+  /** Peso-alvo como fração (0,1 = 10%). */
   targetWeight: number;
+  /** DY em pontos percentuais. */
   dividendYield: number | null;
 }
 
 interface IndexCompositionTableProps {
   composition: CompositionAsset[];
+  /** Quantidade de ativos ocultos para quem não é Premium. */
+  lockedCount?: number;
 }
 
-export function IndexCompositionTable({ composition }: IndexCompositionTableProps) {
-  const { isPremium } = usePremiumStatus();
+const columns: DataTableColumn<CompositionAsset>[] = [
+  {
+    key: 'ticker',
+    header: 'Ativo',
+    sticky: true,
+    sortable: true,
+    cell: (asset) => (
+      <Link href={`/acao/${asset.ticker.toLowerCase()}`} className="flex min-w-0 items-center gap-2 py-1 hover:underline">
+        <CompanyLogo ticker={asset.ticker} logoUrl={asset.logoUrl} companyName={asset.name} size={28} />
+        <span className="min-w-0">
+          <span className="block font-medium text-foreground">{asset.ticker}</span>
+          <span className="block max-w-40 truncate text-xs text-muted-foreground sm:max-w-64">{asset.name}</span>
+        </span>
+      </Link>
+    ),
+  },
+  {
+    key: 'sector',
+    header: 'Setor',
+    sortable: true,
+    className: 'text-muted-foreground',
+    cell: (asset) => asset.sector ?? '—',
+  },
+  {
+    key: 'targetWeight',
+    header: 'Peso',
+    align: 'right',
+    sortable: true,
+    cell: (asset) => formatPct(asset.targetWeight),
+  },
+  {
+    key: 'dividendYield',
+    header: 'DY',
+    align: 'right',
+    sortable: true,
+    cell: (asset) => (asset.dividendYield !== null ? formatPct(asset.dividendYield / 100) : '—'),
+  },
+];
 
-  const formatPercentage = (value: number) => {
-    return `${(value * 100).toFixed(1)}%`;
-  };
-
-  // Mostrar apenas 3 ativos para usuários Free, resto com blur
-  const visibleAssets = isPremium ? composition : composition.slice(0, 3);
-  const blurredAssets = isPremium ? [] : composition.slice(3);
-
+export function IndexCompositionTable({ composition, lockedCount = 0 }: IndexCompositionTableProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>Composição do Índice</span>
-          {!isPremium && (
-            <Badge variant="outline" className="text-xs">
-              <Lock className="h-3 w-3 mr-1" />
-              Premium
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left py-2 px-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Ativo
-                </th>
-                <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Peso
-                </th>
-                <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                  DY
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleAssets.map((asset) => {
-                return (
-                  <tr key={asset.ticker} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <td className="py-3 px-2">
-                      <Link 
-                        href={`/acao/${asset.ticker}`}
-                        className="flex items-center gap-2 hover:underline"
-                      >
-                        <CompanyLogo 
-                          ticker={asset.ticker}
-                          logoUrl={asset.logoUrl}
-                          companyName={asset.name}
-                          size={32}
-                        />
-                        <div>
-                          <div className="font-medium">{asset.ticker}</div>
-                          <div className="text-xs text-gray-500">{asset.name}</div>
-                        </div>
-                      </Link>
-                    </td>
-                    <td className="text-right py-3 px-2 font-medium">
-                      {formatPercentage(asset.targetWeight)}
-                    </td>
-                    <td className="text-right py-3 px-2 text-sm">
-                      {asset.dividendYield !== null 
-                        ? `${asset.dividendYield.toFixed(2)}%`
-                        : 'N/A'}
-                    </td>
-                  </tr>
-                );
-              })}
-              
-              {/* Assets com blur para Free users */}
-              {blurredAssets.map((asset, index) => (
-                <tr 
-                  key={`blurred-${index}`} 
-                  className="border-b relative overflow-hidden"
-                  style={{ filter: 'blur(4px)', pointerEvents: 'none' }}
-                >
-                  <td className="py-3 px-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-gray-300 rounded" />
-                      <div>
-                        <div className="font-medium bg-gray-300 h-4 w-16 rounded" />
-                        <div className="text-xs bg-gray-200 h-3 w-24 rounded mt-1" />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="text-right py-3 px-2">
-                    <div className="bg-gray-300 h-4 w-12 rounded ml-auto" />
-                  </td>
-                  <td className="text-right py-3 px-2">
-                    <div className="bg-gray-300 h-4 w-12 rounded ml-auto" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {!isPremium && blurredAssets.length > 0 && (
-            <div className="mt-4 text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                {blurredAssets.length} ativo{blurredAssets.length > 1 ? 's' : ''} oculto{blurredAssets.length > 1 ? 's' : ''}
-              </p>
-              <Link 
-                href="/planos"
-                className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium"
-              >
-                Assine Premium para ver composição completa →
-              </Link>
-            </div>
-          )}
+    <section className="space-y-4">
+      <SectionHeader
+        title="Composição do índice"
+        description={`${composition.length + lockedCount} ativos na carteira teórica atual`}
+      />
+      <DataTable
+        columns={columns}
+        rows={composition}
+        getRowId={(asset) => asset.ticker}
+        defaultSort={{ key: 'targetWeight', direction: 'desc' }}
+        caption="Ativos e pesos do índice"
+        empty={{ title: 'Composição indisponível', description: 'A carteira é recalculada após o fechamento do pregão.' }}
+      />
+      {lockedCount > 0 && (
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Lock className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            Mais {lockedCount} {lockedCount === 1 ? 'ativo disponível' : 'ativos disponíveis'} no Premium.
+          </p>
+          <Button asChild size="sm">
+            <Link href="/planos">Ver composição completa</Link>
+          </Button>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </section>
   );
 }
-

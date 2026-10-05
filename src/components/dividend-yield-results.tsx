@@ -1,310 +1,139 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { TrendingUp, DollarSign, Calendar, FileText, Lock, Shield, BarChart3, Sparkles, CheckCircle } from "lucide-react"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+/**
+ * Resultado da calculadora de dividend yield: Stats principais, proventos dos últimos 12 meses e convite ao relatório.
+ */
 
-interface CalculationResult {
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Button } from "@/components/ui/button"
+import { Stat } from "@/components/ui/stat"
+import { formatBRL, formatDate, formatNumber, formatPct } from "@/lib/format"
+
+export interface DividendYieldResult {
   ticker: string
   companyName: string
   currentPrice: number
+  /** Fração (0,085 = 8,5%). */
   dividendYield: number
   monthlyIncome: number
   annualIncome: number
-  lastDividend: {
-    amount: number
-    date: Date
-  }
-  dividendHistory: Array<{
-    date: Date
-    amount: number
-  }>
+  lastDividend: { amount: number; date: Date | string }
+  dividendHistory: Array<{ date: Date | string; amount: number }>
   averageMonthlyDividend: number
   averageQuarterlyDividend: number
   totalDividendsLast12Months: number
 }
 
 interface DividendYieldResultsProps {
-  result: CalculationResult
+  result: DividendYieldResult
   investmentAmount: number
   onViewFullReport: () => void
   isAuthenticated: boolean
 }
 
-export function DividendYieldResults({
-  result,
-  investmentAmount,
-  onViewFullReport,
-  isAuthenticated,
-}: DividendYieldResultsProps) {
-  const formatCurrency = (value: number | null): string => {
-    if (value === null) return "N/A"
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value)
-  }
+const AXIS_TICK = { fontSize: 12, fill: "var(--muted-foreground)" } as const
 
-  const formatPercent = (value: number): string => {
-    return `${(value * 100).toFixed(2)}%`
-  }
-
-  const formatDate = (date: Date | string): string => {
-    const d = typeof date === "string" ? new Date(date) : date
-    return new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(d)
-  }
-
-  // Preparar dados para gráfico (últimos 12 meses)
+export function DividendYieldResults({ result, investmentAmount, onViewFullReport, isAuthenticated }: DividendYieldResultsProps) {
+  const shares = result.currentPrice > 0 ? investmentAmount / result.currentPrice : 0
   const chartData = result.dividendHistory
     .slice(0, 12)
     .reverse()
-    .map((div) => {
-      const date = typeof div.date === "string" ? new Date(div.date) : div.date
-      return {
-        date: formatDate(date),
-        amount: div.amount,
-        projectedIncome: div.amount * (investmentAmount / result.currentPrice),
-      }
-    })
+    .map((div) => ({ label: formatDate(div.date), amount: div.amount }))
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Resultado do Cálculo - {result.companyName} ({result.ticker})</span>
-            <Badge variant="outline" className="text-green-600 border-green-600">
-              Preço: {formatCurrency(result.currentPrice)}
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Métricas Principais */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Dividend Yield</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      {formatPercent(result.dividendYield)}
-                    </p>
-                  </div>
-                  <TrendingUp className="w-8 h-8 text-green-600 opacity-50" />
-                </div>
-              </CardContent>
-            </Card>
+    <div className="space-y-4">
+      <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            {result.ticker} <span className="text-sm font-normal text-muted-foreground">{result.companyName}</span>
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Cotação <span className="font-medium tabular-nums text-foreground">{formatBRL(result.currentPrice)}</span>
+          </p>
+        </div>
 
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Renda Mensal</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {formatCurrency(result.monthlyIncome)}
-                    </p>
-                  </div>
-                  <Calendar className="w-8 h-8 text-blue-600 opacity-50" />
-                </div>
-              </CardContent>
-            </Card>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Stat label="Renda mensal média" value={formatBRL(result.monthlyIncome)} caption="estimativa" />
+          <Stat label="Renda em 12 meses" value={formatBRL(result.annualIncome)} caption="estimativa" />
+          <Stat
+            label="Dividend yield"
+            value={formatPct(result.dividendYield)}
+            caption="últimos 12 meses"
+            hint="Proventos pagos nos últimos 12 meses divididos pela cotação atual."
+          />
+          <Stat
+            label="Último provento"
+            value={formatBRL(result.lastDividend.amount)}
+            caption={formatDate(result.lastDividend.date)}
+          />
+        </div>
 
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Renda Anual</p>
-                    <p className="text-2xl font-bold text-purple-600">
-                      {formatCurrency(result.annualIncome)}
-                    </p>
-                  </div>
-                  <DollarSign className="w-8 h-8 text-purple-600 opacity-50" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Último Dividendo</p>
-                    <p className="text-lg font-bold">{formatCurrency(result.lastDividend.amount)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(result.lastDividend.date)}
-                    </p>
-                  </div>
-                  <DollarSign className="w-8 h-8 text-orange-600 opacity-50" />
-                </div>
-              </CardContent>
-            </Card>
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-border pt-4 text-sm sm:grid-cols-3">
+          <div className="flex justify-between gap-3 sm:block">
+            <dt className="text-muted-foreground">Proventos por ação em 12 meses</dt>
+            <dd className="font-medium tabular-nums">{formatBRL(result.totalDividendsLast12Months)}</dd>
           </div>
-
-          {/* Gráfico de Evolução */}
-          {chartData.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Evolução dos Dividendos (Últimos 12 Meses)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="date"
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <YAxis tick={{ fontSize: 12 }} />
-                    <Tooltip
-                      formatter={(value) =>
-                        formatCurrency(
-                          typeof value === 'number' ? value : Number(value ?? 0)
-                        )
-                      }
-                      labelStyle={{ color: "#000" }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="amount"
-                      stroke="#10b981"
-                      strokeWidth={2}
-                      name="Dividendo por Ação"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Informações Adicionais */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground mb-1">Total Últimos 12 Meses</p>
-                <p className="text-xl font-bold">
-                  {formatCurrency(result.totalDividendsLast12Months)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground mb-1">Média Mensal</p>
-                <p className="text-xl font-bold">
-                  {formatCurrency(result.averageMonthlyDividend)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground mb-1">Média Trimestral</p>
-                <p className="text-xl font-bold">
-                  {formatCurrency(result.averageQuarterlyDividend)}
-                </p>
-              </CardContent>
-            </Card>
+          <div className="flex justify-between gap-3 sm:block">
+            <dt className="text-muted-foreground">Média mensal por ação</dt>
+            <dd className="font-medium tabular-nums">{formatBRL(result.averageMonthlyDividend)}</dd>
           </div>
+          <div className="flex justify-between gap-3 sm:block">
+            <dt className="text-muted-foreground">Ações compradas com o valor</dt>
+            <dd className="font-medium tabular-nums">{formatNumber(Math.floor(shares), { digits: 0 })}</dd>
+          </div>
+        </dl>
+      </section>
 
-          {/* CTA para Relatório Completo - Melhorado */}
-          <Card className="border-2 border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/50 dark:from-green-950/20 dark:via-background dark:to-emerald-950/20">
-            <CardContent className="pt-6">
-              <div className="flex flex-col gap-6">
-                <div className="text-center">
-                  <div className="inline-flex items-center gap-2 bg-green-600 text-white rounded-full px-4 py-1.5 mb-3">
-                    <Sparkles className="w-4 h-4" />
-                    <span className="text-sm font-semibold">Relatório Completo Disponível</span>
-                  </div>
-                  <h3 className="font-bold text-xl mb-2">
-                    {isAuthenticated
-                      ? "Acesse o Relatório Completo Agora"
-                      : "Desbloqueie o Relatório Completo Grátis"}
-                  </h3>
-                  <p className="text-muted-foreground">
-                    {isAuthenticated
-                      ? "Veja análises profissionais que vão além do cálculo básico"
-                      : "Cadastre-se grátis e tenha acesso a análises profissionais"}
-                  </p>
-                </div>
+      {chartData.length > 0 && (
+        <section className="space-y-3 rounded-lg border border-border bg-card p-4 sm:p-5">
+          <h3 className="text-sm font-medium text-foreground">Proventos por ação, últimos pagamentos</h3>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={16} />
+                <YAxis
+                  tick={AXIS_TICK}
+                  tickLine={false}
+                  axisLine={false}
+                  width={64}
+                  tickFormatter={(value: number) => formatBRL(value)}
+                />
+                <Tooltip
+                  cursor={{ fill: "var(--muted)" }}
+                  content={({ active, payload }) => {
+                    const point = payload?.[0]?.payload as { label: string; amount: number } | undefined
+                    if (!active || !point) return null
+                    return (
+                      <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+                        <p className="text-muted-foreground">{point.label}</p>
+                        <p className="font-medium tabular-nums">{formatBRL(point.amount)} por ação</p>
+                        {shares > 0 && (
+                          <p className="text-muted-foreground tabular-nums">{formatBRL(point.amount * shares)} no seu valor</p>
+                        )}
+                      </div>
+                    )
+                  }}
+                />
+                <Bar dataKey="amount" fill="var(--chart-1)" radius={[2, 2, 0, 0]} maxBarSize={32} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
 
-                {/* O que está incluído no relatório */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="flex items-start gap-2 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <Shield className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-sm mb-1">Análise de Sustentabilidade</p>
-                      <p className="text-xs text-muted-foreground">
-                        Score completo, ROE, Payout, Margens e alertas de Dividend Trap
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <BarChart3 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-sm mb-1">Gráficos Históricos (5 anos)</p>
-                      <p className="text-xs text-muted-foreground">
-                        Evolução completa, tendência e consistência dos pagamentos
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <TrendingUp className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-sm mb-1">Comparação Setorial</p>
-                      <p className="text-xs text-muted-foreground">
-                        Veja como a empresa se compara com a média do setor
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <DollarSign className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-sm mb-1">Projeções Futuras</p>
-                      <p className="text-xs text-muted-foreground">
-                        Cenários conservador e otimista baseados em tendência histórica
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* CTA Button */}
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <Button
-                    onClick={onViewFullReport}
-                    size="lg"
-                    className="w-full sm:w-auto bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
-                  >
-                    {isAuthenticated ? (
-                      <>
-                        <FileText className="w-4 h-4 mr-2" />
-                        Ver Relatório Completo Agora
-                      </>
-                    ) : (
-                      <>
-                        <Lock className="w-4 h-4 mr-2" />
-                        Cadastrar-se Grátis e Ver Relatório
-                      </>
-                    )}
-                  </Button>
-                  {!isAuthenticated && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <CheckCircle className="w-3 h-3 text-green-600" />
-                      <span>Sem cartão • Acesso imediato • Grátis para sempre</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </CardContent>
-      </Card>
+      <section className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h3 className="text-sm font-medium text-foreground">Relatório completo de {result.ticker}</h3>
+          <p className="text-sm text-muted-foreground">
+            Sustentabilidade dos proventos, histórico de 5 anos, comparação com o setor e cenários de renda.
+            {!isAuthenticated && " Requer conta gratuita."}
+          </p>
+        </div>
+        <Button onClick={onViewFullReport} className="shrink-0">
+          {isAuthenticated ? "Ver relatório" : "Criar conta e ver relatório"}
+        </Button>
+      </section>
     </div>
   )
 }
-

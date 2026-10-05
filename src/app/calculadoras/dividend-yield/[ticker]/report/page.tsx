@@ -1,41 +1,40 @@
 "use client"
 
+/**
+ * Relatório completo da calculadora de dividend yield (exige login).
+ */
+
 import { useEffect, useState } from "react"
-import { useParams, useSearchParams, useRouter } from "next/navigation"
-import { useSession } from "next-auth/react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Loader2, Download, TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react"
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts"
 import Link from "next/link"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { AlertTriangle } from "lucide-react"
+import { PageHeader } from "@/components/page-header"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { SectionHeader } from "@/components/ui/section-header"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Stat } from "@/components/ui/stat"
+import { formatBRL, formatDeltaPct, formatNumber, formatPct } from "@/lib/format"
+
+interface BreakdownItem {
+  points: number
+  maxPoints: number
+  value: number | null
+  description: string
+}
 
 interface ReportData {
   ticker: string
   companyName: string
   currentPrice: number
+  /** Frações (0,085 = 8,5%) em dividendYield, roe, payout, margemLiquida e sectorAverage. */
   dividendYield: number
   monthlyIncome: number
   annualIncome: number
-  lastDividend: {
-    amount: number
-    date: Date
-  }
-  dividendHistory: Array<{
-    date: Date
-    amount: number
-  }>
+  lastDividend: { amount: number; date: Date | string }
+  dividendHistory: Array<{ date: Date | string; amount: number }>
   sustainability: {
     roe: number | null
     payout: number | null
@@ -44,10 +43,10 @@ interface ReportData {
     dividendTrapAlerts: string[]
     score: number
     breakdown: {
-      roe: { points: number; maxPoints: number; value: number | null; description: string }
-      payout: { points: number; maxPoints: number; value: number | null; description: string }
-      margemLiquida: { points: number; maxPoints: number; value: number | null; description: string }
-      liquidezCorrente: { points: number; maxPoints: number; value: number | null; description: string }
+      roe: BreakdownItem
+      payout: BreakdownItem
+      margemLiquida: BreakdownItem
+      liquidezCorrente: BreakdownItem
     }
   }
   sectorComparison: {
@@ -56,29 +55,78 @@ interface ReportData {
     isAboveAverage: boolean | null
   }
   projections: {
-    conservative: {
-      monthly: number
-      annual: number
-    }
-    optimistic: {
-      monthly: number
-      annual: number
-    }
+    conservative: { monthly: number; annual: number }
+    optimistic: { monthly: number; annual: number }
   }
   historicalTrend: {
     trend: "increasing" | "decreasing" | "stable"
+    /** Fração. */
     averageGrowth: number
+    /** 0 a 100. */
     consistency: number
   }
+}
+
+const TREND_LABEL: Record<ReportData["historicalTrend"]["trend"], string> = {
+  increasing: "Crescente",
+  decreasing: "Decrescente",
+  stable: "Estável",
+}
+
+const BREAKDOWN: Array<{
+  key: keyof ReportData["sustainability"]["breakdown"]
+  label: string
+  help: string
+  format: (value: number) => string
+}> = [
+  {
+    key: "roe",
+    label: "ROE",
+    help: "Rentabilidade sobre o patrimônio líquido: capacidade de gerar lucro com o capital dos sócios.",
+    format: (v) => formatPct(v),
+  },
+  {
+    key: "payout",
+    label: "Payout",
+    help: "Parcela do lucro distribuída como proventos. Entre 30% e 60% costuma equilibrar distribuição e reinvestimento.",
+    format: (v) => formatPct(v),
+  },
+  {
+    key: "margemLiquida",
+    label: "Margem líquida",
+    help: "Lucro líquido sobre a receita: eficiência para transformar vendas em lucro.",
+    format: (v) => formatPct(v),
+  },
+  {
+    key: "liquidezCorrente",
+    label: "Liquidez corrente",
+    help: "Ativo circulante sobre passivo circulante: folga para pagar obrigações de curto prazo.",
+    format: (v) => formatNumber(v, { digits: 2 }),
+  },
+]
+
+const AXIS_TICK = { fontSize: 12, fill: "var(--muted-foreground)" } as const
+
+function ReportSkeleton() {
+  return (
+    <div className="container mx-auto max-w-6xl space-y-6 px-4 py-6 sm:py-8" aria-busy="true">
+      <Skeleton className="h-8 w-80 max-w-full" />
+      <Skeleton className="h-28 w-full" />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Skeleton className="h-72 w-full" />
+        <Skeleton className="h-72 w-full" />
+      </div>
+    </div>
+  )
 }
 
 export default function DividendYieldReportPage() {
   const params = useParams()
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const ticker = params.ticker as string
-  const investmentAmount = searchParams.get("investmentAmount")
+  const investmentAmount = Number(searchParams.get("investmentAmount") || 0)
 
   const [loading, setLoading] = useState(true)
   const [reportData, setReportData] = useState<ReportData | null>(null)
@@ -86,560 +134,267 @@ export default function DividendYieldReportPage() {
 
   useEffect(() => {
     if (status === "loading") return
-
     if (status === "unauthenticated") {
-      router.push(`/calculadoras/dividend-yield?redirect=${encodeURIComponent(window.location.href)}`)
+      router.push(`/calculadoras/dividend-yield?ticker=${encodeURIComponent(ticker)}`)
+      return
+    }
+    if (!ticker || !investmentAmount) {
+      setError("Informe a ação e o valor investido na calculadora.")
+      setLoading(false)
       return
     }
 
-    if (status === "authenticated" && ticker && investmentAmount) {
-      loadReport()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, ticker, investmentAmount])
-
-  const loadReport = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch(
-        `/api/calculators/dividend-yield/report?ticker=${ticker}&investmentAmount=${investmentAmount}`
-      )
-
-      if (!response.ok) {
-        throw new Error("Erro ao carregar relatório")
+    let cancelled = false
+    const load = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch(
+          `/api/calculators/dividend-yield/report?ticker=${encodeURIComponent(ticker)}&investmentAmount=${investmentAmount}`
+        )
+        const data = await response.json()
+        if (!response.ok || !data.success) throw new Error(data.error || "Não foi possível carregar o relatório.")
+        if (!cancelled) setReportData(data.data)
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Não foi possível carregar o relatório.")
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-
-      const data = await response.json()
-      if (!data.success) {
-        throw new Error(data.error || "Erro ao carregar relatório")
-      }
-
-      setReportData(data.data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro desconhecido")
-    } finally {
-      setLoading(false)
     }
-  }
-
-  const formatCurrency = (value: number | null): string => {
-    if (value === null) return "N/A"
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value)
-  }
-
-  const formatPercent = (value: number | null): string => {
-    if (value === null) return "N/A"
-    return `${(value * 100).toFixed(2)}%`
-  }
-
-  const formatDate = (date: Date | string): string => {
-    const d = typeof date === "string" ? new Date(date) : date
-    return new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(d)
-  }
-
-  const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case "increasing":
-        return <TrendingUp className="w-5 h-5 text-green-600" />
-      case "decreasing":
-        return <TrendingDown className="w-5 h-5 text-red-600" />
-      default:
-        return <Minus className="w-5 h-5 text-gray-600" />
+    load()
+    return () => {
+      cancelled = true
     }
-  }
+  }, [status, ticker, investmentAmount, router])
 
-  const getTrendLabel = (trend: string) => {
-    switch (trend) {
-      case "increasing":
-        return "Crescimento"
-      case "decreasing":
-        return "Declínio"
-      default:
-        return "Estável"
-    }
-  }
-
-  if (status === "loading" || loading) {
-    return (
-      <div className="container mx-auto px-4 py-12">
-        <div className="flex flex-col items-center justify-center min-h-[400px]">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-          <p className="text-muted-foreground">Carregando relatório completo...</p>
-        </div>
-      </div>
-    )
-  }
+  if (status === "loading" || loading) return <ReportSkeleton />
 
   if (error || !reportData) {
     return (
-      <div className="container mx-auto px-4 py-12">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <AlertTriangle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">Erro ao carregar relatório</h2>
-              <p className="text-muted-foreground mb-4">{error || "Relatório não encontrado"}</p>
-              <Button asChild>
-                <Link href="/calculadoras/dividend-yield">Voltar para Calculadora</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="container mx-auto max-w-6xl px-4 py-12">
+        <div className="mx-auto max-w-md rounded-lg border border-border bg-card p-6 text-center">
+          <p className="text-base font-medium text-foreground">Não foi possível abrir o relatório</p>
+          <p className="mt-1 text-sm text-muted-foreground">{error || "Relatório não encontrado."}</p>
+          <Button asChild className="mt-4">
+            <Link href="/calculadoras/dividend-yield">Voltar para a calculadora</Link>
+          </Button>
+        </div>
       </div>
     )
   }
 
-  // Preparar dados para gráficos
-  const historicalChartData = reportData.dividendHistory
-    .slice(0, 60)
-    .reverse()
-    .map((div) => {
-      const date = typeof div.date === "string" ? new Date(div.date) : div.date
-      return {
-        date: formatDate(date),
-        amount: div.amount,
-        projectedIncome: div.amount * (parseFloat(investmentAmount || "0") / reportData.currentPrice),
-      }
-    })
-
-  // Agrupar por ano para gráfico de barras
-  const yearlyData = new Map<number, number>()
+  const shares = reportData.currentPrice > 0 ? investmentAmount / reportData.currentPrice : 0
+  const yearly = new Map<number, number>()
   reportData.dividendHistory.forEach((div) => {
-    const date = typeof div.date === "string" ? new Date(div.date) : div.date
-    const year = date.getFullYear()
-    const current = yearlyData.get(year) || 0
-    yearlyData.set(year, current + div.amount)
+    const year = new Date(div.date).getFullYear()
+    yearly.set(year, (yearly.get(year) || 0) + div.amount)
   })
-
-  const yearlyChartData = Array.from(yearlyData.entries())
+  const yearlyChartData = Array.from(yearly.entries())
     .sort((a, b) => a[0] - b[0])
     .slice(-5)
-    .map(([year, total]) => ({
-      year: year.toString(),
-      total,
-      projectedIncome: total * (parseFloat(investmentAmount || "0") / reportData.currentPrice),
-    }))
+    .map(([year, total]) => ({ year: String(year), total, income: total * shares }))
+
+  const { sustainability, sectorComparison, projections, historicalTrend } = reportData
+  const hasFinancialExclusions =
+    sustainability.breakdown.margemLiquida.maxPoints === 0 || sustainability.breakdown.liquidezCorrente.maxPoints === 0
 
   return (
-    <div className="container mx-auto px-4 py-8 lg:py-12">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">
-              Relatório Completo - {reportData.companyName} ({reportData.ticker})
-            </h1>
-            <p className="text-muted-foreground">
-              Análise detalhada de dividend yield e sustentabilidade
+    <div className="container mx-auto max-w-6xl space-y-6 px-4 py-6 sm:py-8">
+      <PageHeader
+        breadcrumb={[
+          { label: "Calculadoras", href: "/calculadoras" },
+          { label: "Dividend yield", href: "/calculadoras/dividend-yield" },
+          { label: reportData.ticker },
+        ]}
+        title={`Relatório de dividendos: ${reportData.ticker}`}
+        description={`${reportData.companyName}. Simulação com ${formatBRL(investmentAmount)} investidos.`}
+        actions={
+          <Button variant="outline" asChild>
+            <Link href="/calculadoras/dividend-yield">Nova simulação</Link>
+          </Button>
+        }
+      />
+
+      <section aria-label="Resumo" className="grid grid-cols-2 gap-4 rounded-lg border border-border bg-card p-4 sm:grid-cols-4 sm:p-5">
+        <Stat label="Renda mensal média" value={formatBRL(reportData.monthlyIncome)} caption="estimativa" />
+        <Stat label="Renda em 12 meses" value={formatBRL(reportData.annualIncome)} caption="estimativa" />
+        <Stat label="Dividend yield" value={formatPct(reportData.dividendYield)} caption="últimos 12 meses" />
+        <Stat
+          label="Sustentabilidade"
+          value={`${formatNumber(sustainability.score, { digits: 0 })}/100`}
+          hint="Score de 0 a 100 que combina ROE, payout, margem líquida e liquidez corrente."
+        />
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="space-y-3 rounded-lg border border-border bg-card p-4 sm:p-5">
+          <SectionHeader as="h2" title="Proventos por ação nos últimos anos" />
+          {yearlyChartData.length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={yearlyChartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="year" tick={AXIS_TICK} tickLine={false} axisLine={false} />
+                  <YAxis
+                    tick={AXIS_TICK}
+                    tickLine={false}
+                    axisLine={false}
+                    width={64}
+                    tickFormatter={(value: number) => formatBRL(value)}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "var(--muted)" }}
+                    content={({ active, payload }) => {
+                      const point = payload?.[0]?.payload as { year: string; total: number; income: number } | undefined
+                      if (!active || !point) return null
+                      return (
+                        <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+                          <p className="text-muted-foreground">{point.year}</p>
+                          <p className="font-medium tabular-nums">{formatBRL(point.total)} por ação</p>
+                          <p className="text-muted-foreground tabular-nums">{formatBRL(point.income)} no seu valor</p>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Bar dataKey="total" fill="var(--chart-1)" radius={[2, 2, 0, 0]} maxBarSize={40} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sem histórico de proventos suficiente.</p>
+          )}
+        </section>
+
+        <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+          <SectionHeader as="h2" title="Regularidade dos pagamentos" />
+          <div className="grid grid-cols-2 gap-4">
+            <Stat label="Tendência" value={TREND_LABEL[historicalTrend.trend]} size="sm" />
+            <Stat label="Crescimento médio" value={formatDeltaPct(historicalTrend.averageGrowth)} size="sm" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Consistência</span>
+              <span className="font-medium tabular-nums">{formatPct(historicalTrend.consistency / 100, { digits: 0 })}</span>
+            </div>
+            <div
+              className="h-2 w-full overflow-hidden rounded-full bg-muted"
+              role="meter"
+              aria-label="Consistência dos pagamentos"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={historicalTrend.consistency}
+            >
+              <div className="h-full rounded-full bg-brand" style={{ width: `${Math.min(100, Math.max(0, historicalTrend.consistency))}%` }} />
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              Mede a regularidade dos intervalos entre pagamentos. Empresas que pagam em intervalos constantes (mensal,
+              trimestral) têm consistência maior.
             </p>
           </div>
-          <Button variant="outline" asChild>
-            <Link href="/calculadoras/dividend-yield">
-              <Download className="w-4 h-4 mr-2" />
-              Nova Análise
-            </Link>
-          </Button>
-        </div>
+        </section>
       </div>
 
-      {/* Resumo Executivo */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Resumo Executivo</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Dividend Yield</p>
-              <p className="text-2xl font-bold text-green-600">
-                {formatPercent(reportData.dividendYield)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Renda Mensal</p>
-              <p className="text-2xl font-bold">{formatCurrency(reportData.monthlyIncome)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Renda Anual</p>
-              <p className="text-2xl font-bold">{formatCurrency(reportData.annualIncome)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Score Sustentabilidade</p>
-              <p className="text-2xl font-bold">{reportData.sustainability.score}/100</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Evolução Histórica (Últimos 5 Anos)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={yearlyChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="year" />
-                <YAxis />
-                <Tooltip
-                  formatter={(value) =>
-                    formatCurrency(typeof value === 'number' ? value : Number(value ?? 0))
-                  }
-                />
-                <Legend />
-                <Bar dataKey="total" fill="#10b981" name="Dividendo por Ação" />
-                <Bar dataKey="projectedIncome" fill="#3b82f6" name="Renda Projetada" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Tendência de Pagamentos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                {getTrendIcon(reportData.historicalTrend.trend)}
-                <div>
-                  <p className="font-semibold">{getTrendLabel(reportData.historicalTrend.trend)}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Crescimento médio: {formatPercent(reportData.historicalTrend.averageGrowth)}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm text-muted-foreground">Consistência</p>
-                  <p className="text-xs text-muted-foreground">
-                    {reportData.historicalTrend.consistency}%
-                  </p>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                  <div
-                    className="bg-green-600 h-4 rounded-full transition-all"
-                    style={{ width: `${reportData.historicalTrend.consistency}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  <strong>Como é calculado:</strong> Mede a regularidade dos intervalos entre pagamentos de dividendos. Empresas que pagam em intervalos consistentes (ex: mensalmente ou trimestralmente) têm maior consistência.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Análise de Sustentabilidade */}
-      <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Análise de Sustentabilidade</CardTitle>
-            <Badge variant="outline" className="text-lg">
-              Score: {reportData.sustainability.score}/100
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Breakdown do Score */}
-          <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-            <h4 className="font-semibold mb-3 text-sm">Como o Score é Calculado:</h4>
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm">ROE (Return on Equity)</span>
-                    <Badge variant="secondary" className="text-xs">
-                      {reportData.sustainability.breakdown.roe.points}/{reportData.sustainability.breakdown.roe.maxPoints} pts
-                    </Badge>
+      <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+        <SectionHeader
+          as="h2"
+          title="Sustentabilidade dos proventos"
+          description="Como o score de sustentabilidade é formado. Pesos: ROE 30%, payout 25%, margem líquida 25%, liquidez corrente 20%."
+          actions={<Badge variant="neutral">{formatNumber(sustainability.score, { digits: 0 })}/100</Badge>}
+        />
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {BREAKDOWN.map(({ key, label, help, format }) => {
+            const item = sustainability.breakdown[key]
+            const applicable = item.maxPoints > 0
+            const share = applicable ? Math.min(100, (item.points / item.maxPoints) * 100) : 0
+            return (
+              <li key={key} className="grid gap-2 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_160px] sm:items-center sm:gap-6">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="text-sm font-medium text-foreground">{label}</span>
+                    <span className="text-sm tabular-nums text-foreground">{item.value !== null ? format(item.value) : "—"}</span>
+                    <span className="text-xs text-muted-foreground">{item.description}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-1">
-                    {reportData.sustainability.breakdown.roe.value !== null
-                      ? `Valor: ${formatPercent(reportData.sustainability.breakdown.roe.value)} - ${reportData.sustainability.breakdown.roe.description}`
-                      : reportData.sustainability.breakdown.roe.description}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Mede a rentabilidade sobre o patrimônio líquido. Quanto maior, melhor a capacidade de gerar lucros.
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {applicable ? help : "Não se aplica a empresas do setor financeiro."}
                   </p>
                 </div>
-                <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div
-                    className="bg-green-600 h-2 rounded-full"
-                    style={{
-                      width: `${(reportData.sustainability.breakdown.roe.points / reportData.sustainability.breakdown.roe.maxPoints) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm">Payout Ratio</span>
-                    <Badge variant="secondary" className="text-xs">
-                      {reportData.sustainability.breakdown.payout.points}/{reportData.sustainability.breakdown.payout.maxPoints} pts
-                    </Badge>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-brand" style={{ width: `${share}%` }} />
                   </div>
-                  <p className="text-xs text-muted-foreground mb-1">
-                    {reportData.sustainability.breakdown.payout.value !== null
-                      ? `Valor: ${formatPercent(reportData.sustainability.breakdown.payout.value)} - ${reportData.sustainability.breakdown.payout.description}`
-                      : reportData.sustainability.breakdown.payout.description}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Percentual do lucro distribuído como dividendos. Ideal entre 30-60% para equilibrar distribuição e reinvestimento.
-                  </p>
-                </div>
-                <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div
-                    className="bg-green-600 h-2 rounded-full"
-                    style={{
-                      width: `${(reportData.sustainability.breakdown.payout.points / reportData.sustainability.breakdown.payout.maxPoints) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm">Margem Líquida</span>
-                    {reportData.sustainability.breakdown.margemLiquida.maxPoints > 0 ? (
-                      <Badge variant="secondary" className="text-xs">
-                        {reportData.sustainability.breakdown.margemLiquida.points}/{reportData.sustainability.breakdown.margemLiquida.maxPoints} pts
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-muted-foreground">
-                        N/A
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-1">
-                    {reportData.sustainability.breakdown.margemLiquida.value !== null
-                      ? `Valor: ${formatPercent(reportData.sustainability.breakdown.margemLiquida.value)} - ${reportData.sustainability.breakdown.margemLiquida.description}`
-                      : reportData.sustainability.breakdown.margemLiquida.description}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {reportData.sustainability.breakdown.margemLiquida.maxPoints === 0
-                      ? "Métrica não aplicável para empresas do setor financeiro devido às particularidades do setor."
-                      : "Percentual do lucro líquido sobre a receita. Indica eficiência operacional e capacidade de gerar lucros."}
-                  </p>
-                </div>
-                {reportData.sustainability.breakdown.margemLiquida.maxPoints > 0 ? (
-                  <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div
-                      className="bg-green-600 h-2 rounded-full"
-                      style={{
-                        width: `${(reportData.sustainability.breakdown.margemLiquida.points / reportData.sustainability.breakdown.margemLiquida.maxPoints) * 100}%`,
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2 opacity-50" />
-                )}
-              </div>
-
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm">Liquidez Corrente</span>
-                    {reportData.sustainability.breakdown.liquidezCorrente.maxPoints > 0 ? (
-                      <Badge variant="secondary" className="text-xs">
-                        {reportData.sustainability.breakdown.liquidezCorrente.points}/{reportData.sustainability.breakdown.liquidezCorrente.maxPoints} pts
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-muted-foreground">
-                        N/A
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-1">
-                    {reportData.sustainability.breakdown.liquidezCorrente.value !== null
-                      ? `Valor: ${reportData.sustainability.breakdown.liquidezCorrente.value.toFixed(2)} - ${reportData.sustainability.breakdown.liquidezCorrente.description}`
-                      : reportData.sustainability.breakdown.liquidezCorrente.description}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {reportData.sustainability.breakdown.liquidezCorrente.maxPoints === 0
-                      ? "Métrica não aplicável para empresas do setor financeiro devido às particularidades do setor."
-                      : "Razão entre ativos circulantes e passivos circulantes. Indica capacidade de pagar obrigações de curto prazo."}
-                  </p>
-                </div>
-                {reportData.sustainability.breakdown.liquidezCorrente.maxPoints > 0 ? (
-                  <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div
-                      className="bg-green-600 h-2 rounded-full"
-                      style={{
-                        width: `${(reportData.sustainability.breakdown.liquidezCorrente.points / reportData.sustainability.breakdown.liquidezCorrente.maxPoints) * 100}%`,
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2 opacity-50" />
-                )}
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-muted-foreground">
-                <strong>Nota:</strong> O score é calculado proporcionalmente ao máximo possível baseado nos dados disponíveis. 
-                Cada métrica tem um peso específico: ROE (30%), Payout Ratio (25%), Margem Líquida (25%), Liquidez Corrente (20%).
-                {reportData.sustainability.breakdown.margemLiquida.maxPoints === 0 || reportData.sustainability.breakdown.liquidezCorrente.maxPoints === 0 ? (
-                  <span className="block mt-1">
-                    <strong>Importante:</strong> Para empresas do setor financeiro, Margem Líquida e Liquidez Corrente não são consideradas no cálculo do score, pois essas métricas não são aplicáveis devido às particularidades do setor.
-                  </span>
-                ) : null}
-              </p>
-            </div>
-          </div>
-
-          {/* Métricas Principais */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">ROE</p>
-              <p className="text-xl font-bold">
-                {reportData.sustainability.roe !== null
-                  ? formatPercent(reportData.sustainability.roe)
-                  : "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Payout Ratio</p>
-              <p className="text-xl font-bold">
-                {reportData.sustainability.payout !== null
-                  ? formatPercent(reportData.sustainability.payout)
-                  : "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Margem Líquida</p>
-              <p className="text-xl font-bold">
-                {reportData.sustainability.margemLiquida !== null
-                  ? formatPercent(reportData.sustainability.margemLiquida)
-                  : "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Liquidez Corrente</p>
-              <p className="text-xl font-bold">
-                {reportData.sustainability.liquidezCorrente !== null
-                  ? reportData.sustainability.liquidezCorrente.toFixed(2)
-                  : "N/A"}
-              </p>
-            </div>
-          </div>
-
-          {reportData.sustainability.dividendTrapAlerts.length > 0 && (
-            <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-4">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-2">
-                    Alertas de Dividend Trap
-                  </h4>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-yellow-800 dark:text-yellow-200">
-                    {reportData.sustainability.dividendTrapAlerts.map((alert, index) => (
-                      <li key={index}>{alert}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Comparação Setorial */}
-      {reportData.sectorComparison.sectorAverage !== null && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Comparação Setorial</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Setor: {reportData.sectorComparison.companySector}</span>
-                <Badge
-                  variant={reportData.sectorComparison.isAboveAverage ? "default" : "secondary"}
-                >
-                  {reportData.sectorComparison.isAboveAverage
-                    ? "Acima da Média"
-                    : "Abaixo da Média"}
-                </Badge>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Dividend Yield da Empresa</p>
-                  <p className="text-2xl font-bold">{formatPercent(reportData.dividendYield)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Média do Setor</p>
-                  <p className="text-2xl font-bold">
-                    {formatPercent(reportData.sectorComparison.sectorAverage)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Projeções Futuras */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Projeções Futuras</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="border rounded-lg p-4">
-              <h4 className="font-semibold mb-4 text-orange-600">Cenário Conservador (-20%)</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Renda Mensal:</span>
-                  <span className="font-semibold">
-                    {formatCurrency(reportData.projections.conservative.monthly)}
+                  <span className="w-16 text-right text-xs tabular-nums text-muted-foreground">
+                    {applicable ? `${formatNumber(item.points, { digits: 0 })}/${formatNumber(item.maxPoints, { digits: 0 })} pts` : "—"}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Renda Anual:</span>
-                  <span className="font-semibold">
-                    {formatCurrency(reportData.projections.conservative.annual)}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="border rounded-lg p-4">
-              <h4 className="font-semibold mb-4 text-green-600">Cenário Otimista (+20%)</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Renda Mensal:</span>
-                  <span className="font-semibold">
-                    {formatCurrency(reportData.projections.optimistic.monthly)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Renda Anual:</span>
-                  <span className="font-semibold">
-                    {formatCurrency(reportData.projections.optimistic.annual)}
-                  </span>
-                </div>
-              </div>
+              </li>
+            )
+          })}
+        </ul>
+        <p className="text-xs leading-5 text-muted-foreground">
+          O score é proporcional ao máximo possível com os dados disponíveis.
+          {hasFinancialExclusions &&
+            " Em empresas do setor financeiro, margem líquida e liquidez corrente ficam fora do cálculo."}
+        </p>
+
+        {sustainability.dividendTrapAlerts.length > 0 && (
+          <div className="flex gap-3 rounded-lg bg-warning-subtle p-4">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" strokeWidth={1.75} aria-hidden="true" />
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium text-foreground">Pontos de atenção (possível armadilha de dividendos)</h3>
+              <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
+                {sustainability.dividendTrapAlerts.map((alert) => (
+                  <li key={alert}>{alert}</li>
+                ))}
+              </ul>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-4">
-            * Projeções baseadas em tendência histórica e podem variar conforme condições de
-            mercado
+        )}
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {sectorComparison.sectorAverage !== null && (
+          <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+            <SectionHeader
+              as="h2"
+              title="Comparação com o setor"
+              description={sectorComparison.companySector ?? undefined}
+              actions={
+                sectorComparison.isAboveAverage !== null && (
+                  <Badge variant="neutral">
+                    {sectorComparison.isAboveAverage ? "DY acima da média do setor" : "DY abaixo da média do setor"}
+                  </Badge>
+                )
+              }
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Stat label={`Dividend yield de ${reportData.ticker}`} value={formatPct(reportData.dividendYield)} />
+              <Stat label="Média do setor" value={formatPct(sectorComparison.sectorAverage)} />
+            </div>
+          </section>
+        )}
+
+        <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+          <SectionHeader
+            as="h2"
+            title="Cenários de renda"
+            description="Estimativas com proventos 20% menores ou 20% maiores que os dos últimos 12 meses."
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Stat
+              label="Cenário conservador"
+              value={formatBRL(projections.conservative.monthly)}
+              caption={`por mês, ${formatBRL(projections.conservative.annual)} por ano`}
+            />
+            <Stat
+              label="Cenário otimista"
+              value={formatBRL(projections.optimistic.monthly)}
+              caption={`por mês, ${formatBRL(projections.optimistic.annual)} por ano`}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Estimativas a partir da tendência histórica. Os pagamentos reais podem ser diferentes.
           </p>
-        </CardContent>
-      </Card>
+        </section>
+      </div>
     </div>
   )
 }
-

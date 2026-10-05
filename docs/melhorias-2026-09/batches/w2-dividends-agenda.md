@@ -50,3 +50,7 @@ ACCEPTANCE:
 (4) /dashboard shows the widget; /carteira/<id> shows the yield-on-cost column/card.
 (5) /radar-dividendos renders projections with the 'estimativa estatística' label; grep -n gemini src/lib/dividend-radar-service.ts -> 0.
 (6) Portfolio transactions page: the suggested dividends list appears and nothing is auto-confirmed.
+
+
+## Carry-over from wave 1 (added before launching wave 2)
+- src/app/api/dividend-radar/grid/** is now owned by this batch: the grid API doesn't return `paymentDate`/`type`, so the UI shows "Não informado". Return both (type as Dividendo/JCP/Rendimento) from DividendHistory.

@@ -92,3 +92,9 @@ ACCEPTANCE:
 (5) The dividend ranking as premium includes financial tickers.
 (6) /radar shows 'Barsi' (not 'Bazin') for the Barsi method.
 (7) Dark/light screenshots of the changed pages.
+
+
+## Carry-over from wave 1 (added before launching wave 2)
+- rank-builder / ranking-history (src/app/api/ranking-history/route.ts is now owned by this batch): numbers formatted with a dot decimal and English strings — use @/lib/format and pt-BR copy.
+- useTechnicalAnalysis must default to false in rankings (owner decision 6).
+- magicFormulaRank is being fixed to exclude roic <= 0 by w2-valuation-core in parallel; don't duplicate the fix, just call the helper.

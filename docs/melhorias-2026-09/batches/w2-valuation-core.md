@@ -81,3 +81,14 @@ ACCEPTANCE:
 (2) Premium screenshots light/dark of /acao/petr4, /acao/itub4, /acao/taee11, /acao/vale3: expand the FCD row (bridge + terminal share visible), Gordon row (D0, g, k), Graham label. Margem and Potencial are distinct: for one row compute 1-P/VJ and VJ/P-1 by hand from the displayed numbers.
 (3) /ranking as premium: run Graham, FCD, Gordon, Fórmula Mágica (local compute); no errors in the dev log (<SCRATCH>/dev.log or the terminal output), with non-empty results. Fórmula Mágica excludes banks (ITUB4, BBAS3, BBDC4) and utilities (TAEE11, EGIE3, CMIG4, CPLE6, SBSP3, ELET3).
 (4) grep the strategy files for 'EBITDA \* 0.6|0\.05 \* Math.exp' -> 0.
+
+
+## Carry-over from wave 1 (added before launching wave 2)
+- This batch now OWNS src/lib/finance/** and src/lib/__tests__/finance/** for the wave-1 helper fixes below. Other wave-2 batches import these helpers in parallel: keep every exported signature backward-compatible (add optional params only, never rename/remove exports) and keep `yarn test` green.
+  - dividends.ts `annualizeFromLast12`: returns null when a dividend and a JCP share the same ex-date — group events by exDate before computing intervals; accept an optional `asOf` and flag stale data (last payment older than ~18 months) instead of annualizing it.
+  - dividends.ts `fullYearTotals`: may drop a complete first year in short histories — fix the partial-first-year heuristic (use the first event month, not the series start).
+  - valuation.ts `magicFormulaRank`: exclude `roic <= 0` (and non-positive earnings yield).
+  - signals.ts `fundamentalsIntact`: change the default `ratioBasis` to 'ttm' (schema ROE is annual/TTM); require the 8-quarter window to be consecutive quarters; format check texts with @/lib/format.
+  - macro.ts: `ipcaExpected` is realized 12m IPCA (SGS 433) — rename to `ipca12m` (keep `ipcaExpected` as a deprecated alias) and never label it "IPCA esperado"; `parseSgsDate` must reject impossible dates (e.g. 31/02).
+  - sector-classification.ts: fix misclassifications such as "Máquinas Agrícolas", "Artefatos de Ferro e Aço", "Tecnologia financeira"; add test cases for each.
+- BDR fair values are nonsensical today (AAPL34 Graham ≈ −1.109%): BDR prices are in BRL per BDR while fundamentals come in USD per underlying share. Apply currency + parity (or hide the models with a clear "não aplicável a BDR" state when parity/FX is unavailable). Never show a negative or >±500% upside.

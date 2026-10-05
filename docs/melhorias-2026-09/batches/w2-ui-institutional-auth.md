@@ -77,3 +77,7 @@ Check:
 (3) Auth: page height / viewport height <= 1.2 at 390; input font-size 16px; autocomplete attributes present.
 (4) npx eslint src/components/parceiros -> 0 errors.
 (5) grep -n 'bg-clip-text' in owned files -> 0.
+
+
+## Carry-over from wave 1 (added before launching wave 2)
+- blog, /como-funciona, /contato, /sobre still use gradients and the old hero — remove them (scripts/check-ui.sh must pass on these paths). Also remove the leftover import of the empty legacy `Footer` in any owned page.

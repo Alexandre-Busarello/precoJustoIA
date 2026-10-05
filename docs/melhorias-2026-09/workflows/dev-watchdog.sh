@@ -2,7 +2,7 @@
 # Runs the local Next dev server (port 3100, local DB). Restarts it only when the
 # machine is actually running out of memory (MemAvailable < MIN_AVAIL_MB) or the
 # server passes HARD_MB, and never more than once every COOLDOWN seconds.
-cd /home/busamar/projetos/analisador-acoes/analisador-acoes || exit 1
+cd "$(dirname "$0")/../../.." || exit 1
 MIN_AVAIL_MB=${MIN_AVAIL_MB:-1800}
 HARD_MB=${HARD_MB:-5000}
 COOLDOWN=${COOLDOWN:-300}

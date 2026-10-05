@@ -86,3 +86,8 @@ Playwright:
 - the <head> has exactly one rel=manifest;
 - throttle the network and navigate to /acao/petr4 -> the skeleton is visible before content.
 Also browse /acao/petr4, /ranking and /dashboard normally with API calls -> no 429 from the rate limiter in normal use.
+
+
+## Carry-over from wave 1 (added before launching wave 2)
+- Add a permanent redirect /comparador-etfs → /comparador?tipo=etfs in next.config.ts (check the comparador already reads `tipo=etfs`).
+- Do NOT edit vercel.json crons (owner action).

@@ -81,3 +81,7 @@ Check:
 (4) Inputs have inputmode=decimal; type a value and the BRL mask formats it.
 (5) No auto-opening dialog on the DY calculator within 10 s.
 (6) scrollWidth == innerWidth at 320/360.
+
+
+## Carry-over from wave 1 (added before launching wave 2)
+- /projecoes-ibov still has the old red cards and gradients; calculators still use gradients — remove them all (scripts/check-ui.sh must pass on these paths).

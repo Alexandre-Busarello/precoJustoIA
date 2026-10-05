@@ -51,3 +51,7 @@ ACCEPTANCE:
 (2) Premium: /backtest run the example portfolio (local compute); compare the total return with and without the change (report both numbers); the chart shows CDI and IBOV.
 (3) /carteira/<seed id>/analise: TWR, XIRR and Sharpe visible; the benchmarks legend shows CDI/IBOV/IPCA; dark/light screenshots.
 (4) Confirm that no external calls other than BCB SGS/Yahoo happened (dev log).
+
+
+## Carry-over from wave 1 (added before launching wave 2)
+- Backtest saves a duplicate "Carteira de exemplo" config on every run. Fix server-side in src/app/api/backtest/configs/route.ts (reuse/update the user's existing config with the same name + assets instead of inserting a new one); don't touch src/app/backtest/** (out of this batch).

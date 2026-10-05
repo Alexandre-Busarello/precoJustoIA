@@ -29,7 +29,7 @@ MACHINE LIMITS (the owner's PC has 15 GB RAM and freezes when full — this is c
   flock -w 3600 ${S}/heavy.lock npx tsx scripts/local/screenshots.ts ...
 - Never start another dev server, never run next build, never open extra browsers outside the screenshot script. The dev server on http://localhost:3100 (local Docker DB) is managed by a watchdog that may restart it for memory — if a request fails with connection refused, wait 30 s and retry.
 - Screenshots: pass only the routes you need (--routes) and only the viewports/auth you need; write to ${S}/shots/<your-batch-id>/... Keep outputs out of the repo.
-- DISK IS NEARLY FULL (~2 GB free on the whole machine). Screenshots: deviceScaleFactor 1, only the routes/viewports you need, prefer viewport-height (not full-page) captures unless you must see the whole page; after reviewing, DELETE raw captures you no longer need and keep at most a few evidence images per batch. Before any big screenshot run check \`df -h /\` — if less than 1 GB is free, delete old dirs under ${S}/shots first (never delete anything outside ${S}). Never write large files inside the repo.
+- DISK: the repo is on a large external disk, but ${S} lives on / (~13 GB free). Screenshots: deviceScaleFactor 1, only the routes/viewports you need, prefer viewport-height captures; after reviewing, DELETE raw captures you no longer need and keep at most a few evidence images per batch. If \`df -h /\` shows less than 2 GB free, delete old dirs under ${S}/shots first (never delete anything outside ${S}). Never write large files inside the repo.
 - Test users: premium@local.test / Local123!  and free@local.test / Local123! (local DB only).
 `
 

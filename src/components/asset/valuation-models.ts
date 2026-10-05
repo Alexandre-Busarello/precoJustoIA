@@ -1,4 +1,5 @@
 import { marginOfSafety, VALUATION_STATUS_LABEL, VALUATION_STATUS_TONE, valuationStatus } from '@/lib/valuation-metrics'
+import { isFinancial } from '@/lib/finance/sector-classification'
 
 /**
  * Registro tipado dos modelos de valuation exibidos na página de ativo.
@@ -89,7 +90,34 @@ export const VALUATION_MODELS: ValuationModel[] = [
     label: 'Barsi',
     shortLabel: 'Barsi',
     plan: 'premium',
-    description: 'Preço-teto pelo método de Luiz Barsi: dividendo médio dos últimos anos dividido pelo yield-alvo de 6%.',
+    description:
+      'Preço-teto pelo método de Luiz Barsi: média dos proventos brutos dos últimos 5 anos completos dividida pelo yield-alvo de 6%.',
+  },
+  {
+    key: 'bazin',
+    label: 'Bazin (preço-teto)',
+    shortLabel: 'Bazin',
+    // Troque para 'free' para liberar o modelo no plano gratuito (a API e a página seguem este campo).
+    plan: 'premium',
+    description:
+      'Preço-teto de Décio Bazin: média dos proventos brutos dos últimos 5 anos completos dividida pelo dividend yield alvo de 6%, com dívida baixa e lucros consistentes.',
+  },
+  {
+    key: 'lynch',
+    label: 'Peter Lynch (PEG)',
+    shortLabel: 'Lynch',
+    plan: 'premium',
+    description:
+      'P/L justo igual ao crescimento dos lucros mais o dividend yield; PEG = P/L ÷ crescimento. Não se aplica a commodities cíclicas nem a empresas com prejuízo.',
+  },
+  {
+    key: 'bankPvp',
+    label: 'P/VP justo (bancos)',
+    shortLabel: 'P/VP justo',
+    plan: 'premium',
+    appliesTo: 'financial',
+    description:
+      'Valor de bancos e seguradoras pelo P/VP justo = (ROE − g) ÷ (Ke − g), com ROE médio de 5 anos e custo de capital pelas premissas macro.',
   },
 ]
 
@@ -100,14 +128,11 @@ export function getValuationModel(key: string): ValuationModel | undefined {
 }
 
 /** Modelos cujo resultado depende de dividendos (não se aplicam a empresas que reinvestem o lucro). */
-export const DIVIDEND_MODEL_KEYS = new Set(['gordon', 'barsi', 'dividendYield'])
+export const DIVIDEND_MODEL_KEYS = new Set(['gordon', 'barsi', 'bazin', 'dividendYield'])
 
-const FINANCIAL_TERMS = ['banco', 'segurad', 'seguros', 'previdência', 'financeir']
-
-/** Bancos, seguradoras e demais financeiras (setor ou subsetor com esses termos). */
+/** Bancos, seguradoras e demais financeiras (mesma classificação setorial dos modelos). */
 export function isFinancialCompany(sector?: string | null, industry?: string | null): boolean {
-  const text = `${sector ?? ''} ${industry ?? ''}`.toLowerCase()
-  return FINANCIAL_TERMS.some((term) => text.includes(term))
+  return isFinancial(sector, industry)
 }
 
 function applies(model: ValuationModel, isFinancial: boolean): boolean {
@@ -138,7 +163,7 @@ function hasFairValue(strategy: StrategyResult | null | undefined): strategy is 
   return typeof strategy?.fairValue === 'number' && Number.isFinite(strategy.fairValue) && strategy.fairValue > 0
 }
 
-const DEFAULT_ORDER_FINANCIAL = ['barsi', 'graham', 'gordon', 'fcd']
+const DEFAULT_ORDER_FINANCIAL = ['barsi', 'bankPvp', 'graham', 'gordon', 'fcd']
 const DEFAULT_ORDER_GENERAL = ['fcd', 'graham', 'barsi', 'gordon']
 
 /**

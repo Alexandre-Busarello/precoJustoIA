@@ -31,8 +31,10 @@ import Link from 'next/link'
 import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
 import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
 import { AnonLimitCTA } from '@/components/anon-limit-cta'
-import { formatBRL, formatDeltaPct, formatMultiple, formatNumber, formatPct } from '@/lib/format'
+import { formatBRL, formatBRLCompact, formatDeltaPct, formatMultiple, formatNumber, formatPct } from '@/lib/format'
 import { marginOfSafety, valuationStatusLabel } from '@/lib/valuation-metrics'
+import { InfoHint } from '@/components/ui/info-hint'
+import { getLiquidityFlag, type LiquidityFlag } from '@/lib/rank-builder-service'
 
 interface PageProps {
   params: {
@@ -291,6 +293,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       }
     }
   }
+}
+
+/** Volume médio diário com a ajuda do badge "Baixa liquidez" do cabeçalho. */
+function LiquidityNote({ flag }: { flag: LiquidityFlag }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="tabular-nums">Volume médio: {flag.value === null ? 'sem dado' : `${formatBRLCompact(flag.value)}/dia`}</span>
+      <InfoHint label="Sobre a baixa liquidez" content={flag.hint} />
+    </span>
+  )
 }
 
 export default async function BdrPage({ params }: PageProps) {
@@ -567,6 +579,7 @@ export default async function BdrPage({ params }: PageProps) {
 
   const isLoggedIn = !!session?.user?.id
   const sizeInfo = getCompanySizeInfo(currentMarketCap)
+  const liquidityFlag: LiquidityFlag | null = await getLiquidityFlag(companyData.id, companyData.assetType).catch(() => null)
   const dividendYield = toNumber(latestFinancials?.dy ?? null)
   const location = [companyData.city, companyData.state].filter(Boolean).join(', ')
   const aboutItems = [
@@ -590,14 +603,18 @@ export default async function BdrPage({ params }: PageProps) {
             price={currentPrice > 0 ? currentPrice : null}
             dayChange={dayChange}
             updatedAt={latestFinancials?.updatedAt ?? null}
-            badges={sizeInfo ? [{ label: sizeInfo.label, variant: 'neutral' }] : []}
+            badges={[
+              ...(sizeInfo ? [{ label: sizeInfo.label, variant: 'neutral' as const }] : []),
+              ...(liquidityFlag?.isLow ? [{ label: 'Baixa liquidez', variant: 'warning' as const }] : []),
+            ]}
             sector={companyData.sector}
             industry={companyData.industry}
             canViewFullContent={canViewFullContent}
             isLoggedIn={isLoggedIn}
             compareHref={smartComparatorUrl ?? `/comparador?tickers=${ticker}`}
           />
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            {liquidityFlag?.isLow ? <LiquidityNote flag={liquidityFlag} /> : <span aria-hidden="true" />}
             <PageCacheIndicator ticker={ticker} isPremium={canViewFullContent} className="text-xs text-muted-foreground" />
           </div>
         </div>

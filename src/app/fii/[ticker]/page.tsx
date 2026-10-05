@@ -29,6 +29,8 @@ import {
 } from '@/lib/fii-listing-valuation'
 import { formatBRL, formatBRLCompact, formatDate, formatMultiple, formatNumber, formatPct } from '@/lib/format'
 import { marginOfSafety } from '@/lib/valuation-metrics'
+import { InfoHint } from '@/components/ui/info-hint'
+import { getLiquidityFlag, type LiquidityFlag } from '@/lib/rank-builder-service'
 
 interface PageProps {
   params: {
@@ -205,6 +207,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
+/** Volume médio diário com a ajuda do badge "Baixa liquidez" do cabeçalho. */
+function LiquidityNote({ flag }: { flag: LiquidityFlag }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="tabular-nums">Volume médio: {flag.value === null ? 'sem dado' : `${formatBRLCompact(flag.value)}/dia`}</span>
+      <InfoHint label="Sobre a baixa liquidez" content={flag.hint} />
+    </span>
+  )
+}
+
 export default async function FiiPage({ params }: PageProps) {
   const resolvedParams = await params
   const tickerParam = resolvedParams.ticker
@@ -340,6 +352,11 @@ export default async function FiiPage({ params }: PageProps) {
   }
 
   const fiiData = fullCompany?.fiiData ?? null
+  const liquidityFlag: LiquidityFlag | null = await getLiquidityFlag(
+    companyData.id,
+    companyData.assetType,
+    fiiData ? toNumber(fiiData.liquidez) : null
+  ).catch(() => null)
   const latestFinancials = fullCompany?.financialData?.[0]
   const latestQuote = companyData.dailyQuotes?.[0]
   const previousQuote = companyData.dailyQuotes?.[1]
@@ -451,9 +468,11 @@ export default async function FiiPage({ params }: PageProps) {
           marginOfSafety={marginOfSafety(price, fairValue)}
           score={fiiScore ? { value: fiiScore.score, label: fiiScoreLabel(fiiScore.classification) } : null}
           updatedAt={updatedAt}
+          badges={liquidityFlag?.isLow ? [{ label: 'Baixa liquidez', variant: 'warning' }] : []}
           // O CTA da prévia bloqueada fica num lugar só: na prévia abaixo (ou no aviso de limite do anônimo).
           locked={{ fairValue: !canViewFullContent, score: !canViewFullContent }}
         />
+        {liquidityFlag?.isLow && <LiquidityNote flag={liquidityFlag} />}
 
         {shouldShowAnonLimitCTA && <AnonLimitCTA />}
 

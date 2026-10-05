@@ -12,6 +12,25 @@ import {
 } from '@/lib/radar-service';
 import { getLatestPrices } from '@/lib/quote-service';
 import { getCachedFiiOverallScore } from '@/lib/fii-score-loader';
+import type { StrategyAnalysis } from '@/lib/strategies';
+
+/**
+ * Nomes das estratégias aprovadas, na ordem do radar (os mesmos de `RADAR_STRATEGY_LABELS` em
+ * radar-strategy-badges.tsx, que é um módulo cliente e não pode ser importado aqui). Barsi e Bazin são métodos distintos.
+ */
+const APPROVED_STRATEGY_LABELS: Array<{ key: string; label: string }> = [
+  { key: 'graham', label: 'Graham' },
+  { key: 'barsi', label: 'Barsi' },
+  { key: 'bazin', label: 'Bazin' },
+  { key: 'lynch', label: 'Peter Lynch' },
+  { key: 'bankPvp', label: 'P/VP justo' },
+  { key: 'dividendYield', label: 'Dividend yield' },
+  { key: 'lowPE', label: 'P/L baixo' },
+  { key: 'magicFormula', label: 'Fórmula mágica' },
+  { key: 'fcd', label: 'FCD' },
+  { key: 'gordon', label: 'Gordon' },
+  { key: 'fundamentalist', label: 'Fundamentalista' },
+];
 
 /**
  * POST /api/radar/data - Buscar dados consolidados para array de tickers
@@ -298,14 +317,10 @@ export async function POST(request: NextRequest) {
         const overallStatus = overallScore ? getRadarStatusColor(overallScore.score) : 'yellow';
 
         const approvedStrategies: string[] = [];
-        if (strategies?.graham?.isEligible) approvedStrategies.push('Graham');
-        if (strategies?.barsi?.isEligible) approvedStrategies.push('Bazin');
-        if (strategies?.dividendYield?.isEligible) approvedStrategies.push('Dividend Yield');
-        if (strategies?.lowPE?.isEligible) approvedStrategies.push('Low P/E');
-        if (strategies?.magicFormula?.isEligible) approvedStrategies.push('Magic Formula');
-        if (strategies?.fcd?.isEligible) approvedStrategies.push('FCD');
-        if (strategies?.gordon?.isEligible) approvedStrategies.push('Gordon');
-        if (strategies?.fundamentalist?.isEligible) approvedStrategies.push('Fundamentalista');
+        const strategyMap = (strategies ?? {}) as Record<string, StrategyAnalysis | null | undefined>;
+        for (const { key, label } of APPROVED_STRATEGY_LABELS) {
+          if (strategyMap[key]?.isEligible) approvedStrategies.push(label);
+        }
 
         return {
           ticker: companyTicker,

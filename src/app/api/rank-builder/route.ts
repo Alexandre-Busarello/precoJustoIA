@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma, safeQueryWithParams, safeWrite } from "@/lib/prisma-wrapper";
+import { prisma, safeWrite } from "@/lib/prisma-wrapper";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/user-service";
@@ -15,25 +15,51 @@ import {
   AIParams,
   ScreeningParams,
   BarsiParams,
+  BazinParams,
+  LynchParams,
   FiiScreeningParams,
   FiiDividendYieldParams,
   FiiRankingParams,
   RankBuilderResult,
   CompanyData,
-  toNumber,
 } from "@/lib/strategies";
 import { STRATEGY_CONFIG } from "@/lib/strategies/strategy-config";
-import {
-  TechnicalIndicators,
-  type PriceData,
-} from "@/lib/technical-indicators";
-import { DividendService } from "@/lib/dividend-service";
+import { getCompaniesData, getCompaniesDataFii } from "@/lib/rank-builder-service";
+import { applyLiquidityRules, getRankingModel, isRankingUniverse } from "@/lib/ranking-models";
+import { warmMacroAssumptions } from "@/lib/finance/macro";
+import { formatBRLCompact } from "@/lib/format";
 
 const FII_RANK_BUILDER_MODELS = new Set([
   "fiiScreening",
   "fiiDividendYield",
   "fiiRanking",
 ]);
+
+/** Modelos premium com nome fixo na mensagem de bloqueio. */
+const LEGACY_PREMIUM_MODELS: Record<string, string> = {
+  fcd: "FCD",
+  gordon: "Fórmula de Gordon",
+  fundamentalist: "Fundamentalista 3+1",
+  ai: "Síntese com IA",
+  barsi: "Método Barsi",
+  fiiRanking: "Ranking PJ-FII",
+};
+
+/** Modelos novos: o plano vem do registro (`ranking-models.ts`), então o dono pode liberar um deles no gratuito. */
+const REGISTRY_GATED_MODELS = new Set(["bazin", "lynch"]);
+
+/** Modelos com preço justo próprio: o enriquecimento não troca o preço justo deles pelo de Graham/FCD/Gordon. */
+const MODELS_WITH_FAIR_VALUE = new Set(["graham", "fcd", "gordon", "barsi", "bazin", "lynch"]);
+
+/** Nome do modelo para a mensagem de bloqueio, ou `null` quando o modelo é gratuito. */
+function premiumModelName(model: string): string | null {
+  if (LEGACY_PREMIUM_MODELS[model]) return LEGACY_PREMIUM_MODELS[model];
+  if (REGISTRY_GATED_MODELS.has(model)) {
+    const entry = getRankingModel(model);
+    return !entry || entry.plan === "premium" ? entry?.label ?? model : null;
+  }
+  return null;
+}
 
 type ModelParams =
   | GrahamParams
@@ -46,6 +72,8 @@ type ModelParams =
   | AIParams
   | ScreeningParams
   | BarsiParams
+  | BazinParams
+  | LynchParams
   | FiiScreeningParams
   | FiiDividendYieldParams
   | FiiRankingParams;
@@ -62,328 +90,35 @@ interface RankBuilderRequest {
     | "ai"
     | "screening"
     | "barsi"
+    | "bazin"
+    | "lynch"
     | "fiiScreening"
     | "fiiDividendYield"
     | "fiiRanking";
   params: ModelParams;
 }
 
-/** FIIs para rank-builder (fiiData + cotação + dividendos recentes) */
-async function getCompaniesDataFii(): Promise<CompanyData[]> {
-  const companies = await safeQueryWithParams(
-    "all-fii-companies-data",
-    () =>
-      prisma.company.findMany({
-        where: {
-          assetType: "FII",
-          fiiData: { isNot: null },
-        },
-        include: {
-          fiiData: true,
-          dailyQuotes: {
-            orderBy: { date: "desc" },
-            take: 1,
-          },
-          dividendHistory: {
-            orderBy: { exDate: "desc" },
-            take: 12,
-          },
-        },
-      }),
-    { type: "fii-companies" }
-  );
-
-  return companies.map((company) => {
-    const fd = company.fiiData!;
-    const quotePx = toNumber(company.dailyQuotes[0]?.price);
-    const cot = toNumber(fd.cotacao);
-    const currentPrice = quotePx && quotePx > 0 ? quotePx : cot || 0;
-    const lastDivFromFii = toNumber(fd.lastDividendValue);
-
-    return {
-      ticker: company.ticker,
-      name: company.name,
-      sector: company.sector,
-      industry: company.industry,
-      assetType: "FII",
-      currentPrice,
-      logoUrl: company.logoUrl,
-      /** Alinha com a página do FII (`fiiData.lastDividendValue`), evitando usar só o 1º pagamento do histórico (mensal). */
-      ...(lastDivFromFii !== null && lastDivFromFii > 0 ? { ultimoDividendo: lastDivFromFii } : {}),
-      dividendHistory: company.dividendHistory.map((d) => ({
-        amount: d.amount,
-        exDate: d.exDate,
-      })),
-      financials: {
-        dy: fd.dividendYield,
-        pvp: fd.pvp,
-        vpa: fd.valorPatrimonial,
-        marketCap: fd.valorMercado,
-        fiiLiquidez: fd.liquidez,
-        fiiQtdImoveis: fd.qtdImoveis,
-        fiiVacanciaMedia: fd.vacanciaMedia,
-        fiiCapRate: fd.capRate,
-        fiiFfoYield: fd.ffoYield,
-        fiiSegment: fd.segment,
-        fiiIsPapel: fd.isPapel,
-        fiiCotacao: fd.cotacao,
-        precoM2: fd.precoM2,
-        aluguelM2: fd.aluguelM2,
-        patrimonioLiquido: fd.patrimonioLiquido,
-        ...(lastDivFromFii !== null && lastDivFromFii > 0
-          ? { fiiLastDividendValue: fd.lastDividendValue }
-          : {}),
-      },
-    };
-  });
+/** `minLiquidity` válido: número finito ≥ 0, `null` (incluir ilíquidos) ou `undefined` (limite padrão). */
+/**
+ * Completa parâmetros ausentes (`undefined`) dos modelos de ações com os padrões do registro, como o painel faz.
+ * Ex.: dividendYield sem `minYield` usava `undefined` e não retornava nada. `null` explícito é preservado.
+ * Screening fica de fora: seus filtros são opcionais por definição e o plano gratuito já recebe params restritos.
+ */
+function withRegistryDefaults(model: string, params: ModelParams): ModelParams {
+  const registryModel = getRankingModel(model);
+  if (!registryModel || registryModel.assetType !== "stock" || model === "screening") return params;
+  const raw = (params as { assetTypeFilter?: unknown }).assetTypeFilter;
+  const universe = isRankingUniverse(raw) ? raw : "b3";
+  const filled: Record<string, unknown> = { ...(params as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(registryModel.defaults(universe))) {
+    if (filled[key] === undefined) filled[key] = value;
+  }
+  return filled as ModelParams;
 }
 
-// Função para buscar dados de todas as empresas
-async function getCompaniesData(assetTypeFilter?: 'b3' | 'bdr' | 'both'): Promise<CompanyData[]> {
-  const currentYear = new Date().getFullYear();
-  const startYear = currentYear - 4; // Últimos 5 anos para demonstrações
-
-  // Determinar quais assetTypes incluir baseado no filtro
-  let assetTypes: ("STOCK" | "BDR")[] = [];
-  if (assetTypeFilter === 'b3') {
-    assetTypes = ["STOCK"];
-  } else if (assetTypeFilter === 'bdr') {
-    assetTypes = ["BDR"];
-  } else {
-    // 'both' ou undefined - incluir ambos
-    assetTypes = ["STOCK", "BDR"];
-  }
-
-  const companies = await safeQueryWithParams(
-    "all-companies-data",
-    () =>
-      prisma.company.findMany({
-        include: {
-          financialData: {
-            orderBy: { year: "desc" },
-            take: 8, // Dados atuais + até 7 anos históricos
-          },
-          dailyQuotes: {
-            orderBy: { date: "desc" },
-            take: 1, // Cotação mais recente
-          },
-          dividendHistory: {
-            orderBy: { exDate: "desc" },
-            take: 10, // Últimos 10 dividendos para análise de consistência
-          },
-          historicalPrices: {
-            where: {
-              interval: "1mo",
-              date: {
-                gte: new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000), // Últimos 2 anos
-              },
-            },
-            orderBy: { date: "asc" },
-            select: {
-              date: true,
-              open: true,
-              high: true,
-              low: true,
-              close: true,
-              volume: true,
-            },
-          },
-          // Incluir demonstrações financeiras para cálculo do Overall Score
-          incomeStatements: {
-            where: {
-              period: "YEARLY",
-              endDate: { gte: new Date(`${startYear}-01-01`) },
-            },
-            orderBy: { endDate: "desc" },
-            take: 7,
-          },
-          balanceSheets: {
-            where: {
-              period: "YEARLY",
-              endDate: { gte: new Date(`${startYear}-01-01`) },
-            },
-            orderBy: { endDate: "desc" },
-            take: 7,
-          },
-          cashflowStatements: {
-            where: {
-              period: "YEARLY",
-              endDate: { gte: new Date(`${startYear}-01-01`) },
-            },
-            orderBy: { endDate: "desc" },
-            take: 7,
-          },
-          // Incluir snapshots para filtrar por overall_score
-          snapshots: {
-            select: {
-              overallScore: true,
-              updatedAt: true,
-            },
-            orderBy: { updatedAt: "desc" },
-            take: 1,
-          },
-        },
-        where: {
-          assetType: { in: assetTypes }, // Filtrar por tipo de ativo baseado no filtro
-          financialData: {
-            some: {
-              // Filtros básicos para ter dados mínimos necessários
-              lpa: { not: null },
-              vpa: { not: null },
-            },
-          },
-          dailyQuotes: {
-            some: {},
-          },
-        },
-      }),
-    {
-      type: "all-companies",
-      startYear,
-      currentYear,
-      assetTypeFilter, // Incluir no cache key para diferenciar
-    }
-  );
-
-  // Debug: verificar quantas empresas têm dados históricos
-  const companiesWithHistoricalData = companies.filter(
-    (c) => c.historicalPrices && c.historicalPrices.length >= 20
-  );
-  console.log(
-    `📈 Empresas com dados históricos suficientes: ${companiesWithHistoricalData.length}/${companies.length}`
-  );
-
-
-
-  // Converter para o formato CompanyData e calcular indicadores técnicos
-  return Promise.all(
-    companies.map(async (company) => {
-      let technicalAnalysis = undefined;
-
-      // Calcular indicadores técnicos se houver dados históricos suficientes
-      if (company.historicalPrices && company.historicalPrices.length >= 20) {
-        // Filtrar dados válidos (sem valores zero)
-        const validHistoricalData = company.historicalPrices.filter(
-          (data) =>
-            Number(data.high) > 0 &&
-            Number(data.low) > 0 &&
-            Number(data.close) > 0 &&
-            Number(data.open) > 0
-        );
-
-        if (validHistoricalData.length >= 20) {
-          const priceData: PriceData[] = validHistoricalData.map(
-            (data: any) => ({
-              date: data.date,
-              open: Number(data.open),
-              high: Number(data.high),
-              low: Number(data.low),
-              close: Number(data.close),
-              volume: Number(data.volume),
-            })
-          );
-
-          try {
-            const technicalResult =
-              TechnicalIndicators.calculateTechnicalAnalysis(priceData);
-
-            // Verificar se os dados técnicos são válidos
-            if (
-              technicalResult.currentRSI &&
-              technicalResult.currentStochastic
-            ) {
-              technicalAnalysis = {
-                rsi: technicalResult.currentRSI.rsi,
-                stochasticK: technicalResult.currentStochastic.k,
-                stochasticD: technicalResult.currentStochastic.d,
-                overallSignal: technicalResult.overallSignal,
-              };
-            }
-          } catch (error) {
-            console.warn(
-              `Erro ao calcular indicadores técnicos para ${company.ticker}:`,
-              error
-            );
-          }
-        }
-      }
-
-      // Usar dados de dividendos já disponíveis (enriquecidos pela busca sequencial se necessário)
-      let ultimoDividendo: any = company.ultimoDividendo;
-      let dataUltimoDividendo: any = company.dataUltimoDividendo;
-
-      // Se não temos ultimoDividendo na company, usar o mais recente do histórico
-      if (!ultimoDividendo && company.dividendHistory.length > 0) {
-        const latestDividend = company.dividendHistory[0];
-        ultimoDividendo = Number(latestDividend.amount);
-        dataUltimoDividendo = latestDividend.exDate;
-      }
-
-      // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
-      const historicalFinancials = company.financialData
-        .slice(1)
-        .map((data: any) => ({
-          year: data.year,
-          roe: data.roe,
-          roic: data.roic,
-          pl: data.pl,
-          pvp: data.pvp,
-          dy: data.dy,
-          margemLiquida: data.margemLiquida,
-          margemEbitda: data.margemEbitda,
-          margemBruta: data.margemBruta,
-          liquidezCorrente: data.liquidezCorrente,
-          liquidezRapida: data.liquidezRapida,
-          dividaLiquidaPl: data.dividaLiquidaPl,
-          dividaLiquidaEbitda: data.dividaLiquidaEbitda,
-          lpa: data.lpa,
-          vpa: data.vpa,
-          marketCap: data.marketCap,
-          earningsYield: data.earningsYield,
-          evEbitda: data.evEbitda,
-          roa: data.roa,
-          passivoAtivos: data.passivoAtivos,
-        }));
-
-      // Enriquecer dados financeiros com dividendos atualizados
-      const enrichedFinancials = {
-        ...(company.financialData[0] || {}),
-        // Manter os tipos originais dos campos do Prisma
-        ...(ultimoDividendo !== undefined && { ultimoDividendo }),
-        ...(dataUltimoDividendo !== undefined && { dataUltimoDividendo }),
-      };
-
-      return {
-        ticker: company.ticker,
-        name: company.name,
-        sector: company.sector,
-        industry: company.industry,
-        assetType: company.assetType,
-        currentPrice: toNumber(company.dailyQuotes[0]?.price) || 0,
-        logoUrl: company.logoUrl,
-        financials: enrichedFinancials,
-        historicalFinancials:
-          historicalFinancials.length > 0 ? historicalFinancials : undefined,
-        technicalAnalysis,
-        // Incluir demonstrações financeiras para cálculo do Overall Score
-        incomeStatements:
-          company.incomeStatements?.length > 0
-            ? company.incomeStatements
-            : undefined,
-        balanceSheets:
-          company.balanceSheets?.length > 0 ? company.balanceSheets : undefined,
-        cashflowStatements:
-          company.cashflowStatements?.length > 0
-            ? company.cashflowStatements
-            : undefined,
-        // Overall Score do snapshot mais recente
-        overallScore:
-          company.snapshots && company.snapshots.length > 0
-            ? toNumber(company.snapshots[0].overallScore)
-            : null,
-      };
-    })
-  );
+function parseMinLiquidity(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 // Função para gerar o racional de cada modelo usando StrategyFactory
@@ -392,50 +127,77 @@ function generateRational(model: string, params: ModelParams): string {
     case "graham":
       return StrategyFactory.generateRational("graham", params as GrahamParams);
     case "dividendYield":
-      return StrategyFactory.generateRational(
-        "dividendYield",
-        params as DividendYieldParams
-      );
+      return StrategyFactory.generateRational("dividendYield", params as DividendYieldParams);
     case "lowPE":
       return StrategyFactory.generateRational("lowPE", params as LowPEParams);
     case "magicFormula":
-      return StrategyFactory.generateRational(
-        "magicFormula",
-        params as MagicFormulaParams
-      );
+      return StrategyFactory.generateRational("magicFormula", params as MagicFormulaParams);
     case "fcd":
       return StrategyFactory.generateRational("fcd", params as FCDParams);
     case "gordon":
       return StrategyFactory.generateRational("gordon", params as GordonParams);
     case "fundamentalist":
-      return StrategyFactory.generateRational(
-        "fundamentalist",
-        params as FundamentalistParams
-      );
+      return StrategyFactory.generateRational("fundamentalist", params as FundamentalistParams);
     case "ai":
       return StrategyFactory.generateRational("ai", params as AIParams);
     case "screening":
-      return StrategyFactory.generateRational(
-        "screening",
-        params as ScreeningParams
-      );
+      return StrategyFactory.generateRational("screening", params as ScreeningParams);
     case "barsi":
       return StrategyFactory.generateRational("barsi", params as BarsiParams);
+    case "bazin":
+      return StrategyFactory.generateRational("bazin", params as BazinParams);
+    case "lynch":
+      return StrategyFactory.generateRational("lynch", params as LynchParams);
     case "fiiScreening":
-      return StrategyFactory.generateRational(
-        "fiiScreening",
-        params as FiiScreeningParams
-      );
+      return StrategyFactory.generateRational("fiiScreening", params as FiiScreeningParams);
     case "fiiDividendYield":
-      return StrategyFactory.generateRational(
-        "fiiDividendYield",
-        params as FiiDividendYieldParams
-      );
+      return StrategyFactory.generateRational("fiiDividendYield", params as FiiDividendYieldParams);
     case "fiiRanking":
       return StrategyFactory.generateRational("fiiRanking", params as FiiRankingParams);
     default:
       return "Modelo não encontrado.";
   }
+}
+
+interface ModelValuation {
+  upside: number;
+  fairValue: number;
+  model: string;
+}
+
+/**
+ * Preços justos de Graham (todos) e de FCD e Gordon (Premium) para a empresa. Grava o upside de cada um em
+ * `keyMetrics` (grahamUpside, fcdUpside, gordonUpside) e devolve os que têm preço justo.
+ */
+function modelValuations(
+  company: CompanyData,
+  userIsPremium: boolean,
+  keyMetrics: Record<string, number | null>
+): ModelValuation[] {
+  const runs: Array<{ model: string; key: string; run: () => { upside: number | null; fairValue: number | null } }> = [
+    { model: "Graham", key: "grahamUpside", run: () => StrategyFactory.runGrahamAnalysis(company, STRATEGY_CONFIG.graham) },
+  ];
+  if (userIsPremium) {
+    runs.push(
+      { model: "FCD", key: "fcdUpside", run: () => StrategyFactory.runFCDAnalysis(company, STRATEGY_CONFIG.fcd) },
+      { model: "Gordon", key: "gordonUpside", run: () => StrategyFactory.runGordonAnalysis(company, STRATEGY_CONFIG.gordon) }
+    );
+  }
+
+  const valuations: ModelValuation[] = [];
+  for (const { model, key, run } of runs) {
+    try {
+      const analysis = run();
+      if (analysis.upside === null || analysis.upside === undefined) continue;
+      keyMetrics[key] = analysis.upside;
+      if (analysis.fairValue !== null && analysis.fairValue !== undefined) {
+        valuations.push({ upside: analysis.upside, fairValue: analysis.fairValue, model });
+      }
+    } catch {
+      // Modelo sem dados suficientes para esta empresa: segue com os demais.
+    }
+  }
+  return valuations;
 }
 
 export async function POST(request: NextRequest) {
@@ -469,30 +231,12 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     // Verificar se é modelo Premium e se usuário tem acesso
-    if (
-      model === "fcd" ||
-      model === "gordon" ||
-      model === "fundamentalist" ||
-      model === "ai" ||
-      model === "barsi" ||
-      model === "fiiRanking"
-    ) {
+    const premiumName = premiumModelName(model);
+    if (premiumName) {
       if (!session?.user?.id) {
-        const modelName =
-          model === "fcd"
-            ? "FCD"
-            : model === "gordon"
-            ? "Fórmula de Gordon"
-            : model === "fundamentalist"
-            ? "Fundamentalista 3+1"
-            : model === "barsi"
-            ? "Método Barsi"
-            : model === "fiiRanking"
-            ? "Ranking PJ-FII"
-            : "Análise com IA";
         return NextResponse.json(
           {
-            error: `Modelo ${modelName} exclusivo para usuários logados. Faça login para acessar.`,
+            error: `Modelo ${premiumName} exclusivo para usuários logados. Faça login para acessar.`,
           },
           { status: 401 }
         );
@@ -502,21 +246,9 @@ export async function POST(request: NextRequest) {
       const user = await getCurrentUser();
 
       if (!user?.isPremium) {
-        const modelName =
-          model === "fcd"
-            ? "FCD"
-            : model === "gordon"
-            ? "Fórmula de Gordon"
-            : model === "fundamentalist"
-            ? "Fundamentalista 3+1"
-            : model === "barsi"
-            ? "Método Barsi"
-            : model === "fiiRanking"
-            ? "Ranking PJ-FII"
-            : "Análise com IA";
         return NextResponse.json(
           {
-            error: `Modelo ${modelName} exclusivo para usuários Premium. Faça upgrade para acessar análises avançadas.`,
+            error: `Modelo ${premiumName} exclusivo para usuários Premium. Faça upgrade para acessar análises avançadas.`,
           },
           { status: 403 }
         );
@@ -562,6 +294,8 @@ export async function POST(request: NextRequest) {
             companySize: screeningParams.companySize || "all",
             useTechnicalAnalysis: false, // Desabilitar análise técnica para não-Premium
             assetTypeFilter: screeningParams.assetTypeFilter,
+            // Liquidez: o usuário pode incluir ativos com baixa liquidez (null) também no plano gratuito
+            minLiquidity: screeningParams.minLiquidity,
 
             // Remover todos os outros filtros (ficam undefined)
             roeFilter: undefined,
@@ -616,74 +350,27 @@ export async function POST(request: NextRequest) {
 
     // Buscar dados de todas as empresas (com filtro de tipo de ativo se fornecido)
     // Usar body.params se foi modificado, senão usar params original
-    const finalParams = (body.params || params) as any;
-    const assetTypeFilter = finalParams.assetTypeFilter as
-      | "b3"
-      | "bdr"
-      | "both"
-      | "fii"
-      | undefined;
-    const companies =
-      assetTypeFilter === "fii"
-        ? await getCompaniesDataFii()
-        : await getCompaniesData(assetTypeFilter);
+    const finalParams = (body.params || params) as ModelParams;
+    const assetTypeFilter = finalParams.assetTypeFilter;
+    const minLiquidity = parseMinLiquidity(finalParams.minLiquidity);
+    const [loadedCompanies] = await Promise.all([
+      assetTypeFilter === "fii" ? getCompaniesDataFii() : getCompaniesData(assetTypeFilter),
+      // FCD, Gordon e P/VP justo usam Ke das premissas macro (snapshot síncrono).
+      warmMacroAssumptions(),
+    ]);
+    // Liquidez: exclui ações/FIIs abaixo do volume mínimo (salvo `minLiquidity: null`), marca BDRs ilíquidos
+    // e mantém só a classe mais líquida de cada empresa.
+    const companies = applyLiquidityRules(loadedCompanies, minLiquidity);
+    const companiesByTicker = new Map(companies.map((company) => [company.ticker, company]));
 
-    // Debug: verificar quantas empresas têm dados técnicos
-    const companiesWithTechnical = companies.filter((c) => c.technicalAnalysis);
     console.log(
-      `📊 Empresas carregadas: ${companies.length}, com dados técnicos: ${companiesWithTechnical.length}`
+      `📊 Empresas carregadas: ${loadedCompanies.length}, após liquidez: ${companies.length}`
     );
 
-    // OTIMIZAÇÃO BARSI: Buscar dividendos sequencialmente para empresas que precisam
-    // if (model === 'barsi') {
-    //   // Identificar empresas que precisam de dados de dividendos
-    //   const companiesNeedingDividends: string[] = [];
-      
-    //   for (const company of companies) {
-    //     const hasUltimoDividendo = company.financials.ultimoDividendo && Number(company.financials.ultimoDividendo) > 0;
-    //     // Para verificar dividendHistory, preciso acessar os dados brutos do Prisma
-    //     // Como estou trabalhando com CompanyData já processado, vou usar uma abordagem diferente
-        
-    //     if (!hasUltimoDividendo) {
-    //       companiesNeedingDividends.push(company.ticker);
-    //     }
-    //   }
-      
-    //   if (companiesNeedingDividends.length > 0) {
-    //     console.log(`📊 [BARSI OPTIMIZATION] ${companiesNeedingDividends.length} empresas precisam de dados de dividendos`);
-    //     console.log(`📊 [BARSI OPTIMIZATION] Iniciando busca sequencial: ${companiesNeedingDividends.join(', ')}`);
-        
-    //     // Buscar dividendos sequencialmente para evitar sobrecarga
-    //     // IMPORTANTE: Este método também SALVA os dividendos no banco (Company + FinancialData)
-    //     const dividendResults = await DividendService.fetchLatestDividendsSequential(
-    //       companiesNeedingDividends,
-    //       400 // 400ms entre cada busca
-    //     );
-        
-    //     const successCount = Array.from(dividendResults.values()).filter(r => r.success).length;
-    //     console.log(`✅ [BARSI OPTIMIZATION] Busca concluída: ${successCount}/${companiesNeedingDividends.length} sucessos`);
-        
-    //     // Enriquecer dados das empresas com dividendos encontrados
-    //     for (const company of companies) {
-    //       if (dividendResults.has(company.ticker)) {
-    //         const dividendResult = dividendResults.get(company.ticker);
-    //         if (dividendResult?.success && dividendResult.latestDividend) {
-    //           // Adicionar o dividendo encontrado aos dados financeiros da empresa
-    //           company.financials.ultimoDividendo = dividendResult.latestDividend.amount;
-    //           company.financials.dataUltimoDividendo = dividendResult.latestDividend.date;
-    //           console.log(`📊 [BARSI] Enriquecido ${company.ticker} com dividendo: R$ ${dividendResult.latestDividend.amount}`);
-    //         }
-    //       }
-    //     }
-    //   } else {
-    //     console.log(`✅ [BARSI OPTIMIZATION] Todas as empresas já possuem dados de dividendos`);
-    //   }
-    // }
-
     let results: RankBuilderResult[] = [];
-    
+
     // Usar body.params se foi modificado (para screening não-Premium), senão usar params original
-    const executionParams = body.params || params;
+    const executionParams = withRegistryDefaults(model, (body.params || params) as ModelParams);
 
     switch (model) {
       case "graham":
@@ -704,40 +391,28 @@ export async function POST(request: NextRequest) {
           executionParams as LowPEParams
         );
         break;
-      case "magicFormula":
+      case "magicFormula": {
         // Verificar status Premium do usuário (pode ser null se deslogado)
         const magicFormulaUser = session?.user?.id ? await getCurrentUser() : null;
         const magicFormulaIsPremium = magicFormulaUser?.isPremium || false;
-        
+
         // Calcular total ANTES de aplicar limite (para mostrar blur nas rotas de marketing)
-        const magicFormulaParamsWithoutLimit: MagicFormulaParams = {
+        const allMagicFormulaResults = StrategyFactory.runMagicFormulaRanking(companies, {
           ...(executionParams as MagicFormulaParams),
-          limit: undefined // Sem limite para contar total
-        };
-        const allMagicFormulaResults = StrategyFactory.runMagicFormulaRanking(
-          companies,
-          magicFormulaParamsWithoutLimit
-        );
+          limit: undefined,
+        });
         const magicFormulaTotalCount = allMagicFormulaResults.length;
-        
-        // Backend SEMPRE aplica o limite correto baseado no status Premium
-        // Não confiar no limite enviado pelo frontend
-        const finalMagicFormulaParams: MagicFormulaParams = {
+
+        // Backend SEMPRE aplica o limite correto baseado no status Premium (não confiar no frontend):
+        // Premium sem limite; não-Premium (incluindo deslogados) sempre 3.
+        results = StrategyFactory.runMagicFormulaRanking(companies, {
           ...(executionParams as MagicFormulaParams),
-          // Premium: sem limite (undefined). Não-Premium (incluindo deslogados): sempre 3
-          limit: magicFormulaIsPremium ? undefined : 3
-        };
-        
-        console.log(`[MAGIC_FORMULA] Premium: ${magicFormulaIsPremium}, Limit aplicado: ${finalMagicFormulaParams.limit}, Total encontrado: ${magicFormulaTotalCount}, User: ${magicFormulaUser?.email || 'deslogado'}`);
-        
-        results = StrategyFactory.runMagicFormulaRanking(
-          companies,
-          finalMagicFormulaParams
-        );
-        
-        // Armazenar totalCount em variável separada para retornar na resposta
+          limit: magicFormulaIsPremium ? undefined : 3,
+        });
+
         (results as any).__magicFormulaTotalCount = magicFormulaTotalCount;
         break;
+      }
       case "fcd":
         results = StrategyFactory.runFCDRanking(companies, executionParams as FCDParams);
         break;
@@ -759,50 +434,40 @@ export async function POST(request: NextRequest) {
           executionParams as AIParams
         );
         break;
-      case "screening":
+      case "screening": {
         const screeningParams = executionParams as ScreeningParams;
-        
+
         // Verificar status Premium do usuário (pode ser null se deslogado)
         const screeningUser = session?.user?.id ? await getCurrentUser() : null;
         const screeningIsPremium = screeningUser?.isPremium || false;
-        
+
         // Calcular total ANTES de aplicar limite (para mostrar blur nas rotas de marketing)
-        const paramsWithoutLimit: ScreeningParams = {
+        const totalCount = StrategyFactory.runScreeningRanking(companies, {
           ...screeningParams,
-          limit: undefined // Sem limite para contar total
-        };
-        const allResults = StrategyFactory.runScreeningRanking(
-          companies,
-          paramsWithoutLimit
-        );
-        const totalCount = allResults.length;
-        
-        // Backend SEMPRE aplica o limite correto baseado no status Premium
-        // Não confiar no limite enviado pelo frontend
-        const finalScreeningParams: ScreeningParams = {
+          limit: undefined,
+        }).length;
+
+        // Backend SEMPRE aplica o limite correto baseado no status Premium (não confiar no frontend):
+        // Premium sem limite (usa o padrão da estratégia); não-Premium (incluindo deslogados) sempre 3.
+        results = StrategyFactory.runScreeningRanking(companies, {
           ...screeningParams,
-          // Premium: sem limite (undefined = usa default de 1000). Não-Premium (incluindo deslogados): sempre 3
-          limit: screeningIsPremium ? undefined : 3
-        };
-        
-        console.log(`[SCREENING] Premium: ${screeningIsPremium}, Limit aplicado: ${finalScreeningParams.limit}, Total encontrado: ${totalCount}, User: ${screeningUser?.email || 'deslogado'}`);
-        console.log(`[SCREENING] Params recebidos:`, JSON.stringify(finalScreeningParams, null, 2));
-        
-        results = StrategyFactory.runScreeningRanking(
-          companies,
-          finalScreeningParams
-        );
-        
-        console.log(`[SCREENING] Resultados retornados: ${results.length}`);
-        
-        // Armazenar totalCount em variável separada para retornar na resposta
+          limit: screeningIsPremium ? undefined : 3,
+        });
+
         (results as any).__screeningTotalCount = totalCount;
         break;
+      }
       case "barsi":
         results = await StrategyFactory.runBarsiRanking(
           companies,
           executionParams as BarsiParams
         );
+        break;
+      case "bazin":
+        results = StrategyFactory.runBazinRanking(companies, executionParams as BazinParams);
+        break;
+      case "lynch":
+        results = StrategyFactory.runLynchRanking(companies, executionParams as LynchParams);
         break;
       case "fiiScreening":
         results = StrategyFactory.runFiiScreeningRanking(
@@ -829,294 +494,71 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    // Enriquecer resultados com múltiplos upsides (Graham, FCD, Gordon)
-    // Isso permite que o usuário veja diferentes perspectivas de valor justo
-    // Calcular preço justo para TODOS os usuários (Graham sempre disponível, mesmo deslogados)
+    // Total real (antes do limite) guardado como propriedade do array pelo screening / Magic Formula:
+    // lido aqui porque os .map() abaixo criam arrays novos e perderiam a propriedade.
+    const rawResults = results as RankBuilderResult[] & {
+      __screeningTotalCount?: number;
+      __magicFormulaTotalCount?: number;
+    };
+    const totalCount =
+      rawResults.__screeningTotalCount ?? rawResults.__magicFormulaTotalCount ?? results.length;
+    delete rawResults.__screeningTotalCount;
+    delete rawResults.__magicFormulaTotalCount;
+
+    // Enriquecer resultados com os upsides de Graham (todos), FCD e Gordon (Premium). Modelos sem preço justo
+    // próprio (screening, dividendos, P/L baixo…) passam a mostrar o maior deles, com o modelo de origem.
     if (results.length > 0 && !FII_RANK_BUILDER_MODELS.has(model)) {
       try {
-        // Buscar status Premium do usuário (pode ser null se deslogado)
         const currentUser = session?.user?.id ? await getCurrentUser() : null;
         const userIsPremium = currentUser?.isPremium || false;
+        const hasOwnFairValue = MODELS_WITH_FAIR_VALUE.has(model);
 
         results = results.map((result) => {
-          // Encontrar a empresa original
-          const company = companies.find((c) => c.ticker === result.ticker);
+          const company = companiesByTicker.get(result.ticker);
           if (!company) return result;
 
           const enrichedKeyMetrics = { ...(result.key_metrics || {}) };
-          let mainUpside = result.upside;
-          let mainFairValue = result.fairValue;
-          let fairValueModel: string | null = null;
+          const valuations = modelValuations(company, userIsPremium, enrichedKeyMetrics);
+          const missingOwnValue =
+            result.upside === null || result.upside === undefined || result.fairValue === null || result.fairValue === undefined;
 
-          // Para estratégias sem preço justo (como screening), calcular o maior upside entre Graham, FCD e Gordon
-          // Para screening, sempre calcular preço justo (Graham para todos, FCD/Gordon para Premium)
-          const strategiesWithFairValue = ["graham", "fcd", "gordon"];
-          const shouldCalculateFairValue = 
-            !strategiesWithFairValue.includes(model) || // Screening não tem preço justo próprio
-            (mainUpside === null || mainUpside === undefined || mainFairValue === null || mainFairValue === undefined);
-          
-          if (shouldCalculateFairValue) {
-            const valuations: Array<{ upside: number; fairValue: number; model: string }> = [];
-
-            // Graham (sempre disponível)
-            try {
-              const grahamAnalysis = StrategyFactory.runGrahamAnalysis(
-                company,
-                STRATEGY_CONFIG.graham
-              );
-              if (
-                grahamAnalysis.upside !== null &&
-                grahamAnalysis.upside !== undefined &&
-                grahamAnalysis.fairValue !== null &&
-                grahamAnalysis.fairValue !== undefined
-              ) {
-                valuations.push({
-                  upside: grahamAnalysis.upside,
-                  fairValue: grahamAnalysis.fairValue,
-                  model: "Graham"
-                });
-                enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
-              }
-            } catch (_) {
-              // Ignorar erro
-            }
-
-            // FCD (se Premium)
-            if (userIsPremium) {
-              try {
-                const fcdAnalysis = StrategyFactory.runFCDAnalysis(
-                  company,
-                  STRATEGY_CONFIG.fcd
-                );
-                if (
-                  fcdAnalysis.upside !== null &&
-                  fcdAnalysis.upside !== undefined &&
-                  fcdAnalysis.fairValue !== null &&
-                  fcdAnalysis.fairValue !== undefined
-                ) {
-                  valuations.push({
-                    upside: fcdAnalysis.upside,
-                    fairValue: fcdAnalysis.fairValue,
-                    model: "FCD"
-                  });
-                  enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
-                }
-              } catch (_) {
-                // Ignorar erro
-              }
-            }
-
-            // Gordon (se Premium)
-            if (userIsPremium) {
-              try {
-                const gordonAnalysis = StrategyFactory.runGordonAnalysis(
-                  company,
-                  STRATEGY_CONFIG.gordon
-                );
-                if (
-                  gordonAnalysis.upside !== null &&
-                  gordonAnalysis.upside !== undefined &&
-                  gordonAnalysis.fairValue !== null &&
-                  gordonAnalysis.fairValue !== undefined
-                ) {
-                  valuations.push({
-                    upside: gordonAnalysis.upside,
-                    fairValue: gordonAnalysis.fairValue,
-                    model: "Gordon"
-                  });
-                  enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
-                }
-              } catch (_) {
-                // Ignorar erro
-              }
-            }
-
-            // Usar o maior upside encontrado (maior margem de segurança)
-            if (valuations.length > 0) {
-              const bestValuation = valuations.reduce((best, current) => 
-                current.upside > best.upside ? current : best
-              );
-              mainUpside = bestValuation.upside;
-              mainFairValue = bestValuation.fairValue;
-              fairValueModel = bestValuation.model;
-            }
-          } else {
-            // Para estratégias com preço justo OU screening que já calculou upside, enriquecer os upsides adicionais
-            // Mas para screening, ainda precisamos garantir que fairValue e upside estão atualizados
-
-            // Para screening, sempre calcular fairValue mesmo se já tiver upside
-            if (model === "screening" && (mainFairValue === null || mainFairValue === undefined)) {
-              const valuations: Array<{ upside: number; fairValue: number; model: string }> = [];
-
-              // Graham (sempre disponível)
-              try {
-                const grahamAnalysis = StrategyFactory.runGrahamAnalysis(
-                  company,
-                  STRATEGY_CONFIG.graham
-                );
-                if (
-                  grahamAnalysis.upside !== null &&
-                  grahamAnalysis.upside !== undefined &&
-                  grahamAnalysis.fairValue !== null &&
-                  grahamAnalysis.fairValue !== undefined
-                ) {
-                  valuations.push({
-                    upside: grahamAnalysis.upside,
-                    fairValue: grahamAnalysis.fairValue,
-                    model: "Graham"
-                  });
-                  enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
-                }
-              } catch (_) {
-                // Ignorar erro
-              }
-
-              // FCD (se Premium)
-              if (userIsPremium) {
-                try {
-                  const fcdAnalysis = StrategyFactory.runFCDAnalysis(
-                    company,
-                    STRATEGY_CONFIG.fcd
-                  );
-                  if (
-                    fcdAnalysis.upside !== null &&
-                    fcdAnalysis.upside !== undefined &&
-                    fcdAnalysis.fairValue !== null &&
-                    fcdAnalysis.fairValue !== undefined
-                  ) {
-                    valuations.push({
-                      upside: fcdAnalysis.upside,
-                      fairValue: fcdAnalysis.fairValue,
-                      model: "FCD"
-                    });
-                    enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
-                  }
-                } catch (_) {
-                  // Ignorar erro
-                }
-              }
-
-              // Gordon (se Premium)
-              if (userIsPremium) {
-                try {
-                  const gordonAnalysis = StrategyFactory.runGordonAnalysis(
-                    company,
-                    STRATEGY_CONFIG.gordon
-                  );
-                  if (
-                    gordonAnalysis.upside !== null &&
-                    gordonAnalysis.upside !== undefined &&
-                    gordonAnalysis.fairValue !== null &&
-                    gordonAnalysis.fairValue !== undefined
-                  ) {
-                    valuations.push({
-                      upside: gordonAnalysis.upside,
-                      fairValue: gordonAnalysis.fairValue,
-                      model: "Gordon"
-                    });
-                    enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
-                  }
-                } catch (_) {
-                  // Ignorar erro
-                }
-              }
-
-              // Usar o maior upside encontrado (maior margem de segurança)
-              if (valuations.length > 0) {
-                const bestValuation = valuations.reduce((best, current) => 
-                  current.upside > best.upside ? current : best
-                );
-                mainUpside = bestValuation.upside;
-                mainFairValue = bestValuation.fairValue;
-                fairValueModel = bestValuation.model;
-              }
-            }
-
-            // Calcular upside de Graham se ainda não tiver (disponível para todos)
-            if (
-              model !== "graham" &&
-              (!enrichedKeyMetrics.grahamUpside ||
-                enrichedKeyMetrics.grahamUpside === null)
-            ) {
-              try {
-                const grahamAnalysis = StrategyFactory.runGrahamAnalysis(
-                  company,
-                  STRATEGY_CONFIG.graham
-                );
-                if (
-                  grahamAnalysis.upside !== null &&
-                  grahamAnalysis.upside !== undefined
-                ) {
-                  enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
-                }
-              } catch (_) {
-                // Silenciosamente ignorar erros
-              }
-            }
-
-            // Calcular upside de FCD se Premium e ainda não tiver
-            if (
-              model !== "fcd" &&
-              userIsPremium &&
-              (!enrichedKeyMetrics.fcdUpside ||
-                enrichedKeyMetrics.fcdUpside === null)
-            ) {
-              try {
-                const fcdAnalysis = StrategyFactory.runFCDAnalysis(
-                  company,
-                  STRATEGY_CONFIG.fcd
-                );
-                if (
-                  fcdAnalysis.upside !== null &&
-                  fcdAnalysis.upside !== undefined
-                ) {
-                  enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
-                }
-              } catch (_) {
-                // Silenciosamente ignorar erros
-              }
-            }
-
-            // Calcular upside de Gordon se Premium e ainda não tiver
-            if (
-              model !== "gordon" &&
-              userIsPremium &&
-              (!enrichedKeyMetrics.gordonUpside ||
-                enrichedKeyMetrics.gordonUpside === null)
-            ) {
-              try {
-                const gordonAnalysis = StrategyFactory.runGordonAnalysis(
-                  company,
-                  STRATEGY_CONFIG.gordon
-                );
-                if (
-                  gordonAnalysis.upside !== null &&
-                  gordonAnalysis.upside !== undefined
-                ) {
-                  enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
-                }
-              } catch (_) {
-                // Silenciosamente ignorar erros
-              }
-            }
+          if ((!hasOwnFairValue || missingOwnValue) && valuations.length > 0) {
+            const best = valuations.reduce((acc, current) => (current.upside > acc.upside ? current : acc));
+            return {
+              ...result,
+              upside: best.upside,
+              fairValue: best.fairValue,
+              fairValueModel: best.model,
+              key_metrics: enrichedKeyMetrics,
+            };
           }
-
-          return {
-            ...result,
-            upside: mainUpside, // Atualizar upside principal se necessário
-            fairValue: mainFairValue, // Atualizar preço justo principal se necessário
-            fairValueModel: fairValueModel || result.fairValueModel || null, // Indicar qual modelo foi usado
-            key_metrics: enrichedKeyMetrics,
-          };
+          return { ...result, fairValueModel: result.fairValueModel ?? null, key_metrics: enrichedKeyMetrics };
         });
       } catch (error) {
-        console.warn(
-          "Erro ao enriquecer resultados com múltiplos upsides:",
-          error
-        );
-        // Continuar com resultados originais se houver erro
+        console.warn("Erro ao enriquecer resultados com múltiplos upsides:", error);
       }
     }
+
+    // Liquidez em cada linha: volume médio diário (R$/dia) e aviso para ativos abaixo do limite mantidos no ranking.
+    results = results.map((result) => {
+      const company = companiesByTicker.get(result.ticker);
+      const value = company?.averageDailyTradedValue;
+      if (value === undefined) return result;
+      const keyMetrics = { ...(result.key_metrics || {}) };
+      if (keyMetrics.liquidez === undefined) keyMetrics.liquidez = value;
+      const lowLiquidity = company?.lowLiquidity === true;
+      return {
+        ...result,
+        averageDailyTradedValue: value,
+        lowLiquidity,
+        key_metrics: keyMetrics,
+        rational: lowLiquidity
+          ? `${result.rational}\n\nBaixa liquidez: ${
+              value === null ? "sem dado de volume negociado recente" : `volume médio diário de ${formatBRLCompact(value)}`
+            }.`
+          : result.rational,
+      };
+    });
 
     // Gerar racional para o modelo usado (usar executionParams que pode ter sido modificado)
     const rational = generateRational(model, executionParams);
@@ -1149,18 +591,6 @@ export async function POST(request: NextRequest) {
         // Não falhar a request se não conseguir salvar no histórico
         console.error("Erro ao salvar histórico:", historyError);
       }
-    }
-
-    // Extrair totalCount se foi armazenado (para screening ou magicFormula)
-    let totalCount = results.length;
-    if ((results as any).__screeningTotalCount !== undefined) {
-      totalCount = (results as any).__screeningTotalCount;
-      // Remover propriedade temporária
-      delete (results as any).__screeningTotalCount;
-    } else if ((results as any).__magicFormulaTotalCount !== undefined) {
-      totalCount = (results as any).__magicFormulaTotalCount;
-      // Remover propriedade temporária
-      delete (results as any).__magicFormulaTotalCount;
     }
 
     return NextResponse.json({

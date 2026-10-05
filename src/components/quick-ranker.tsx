@@ -9,6 +9,8 @@ import { useTracking } from "@/hooks/use-tracking"
 import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import { EventType } from "@/lib/tracking-types"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { InfoHint } from "@/components/ui/info-hint"
 import { Label } from "@/components/ui/label"
 import { SectionHeader } from "@/components/ui/section-header"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -28,7 +30,8 @@ import {
   type RankingResponse,
   type RankingResult,
 } from "@/components/ranking-wizard/ranking-data"
-import { formatDate } from "@/lib/format"
+import { formatBRLCompact, formatDate } from "@/lib/format"
+import { LIQUIDITY_DEFAULTS } from "@/lib/finance/liquidity-rules"
 import { cn } from "@/lib/utils"
 import type { EtfRankingItem } from "@/lib/strategies/etf-ranking-strategy"
 import {
@@ -39,12 +42,15 @@ import {
   canUseRankingModel,
   defaultModelForUniverse,
   getRankingModel,
+  includesLowLiquidity,
   isModelInUniverse,
   isRankingUniverse,
   modelsForUniverse,
   previewCredentials,
   rankingModelLabel,
+  supportsLowLiquidityToggle,
   universeForModel,
+  withLowLiquidity,
   type RankingModel,
   type RankingParams,
   type RankingUniverse,
@@ -247,7 +253,9 @@ export function QuickRanker({
   const applySelection = (nextModel: RankingModel, nextUniverse: RankingUniverse) => {
     setSaved(null)
     onSelectionChange?.(nextModel.key, nextUniverse)
-    const nextParams = nextModel.defaults(nextUniverse)
+    // A escolha "incluir baixa liquidez" acompanha a troca de modelo de ações.
+    const keepLowLiquidity = includesLowLiquidity(params) && supportsLowLiquidityToggle(nextModel)
+    const nextParams = withLowLiquidity(nextModel.defaults(nextUniverse), keepLowLiquidity)
     requestSeq.current += 1
     setLoading(false)
     setError(null)
@@ -281,6 +289,17 @@ export function QuickRanker({
     run(model, universe, params)
   }
 
+  const toggleLowLiquidity = (include: boolean) => {
+    if (!model) return
+    const nextParams = withLowLiquidity(params, include)
+    setParams(nextParams)
+    setSaved(null)
+    if (canAutoRunRankingModel(model, hasPremium)) {
+      onSelectionChange?.(model.key, universe)
+      run(model, universe, nextParams)
+    }
+  }
+
   const openDefaultRanking = () => {
     const fallback = defaultModelForUniverse(universe)
     applySelection(fallback, universeForModel(fallback, universe))
@@ -294,6 +313,7 @@ export function QuickRanker({
   const universeModels = modelsForUniverse(universe)
   const lockedModels = RANKING_MODELS.filter((m) => !canUseRankingModel(m, hasPremium))
   const showParams = !!model && usable && model.fields.length > 0
+  const showLiquidityToggle = !!model && usable && supportsLowLiquidityToggle(model)
   // Ranking salvo continua visível mesmo quando o modelo deixou de estar no plano (ex.: fim do teste Premium).
   const showLocked = !!model && !usable && !(saved && outcome)
   const awaitingAi = !!model?.isAi && usable && !outcome && !loading && !error
@@ -376,6 +396,34 @@ export function QuickRanker({
         </div>
 
         {model && <p className="max-w-[68ch] text-sm text-muted-foreground">{model.description}</p>}
+
+        {showLiquidityToggle && (
+          <div className="flex items-center gap-1">
+            <Label
+              htmlFor="ranking-low-liquidity"
+              className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-normal text-foreground"
+            >
+              <Checkbox
+                id="ranking-low-liquidity"
+                checked={includesLowLiquidity(params)}
+                onCheckedChange={(checked) => toggleLowLiquidity(checked === true)}
+                disabled={loading}
+              />
+              Incluir ativos com baixa liquidez
+            </Label>
+            <InfoHint
+              label="Sobre o filtro de liquidez"
+              content={
+                <p>
+                  Por padrão, ficam fora as ações com volume médio negociado abaixo de {formatBRLCompact(LIQUIDITY_DEFAULTS.stock)} por
+                  dia nos últimos 60 pregões. BDRs abaixo de {formatBRLCompact(LIQUIDITY_DEFAULTS.bdr)} por dia continuam no ranking,
+                  com aviso. Quando há mais de uma classe da mesma empresa, fica a mais negociada. O volume de cada ativo aparece em
+                  Liquidez diária, nos detalhes da linha.
+                </p>
+              }
+            />
+          </div>
+        )}
 
         {saved && (
           <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">

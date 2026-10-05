@@ -1,4 +1,4 @@
-import { AbstractStrategy, toNumber, formatPercent } from './base-strategy';
+import { AbstractStrategy, toNumber } from './base-strategy';
 import {
   CompanyData,
   FiiRankingParams,
@@ -52,7 +52,8 @@ export class FiiRankingStrategy extends AbstractStrategy<FiiRankingParams> {
     const liq = toNumber(companyData.financials.fiiLiquidez);
     const minL = params.minLiquidity ?? 1_000_000;
     if (!matchesTipo(companyData.financials, params.tipoFii || 'both')) return false;
-    if (liq !== null && liq < minL) return false;
+    // Sem dado de liquidez conta como ilíquido (mesma regra do filtro de liquidez dos rankings).
+    if (liq === null || liq < minL) return false;
     const qtd = toNumber(companyData.financials.fiiQtdImoveis);
     if (params.minQtdImoveis != null && (qtd === null || qtd < params.minQtdImoveis)) return false;
     const vac = toNumber(companyData.financials.fiiVacanciaMedia);
@@ -101,7 +102,7 @@ export class FiiRankingStrategy extends AbstractStrategy<FiiRankingParams> {
       const res = calculateFiiOverallScore(buildScoreInput(c), c.dividendHistory);
       if (!res || res.score < minS) continue;
       const liq = toNumber(c.financials.fiiLiquidez);
-      if (liq !== null && liq < minL) continue;
+      if (liq === null || liq < minL) continue;
       if (!matchesTipo(c.financials, params.tipoFii || 'both')) continue;
       const qtd = toNumber(c.financials.fiiQtdImoveis);
       if (params.minQtdImoveis != null && (qtd === null || qtd < params.minQtdImoveis)) continue;
@@ -137,8 +138,9 @@ export class FiiRankingStrategy extends AbstractStrategy<FiiRankingParams> {
         fairValue: analysis.fairValue,
         upside: analysis.upside,
         fairValueModel: fiiListingFairValueModelLabel(src),
-        marginOfSafety: analysis.fairValue
-          ? ((analysis.fairValue - c.currentPrice) / c.currentPrice) * 100
+        // Margem de segurança (1 − preço ÷ preço justo), em pontos percentuais.
+        marginOfSafety: analysis.fairValue && analysis.fairValue > 0
+          ? (1 - c.currentPrice / analysis.fairValue) * 100
           : null,
         rational:
           `PJ-FII ${res.score} (${res.grade}). Pilares: Dividendos ${res.breakdown.dividendos.score.toFixed(

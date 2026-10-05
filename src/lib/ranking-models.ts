@@ -6,7 +6,12 @@
  * (`/api/rank-builder` para ações e FIIs, `/api/etf-ranking` para ETFs).
  *
  * Unidades dos parâmetros: percentuais são **frações** (0,2 = 20%), como a API espera.
+ *
+ * Também concentra as regras de liquidez dos rankings (puras, usadas pela API e pela UI): exclusão de ativos
+ * abaixo do volume mínimo e deduplicação das classes de ações da mesma empresa.
  */
+
+import { LIQUIDITY_DEFAULTS, isIlliquid, toLiquidityAssetType } from '@/lib/finance/liquidity-rules'
 
 export type RankingAssetType = 'stock' | 'fii' | 'etf' | 'bdr'
 export type RankingPlan = 'free' | 'premium'
@@ -124,9 +129,9 @@ function fiiLiquidityField(): RankingSelectField {
 
 const isBdr = (universe: RankingUniverse) => universe === 'bdr'
 
-/** Parâmetros comuns aos modelos de ações. */
+/** Parâmetros comuns aos modelos de ações. A priorização técnica fica desligada por padrão. */
 function stockBase(): RankingParams {
-  return { companySize: 'all', useTechnicalAnalysis: true }
+  return { companySize: 'all', useTechnicalAnalysis: false }
 }
 
 function etfPreset(key: string, label: string, description: string): RankingModel {
@@ -328,7 +333,7 @@ export const RANKING_MODELS: RankingModel[] = [
         max: 10,
         step: 1,
       },
-      { kind: 'slider', key: 'maxDebtToEquity', label: 'Dívida/PL máxima', unit: 'pct', min: 0.5, max: 2, step: 0.1 },
+      { kind: 'slider', key: 'maxDebtToEquity', label: 'Dív. líq./PL máxima', unit: 'multiple', min: 0.5, max: 2, step: 0.1 },
       { kind: 'slider', key: 'minROE', label: 'ROE mínimo', unit: 'pct', min: 0.05, max: 0.25, step: 0.01 },
       {
         kind: 'switch',
@@ -351,6 +356,47 @@ export const RANKING_MODELS: RankingModel[] = [
     score: { key: 'barsiScore', label: 'Score', format: 'score' },
     fairValueKey: 'ceilingPrice',
     fairValueLabel: 'Preço-teto',
+  },
+  {
+    key: 'bazin',
+    label: 'Bazin (preço-teto)',
+    plan: 'premium',
+    assetType: 'stock',
+    description:
+      'Preço-teto de Décio Bazin: média dos proventos brutos dos últimos 5 anos completos dividida pelo dividend yield alvo, com dívida baixa e lucros consistentes.',
+    fields: [
+      COMPANY_SIZE,
+      { kind: 'slider', key: 'targetDividendYield', label: 'Dividend yield alvo', unit: 'pct', min: 0.04, max: 0.12, step: 0.005 },
+      {
+        kind: 'slider',
+        key: 'maxDebtToEquity',
+        label: 'Dív. líq./PL máxima',
+        unit: 'multiple',
+        min: 0.2,
+        max: 1.5,
+        step: 0.1,
+        hint: 'Não vale para bancos e seguradoras, avaliados por ROE médio e payout.',
+      },
+      TECHNICAL,
+    ],
+    defaults: () => ({ ...stockBase(), targetDividendYield: 0.06, maxDebtToEquity: 0.5, yearsForAverage: 5 }),
+    score: { key: 'dividendYield', label: 'DY médio', format: 'pct' },
+    fairValueKey: 'ceilingPrice',
+    fairValueLabel: 'Preço-teto',
+  },
+  {
+    key: 'lynch',
+    label: 'Peter Lynch (PEG)',
+    plan: 'premium',
+    assetType: 'stock',
+    description:
+      'P/L justo de Peter Lynch (crescimento dos lucros + dividend yield) e PEG: P/L dividido pelo crescimento. Commodities cíclicas ficam de fora.',
+    fields: [
+      COMPANY_SIZE,
+      { kind: 'slider', key: 'maxPeg', label: 'PEG máximo', unit: 'multiple', min: 0.3, max: 2, step: 0.1 },
+      TECHNICAL,
+    ],
+    defaults: () => ({ ...stockBase(), maxPeg: 1, maxGrowthRate: 0.25 }),
   },
   {
     key: 'ai',
@@ -512,4 +558,92 @@ export function buildRankBuilderBody(model: RankingModel, universe: RankingUnive
       assetTypeFilter,
     },
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Liquidez
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Modelos com a opção "Incluir ativos com baixa liquidez" (os de FII têm o próprio seletor de liquidez mínima). */
+export function supportsLowLiquidityToggle(model: RankingModel | undefined): boolean {
+  return model?.assetType === 'stock' || model?.assetType === 'bdr'
+}
+
+/** `true` quando os parâmetros pedem para incluir ativos abaixo do volume mínimo (`minLiquidity: null`). */
+export function includesLowLiquidity(params: RankingParams): boolean {
+  return params.minLiquidity === null
+}
+
+/** Liga/desliga a inclusão de ativos ilíquidos: `null` inclui todos; sem a chave, vale o limite padrão. */
+export function withLowLiquidity(params: RankingParams, include: boolean): RankingParams {
+  const next = { ...params }
+  delete next.minLiquidity
+  return include ? { ...next, minLiquidity: null } : next
+}
+
+export interface LiquidityItem {
+  ticker: string
+  /** Prisma `AssetType` ('STOCK', 'BDR', 'FII'…). */
+  assetType?: string | null
+  /** R$/dia; `null` = sem dado (conta como ilíquido); `undefined` = não calculado (fica fora das regras). */
+  averageDailyTradedValue?: number | null
+  lowLiquidity?: boolean
+}
+
+/** Raiz do ticker, comum às classes da mesma empresa: PETR3/PETR4 → PETR, TAEE11 → TAEE. */
+export function companyPrefix(ticker: string): string {
+  return ticker.trim().toUpperCase().replace(/[0-9]+[A-Z]*$/, '')
+}
+
+function liquidityOf(item: LiquidityItem): number {
+  const value = item.averageDailyTradedValue
+  return typeof value === 'number' && Number.isFinite(value) ? value : -Infinity
+}
+
+/**
+ * Mantém uma classe por empresa (mesma raiz de ticker): a de maior volume médio diário. A ordem de entrada é
+ * preservada (a classe escolhida ocupa a posição da primeira classe da empresa). FIIs não passam por aqui.
+ */
+export function dedupeShareClasses<T extends LiquidityItem>(items: readonly T[]): T[] {
+  const best = new Map<string, T>()
+  for (const item of items) {
+    const prefix = companyPrefix(item.ticker)
+    const current = best.get(prefix)
+    if (!current || liquidityOf(item) > liquidityOf(current)) best.set(prefix, item)
+  }
+  const seen = new Set<string>()
+  const result: T[] = []
+  for (const item of items) {
+    const prefix = companyPrefix(item.ticker)
+    if (seen.has(prefix)) continue
+    seen.add(prefix)
+    result.push(best.get(prefix) as T)
+  }
+  return result
+}
+
+/**
+ * Regras de liquidez dos rankings:
+ * - classes da mesma empresa são deduplicadas pela mais líquida (exceto FIIs);
+ * - ações e FIIs abaixo do limite (`minLiquidity`, ou o padrão do tipo) saem; com `minLiquidity: null` ficam, marcados;
+ * - BDRs nunca saem: abaixo do limite ficam marcados com `lowLiquidity`.
+ * Itens sem liquidez calculada (`undefined`) não são filtrados nem marcados.
+ */
+export function applyLiquidityRules<T extends LiquidityItem>(items: readonly T[], minLiquidity?: number | null): T[] {
+  const stocks = items.filter((item) => toLiquidityAssetType(item.assetType) !== 'fii')
+  const fiis = items.filter((item) => toLiquidityAssetType(item.assetType) === 'fii')
+  const candidates = [...dedupeShareClasses(stocks), ...fiis]
+  const result: T[] = []
+  for (const item of candidates) {
+    if (item.averageDailyTradedValue === undefined) {
+      result.push(item)
+      continue
+    }
+    const type = toLiquidityAssetType(item.assetType)
+    const threshold = typeof minLiquidity === 'number' ? minLiquidity : LIQUIDITY_DEFAULTS[type]
+    const illiquid = isIlliquid(item.averageDailyTradedValue, type, threshold)
+    if (illiquid && type !== 'bdr' && minLiquidity !== null) continue
+    result.push(illiquid ? { ...item, lowLiquidity: true } : item)
+  }
+  return result
 }

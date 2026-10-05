@@ -36,8 +36,10 @@ import { FollowAssetCard } from '@/components/asset/follow-asset-card'
 import { AssetSectionNav, type AssetSection } from '@/components/asset/asset-section-nav'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Button } from '@/components/ui/button'
-import { formatBRL, formatDeltaPct, formatMultiple, formatNumber, formatPct } from '@/lib/format'
+import { formatBRL, formatBRLCompact, formatDeltaPct, formatMultiple, formatNumber, formatPct } from '@/lib/format'
 import { marginOfSafety, valuationStatusLabel } from '@/lib/valuation-metrics'
+import { InfoHint } from '@/components/ui/info-hint'
+import { getLiquidityFlag, type LiquidityFlag } from '@/lib/rank-builder-service'
 
 interface PageProps {
   params: {
@@ -282,6 +284,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       }
     }
   }
+}
+
+/** Volume médio diário com a ajuda do badge "Baixa liquidez" do cabeçalho. */
+function LiquidityNote({ flag }: { flag: LiquidityFlag }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="tabular-nums">Volume médio: {flag.value === null ? 'sem dado' : `${formatBRLCompact(flag.value)}/dia`}</span>
+      <InfoHint label="Sobre a baixa liquidez" content={flag.hint} />
+    </span>
+  )
 }
 
 export default async function TickerPage({ params }: PageProps) {
@@ -667,6 +679,7 @@ export default async function TickerPage({ params }: PageProps) {
 
   const marketCap = toNumber(latestFinancials?.marketCap ?? null)
   const sizeInfo = getCompanySizeInfo(marketCap)
+  const liquidityFlag: LiquidityFlag | null = await getLiquidityFlag(companyData.id, companyData.assetType).catch(() => null)
   const dividendYield = toNumber(latestFinancials?.dy ?? null)
   const location = [companyData.city, companyData.state].filter(Boolean).join(', ')
   const aboutItems = [
@@ -692,7 +705,10 @@ export default async function TickerPage({ params }: PageProps) {
             price={currentPrice > 0 ? currentPrice : null}
             dayChange={dayChange}
             updatedAt={latestFinancials?.updatedAt ?? null}
-            badges={sizeInfo ? [{ label: sizeInfo.label, variant: 'neutral' }] : []}
+            badges={[
+              ...(sizeInfo ? [{ label: sizeInfo.label, variant: 'neutral' as const }] : []),
+              ...(liquidityFlag?.isLow ? [{ label: 'Baixa liquidez', variant: 'warning' as const }] : []),
+            ]}
             sector={companyData.sector}
             industry={companyData.industry}
             canViewFullContent={canViewFullContent}
@@ -707,6 +723,7 @@ export default async function TickerPage({ params }: PageProps) {
             >
               Como o score é calculado
             </Link>
+            {liquidityFlag?.isLow && <LiquidityNote flag={liquidityFlag} />}
             <PageCacheIndicator ticker={ticker} isPremium={canViewFullContent} className="text-xs text-muted-foreground" />
           </div>
         </div>

@@ -130,9 +130,10 @@ export class FiiScreeningStrategy extends AbstractStrategy<FiiScreeningParams> {
       );
       const ref = computeFiiListingValuation(c);
       const fairValueModel = fiiListingFairValueModelLabel(ref.upsideSource);
+      // Margem de segurança (1 − preço ÷ preço justo), em pontos percentuais.
       const marginOfSafety =
         ref.fairValue !== null && ref.fairValue > 0 && c.currentPrice > 0
-          ? ((ref.fairValue - c.currentPrice) / c.currentPrice) * 100
+          ? (1 - c.currentPrice / ref.fairValue) * 100
           : null;
       out.push({
         ticker: c.ticker,

@@ -14,6 +14,9 @@ export interface RadarStrategies {
   fcd?: StrategyAnalysis | null
   gordon?: StrategyAnalysis | null
   fundamentalist?: StrategyAnalysis | null
+  bazin?: StrategyAnalysis | null
+  lynch?: StrategyAnalysis | null
+  bankPvp?: StrategyAnalysis | null
 }
 
 interface RadarStrategyBadgesProps {
@@ -23,10 +26,13 @@ interface RadarStrategyBadgesProps {
   className?: string
 }
 
-/** Ordem e nomes das estratégias do radar (o método Barsi é o `barsi`; o Bazin chega na onda 2). */
+/** Ordem e nomes das estratégias do radar (Barsi e Bazin são métodos distintos). */
 export const RADAR_STRATEGY_LABELS: Array<{ key: keyof RadarStrategies; label: string }> = [
   { key: 'graham', label: 'Graham' },
   { key: 'barsi', label: 'Barsi' },
+  { key: 'bazin', label: 'Bazin' },
+  { key: 'lynch', label: 'Peter Lynch' },
+  { key: 'bankPvp', label: 'P/VP justo' },
   { key: 'dividendYield', label: 'Dividend yield' },
   { key: 'lowPE', label: 'P/L baixo' },
   { key: 'magicFormula', label: 'Fórmula mágica' },

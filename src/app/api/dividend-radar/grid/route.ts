@@ -5,12 +5,15 @@ import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { DividendProjection, DividendRadarService } from '@/lib/dividend-radar-service';
 import { DividendService } from '@/lib/dividend-service';
 import { cache } from '@/lib/cache-service';
+import { dividendTypeLabel, type DividendTypeLabel } from '@/app/agenda-proventos/agenda-model';
 
 interface HistoricalDividend {
   month: number;
   year: number;
   exDate: Date;
+  paymentDate: Date | null;
   amount: number;
+  type: DividendTypeLabel;
 }
 
 interface GridCompany {
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0', 10);
 
     // Chave de cache baseada nos filtros
-    const cacheKey = `dividend-radar-grid:${search}:${sector}:${period}:${myAssets}:${dateType}:${oneTickerPerStock}:${limit}:${offset}:${currentUser?.id || 'anonymous'}`;
+    const cacheKey = `dividend-radar-grid:v2:${search}:${sector}:${period}:${myAssets}:${dateType}:${oneTickerPerStock}:${limit}:${offset}:${currentUser?.id || 'anonymous'}`;
 
     // Verificar cache (1 hora)
     const cached = await cache.get(cacheKey);
@@ -74,7 +77,9 @@ export async function GET(request: NextRequest) {
           orderBy: { exDate: 'desc' },
           select: {
             exDate: true,
+            paymentDate: true,
             amount: true,
+            type: true,
           },
         },
       },
@@ -180,51 +185,29 @@ export async function GET(request: NextRequest) {
     // Calcular data de corte para histórico (4 meses atrás)
     const historicalCutoffDate = new Date(now.getFullYear(), now.getMonth() - 4, 1);
 
-    // Processar empresas e iniciar carregamento sob demanda em background para empresas sem projeções
-    const companiesToProcess = paginatedCompanies.filter((c: any) => !c.dividendRadarProjections);
-    
-    // Iniciar processamento em background para empresas sem projeções (não bloqueia resposta)
-    // IMPORTANTE: Carregar dividendos PRIMEIRO, depois gerar projeções
-    // Isso garante que novos dividendos sejam detectados antes de gerar/reprocessar projeções
-    if (companiesToProcess.length > 0) {
+    // Empresas sem projeções em cache: atualiza o histórico de proventos em background (não bloqueia a resposta).
+    // Ao salvar, o DividendService recalcula as projeções se houver provento novo.
+    const companiesToRefresh = paginatedCompanies.filter((c: any) => !c.dividendRadarProjections);
+    if (companiesToRefresh.length > 0) {
       Promise.all(
-        companiesToProcess.map(async (company: any) => {
-          try {
-            // 1. Carregar dividendos atualizados primeiro
-            await DividendService.fetchAndSaveDividends(company.ticker);
-            
-            // 2. Depois gerar/reprocessar projeções (detecta novos dividendos automaticamente)
-            await DividendRadarService.getOrGenerateProjections(company.ticker);
-          } catch (error) {
-            console.error(`[GRID] Erro ao processar ${company.ticker}:`, error);
-            // Ignorar erros silenciosamente - processamento em background
-          }
-        })
-      ).catch(() => {
-        // Ignorar erros silenciosamente - processamento em background
-      });
+        companiesToRefresh.map((company: any) =>
+          DividendService.fetchAndSaveDividends(company.ticker).catch((error) => {
+            console.error(`[GRID] Erro ao atualizar proventos de ${company.ticker}:`, error);
+          })
+        )
+      ).catch(() => {});
     }
 
     for (const company of paginatedCompanies) {
-      let projections: DividendProjection[] = [];
-
-      // Verificar se precisa reprocessar projeções (novos dividendos ou projeções antigas)
-      const needsReprocessing = await DividendRadarService.shouldReprocessProjections(company.ticker);
-      
-      if (needsReprocessing) {
-        // Reprocessar projeções em background (não bloqueia resposta)
-        DividendRadarService.getOrGenerateProjections(company.ticker).catch((error) => {
-          console.error(`[GRID] Erro ao reprocessar projeções para ${company.ticker}:`, error);
-        });
-      }
-
-      // Usar projeções que já existem no banco
-      if ((company as any).dividendRadarProjections) {
-        projections = (company as any).dividendRadarProjections as DividendProjection[];
-      } else {
-        // Se não tem projeções, iniciar processamento em background e pular por enquanto
-        // Na próxima requisição (ou após processamento), a empresa já terá projeções
-        continue;
+      // Projeções em cache; recalcula na hora (estimativa estatística, consulta rápida) quando faltam ou estão desatualizadas
+      let projections = ((company as any).dividendRadarProjections as DividendProjection[] | null) ?? null;
+      try {
+        if (!projections || (await DividendRadarService.shouldReprocessProjections(company.ticker))) {
+          projections = await DividendRadarService.generateProjections(company.ticker);
+        }
+      } catch (error) {
+        console.error(`[GRID] Erro ao calcular projeções para ${company.ticker}:`, error);
+        projections = projections ?? [];
       }
 
       // Filtrar projeções antigas (meses passados) e futuras (apenas meses futuros) E confiança >= 60%
@@ -255,10 +238,12 @@ export async function GET(request: NextRequest) {
           const divDate = new Date(div.exDate);
           if (divDate >= historicalCutoffDate && divDate <= now) {
             historicalDividends.push({
-              month: divDate.getMonth() + 1,
-              year: divDate.getFullYear(),
+              month: divDate.getUTCMonth() + 1,
+              year: divDate.getUTCFullYear(),
               exDate: divDate,
+              paymentDate: div.paymentDate ?? null,
               amount: Number(div.amount),
+              type: dividendTypeLabel(div.type),
             });
           }
         });

@@ -88,6 +88,7 @@ export const navigation: { marketing: NavSection[]; app: NavSection[] } = {
       label: 'Carteiras',
       items: [
         { label: 'Minhas carteiras', href: '/carteira', description: 'Posições, aportes e rentabilidade' },
+        { label: 'Agenda de proventos', href: '/agenda-proventos', description: 'Datas ex, pagamentos e renda mensal' },
         { label: 'Backtest', href: '/backtest', description: 'Simule carteiras no passado' },
         { label: 'Índices teóricos', href: '/indices', description: 'Carteiras teóricas com histórico' },
       ],
@@ -96,6 +97,7 @@ export const navigation: { marketing: NavSection[]; app: NavSection[] } = {
       label: 'Alertas',
       items: [
         { label: 'Meu radar', href: '/radar', description: 'Ativos que você acompanha' },
+        { label: 'Agenda de proventos', href: '/agenda-proventos', description: 'Proventos do radar e da carteira' },
         { label: 'Alertas de preço', href: '/dashboard/subscriptions', description: 'Aviso por e-mail por ticker' },
         { label: 'Monitoramentos', href: '/dashboard/monitoramentos-customizados', description: 'Alertas por indicador' },
         { label: 'Notificações', href: '/notificacoes', description: 'Avisos da plataforma' },

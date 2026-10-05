@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
 import { authOptions } from "@/lib/auth";
+import { DashboardAgendaWidget } from "@/components/dashboard-agenda-widget";
 import { DashboardClient } from "./dashboard-client";
 
 export const metadata: Metadata = {
@@ -18,5 +19,12 @@ export default async function DashboardPage() {
     redirect("/login?callbackUrl=/dashboard");
   }
 
-  return <DashboardClient />;
+  return (
+    <>
+      <DashboardClient />
+      <div className="mx-auto w-full max-w-6xl px-4 pt-2 pb-6">
+        <DashboardAgendaWidget />
+      </div>
+    </>
+  );
 }

@@ -35,7 +35,12 @@ interface Holding {
   actualAllocation: number;
   allocationDiff: number;
   needsRebalancing: boolean;
+  /** Proventos brutos por ação dos últimos 12 meses ÷ preço médio (fração); `null` sem dado. */
+  yieldOnCost?: number | null;
 }
+
+const YIELD_ON_COST_HINT =
+  "Proventos brutos por ação com data ex nos últimos 12 meses divididos pelo seu preço médio.";
 
 interface PortfolioHoldingsTableProps {
   portfolioId: string;
@@ -146,6 +151,7 @@ function HoldingCard({ holding, onRecovery }: { holding: Holding; onRecovery: (h
               {formatBRL(holding.return)}
             </DetailItem>
             <DetailItem label="Dividendos">{formatBRL(holding.totalDividends)}</DetailItem>
+            <DetailItem label="Yield on cost (12m)">{formatPct(holding.yieldOnCost)}</DetailItem>
             <DetailItem
               label="Retorno c/ dividendos"
               className={returnToneClass(holding.returnWithDividendsPercentage)}
@@ -185,7 +191,28 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
     },
   });
 
-  const holdings: Holding[] = holdingsData?.holdings || [];
+  const baseHoldings: Holding[] = holdingsData?.holdings || [];
+  const tickersParam = baseHoldings.map((h) => h.ticker).sort().join(",");
+
+  // Proventos dos últimos 12 meses por ação (base do yield on cost).
+  const { data: ttmData } = useQuery<{ ttm: Record<string, number> }>({
+    queryKey: ["dividends-ttm", tickersParam],
+    queryFn: async () => {
+      const response = await fetch(`/api/agenda-proventos/ttm?tickers=${encodeURIComponent(tickersParam)}`);
+      if (!response.ok) throw new Error("Erro ao carregar proventos");
+      return response.json();
+    },
+    enabled: tickersParam.length > 0,
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const holdings: Holding[] = baseHoldings.map((h) => {
+    const ttm = ttmData?.ttm[h.ticker];
+    return {
+      ...h,
+      yieldOnCost: typeof ttm === "number" && h.averagePrice > 0 ? ttm / h.averagePrice : null,
+    };
+  });
 
   // Sugestões de aporte/compra pendentes (devem ser concluídas antes de rebalancear).
   const { data: pendingContributionsData } = useQuery({
@@ -285,6 +312,14 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
       sortable: true,
       hint: "Inclui os dividendos recebidos do ativo.",
       cell: (h) => <ReturnCell fraction={h.returnWithDividendsPercentage} amount={h.returnWithDividends} />,
+    },
+    {
+      key: "yieldOnCost",
+      header: "Yield on cost",
+      align: "right",
+      sortable: true,
+      hint: YIELD_ON_COST_HINT,
+      cell: (h) => formatPct(h.yieldOnCost),
     },
     {
       key: "actualAllocation",

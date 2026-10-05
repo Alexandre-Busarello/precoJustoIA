@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DividendRadarService } from '@/lib/dividend-radar-service';
+import { DIVIDEND_PROJECTION_LABEL, DividendRadarService } from '@/lib/dividend-radar-service';
 import { prisma } from '@/lib/prisma';
+import { dividendTypeLabel, type DividendTypeLabel } from '@/app/agenda-proventos/agenda-model';
 
 interface HistoricalDividend {
   month: number;
   year: number;
   exDate: Date;
+  paymentDate: Date | null;
   amount: number;
+  type: DividendTypeLabel;
 }
 
 /**
  * GET /api/dividend-radar/projections/[ticker]
- * Retorna projeções de dividendos para um ticker específico + histórico dos últimos 6 meses
+ * Retorna projeções de dividendos (estimativa estatística, sem IA) para um ticker + histórico de proventos
  */
 export async function GET(
   request: NextRequest,
@@ -35,7 +38,9 @@ export async function GET(
           orderBy: { exDate: 'desc' },
           select: {
             exDate: true,
+            paymentDate: true,
             amount: true,
+            type: true,
           },
         },
       },
@@ -47,10 +52,12 @@ export async function GET(
       company.dividendHistory.forEach((div) => {
         const divDate = new Date(div.exDate);
         allHistoricalDividends.push({
-          month: divDate.getMonth() + 1,
-          year: divDate.getFullYear(),
+          month: divDate.getUTCMonth() + 1,
+          year: divDate.getUTCFullYear(),
           exDate: divDate,
+          paymentDate: div.paymentDate,
           amount: Number(div.amount),
+          type: dividendTypeLabel(div.type),
         });
       });
     }
@@ -65,6 +72,7 @@ export async function GET(
       success: true,
       ticker,
       projections, // Todas as projeções completas
+      projectionMethod: DIVIDEND_PROJECTION_LABEL,
       historicalDividends: recentHistoricalDividends, // Últimos 4 meses para visualização resumida
       allHistoricalDividends, // Histórico completo
       count: projections.length,

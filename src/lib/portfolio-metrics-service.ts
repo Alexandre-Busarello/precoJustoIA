@@ -3,7 +3,7 @@
  * 
  * Calculates and manages portfolio metrics including:
  * - Current holdings and valuations
- * - Performance metrics (returns, volatility, Sharpe ratio)
+ * - Performance metrics (TWR, volatility, Sharpe ratio with CDI)
  * - Risk metrics (max drawdown)
  * - Sector/industry allocations
  */
@@ -15,7 +15,7 @@ import { Prisma } from '@prisma/client';
 import { getLatestPrices as getQuotes, pricesToNumberMap } from './quote-service';
 import { HistoricalDataService } from './historical-data-service';
 import { AssetRegistrationService } from './asset-registration-service';
-import { PortfolioAnalytics, PortfolioAnalyticsService } from './portfolio-analytics-service';
+import { PortfolioAnalyticsService } from './portfolio-analytics-service';
 
 // Types
 export interface PortfolioHolding {
@@ -60,6 +60,8 @@ export interface PortfolioMetricsData {
   annualizedReturn: number | null;
   volatility: number | null;
   sharpeRatio: number | null;
+  /** O CDI não pôde ser obtido: o Sharpe gravado antes é mantido. */
+  sharpeUnavailable?: boolean;
   maxDrawdown: number | null;
   holdings: PortfolioHolding[];
   monthlyReturns: { date: string; return: number; portfolioValue: number }[];
@@ -171,13 +173,18 @@ export class PortfolioMetricsService {
     
     console.log('📊 [METRICS EVOLUTION] Usando dados do Analytics:', evolutionData);
     
-    // Calculate monthly returns
-    const monthlyReturns = this.calculateMonthlyReturns(evolutionData);
-    
-    // Calculate risk metrics
-    const volatility = this.calculateVolatility(monthlyReturns);
-    const annualizedReturn = this.calculateAnnualizedReturn(totalReturn, evolutionData.length);
-    const sharpeRatio = volatility && annualizedReturn ? this.calculateSharpeRatio(annualizedReturn, volatility) : null;
+    // Rentabilidade por cota (TWR), volatilidade e Sharpe com o CDI do período (mesmo cálculo do Analytics)
+    const performance = await PortfolioAnalyticsService.calculatePerformance(evolutionPoints, transactions);
+    // Patrimônio no fim de cada mês medido (ponto seguinte da evolução)
+    const valueAtPeriodEnd = new Map(evolutionPoints.slice(0, -1).map((point, index) => [point.date, evolutionPoints[index + 1].value]));
+    const monthlyReturns = performance.monthlyReturns.map(month => ({
+      date: month.date.substring(0, 7),
+      return: month.return / 100,
+      portfolioValue: valueAtPeriodEnd.get(month.date) ?? 0
+    }));
+    const volatility = performance.summary.volatility;
+    const annualizedReturn = performance.summary.twrAnnualized;
+    const sharpeRatio = performance.summary.sharpe;
     
     // Calculate maxDrawdown usando o MESMO método do Analytics
     const { drawdownHistory } = PortfolioAnalyticsService.calculateDrawdown(evolutionPoints);
@@ -206,6 +213,7 @@ export class PortfolioMetricsService {
       annualizedReturn,
       volatility,
       sharpeRatio,
+      sharpeUnavailable: !performance.summary.riskFreeAvailable,
       maxDrawdown,
       holdings,
       monthlyReturns,
@@ -930,71 +938,6 @@ export class PortfolioMetricsService {
   // ✅ Métodos calculateEvolutionData e getPricesAsOf REMOVIDOS
   // Agora usamos PortfolioAnalyticsService.calculateEvolution() diretamente
 
-  /**
-   * Calculate monthly returns
-   */
-  private static calculateMonthlyReturns(
-    evolutionData: { date: string; value: number; cashBalance: number }[]
-  ): { date: string; return: number; portfolioValue: number }[] {
-    const returns: { date: string; return: number; portfolioValue: number }[] = [];
-    
-    for (let i = 1; i < evolutionData.length; i++) {
-      const current = evolutionData[i];
-      const previous = evolutionData[i - 1];
-      
-      const monthReturn = previous.value > 0 ? (current.value - previous.value) / previous.value : 0;
-      
-      returns.push({
-        date: current.date,
-        return: monthReturn,
-        portfolioValue: current.value
-      });
-    }
-
-    return returns;
-  }
-
-  /**
-   * Calculate volatility ANUALIZADA (annualized standard deviation)
-   * 
-   * IMPORTANTE: Esta volatilidade é ANUALIZADA para fins de comparação com benchmarks
-   * e outras métricas de investimento que são tipicamente expressas em base anual.
-   * 
-   * A volatilidade em Analytics é MENSAL (não anualizada) para análise detalhada.
-   * Exemplo: Mensal = 0.10%, Anualizada = 0.10% * √12 ≈ 0.34%
-   */
-  private static calculateVolatility(
-    monthlyReturns: { date: string; return: number; portfolioValue: number }[]
-  ): number | null {
-    if (monthlyReturns.length < 2) return null;
-
-    const returns = monthlyReturns.map(r => r.return);
-    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
-    const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
-    const stdDev = Math.sqrt(variance);
-    
-    // Annualize (monthly to yearly) - Multiplica por √12 para anualizar
-    return stdDev * Math.sqrt(12);
-  }
-
-  /**
-   * Calculate annualized return
-   */
-  private static calculateAnnualizedReturn(totalReturn: number, months: number): number | null {
-    if (months < 12) return null; // Need at least 1 year
-    
-    const years = months / 12;
-    return Math.pow(1 + totalReturn, 1 / years) - 1;
-  }
-
-  /**
-   * Calculate Sharpe Ratio (risk-free rate assumed 0%)
-   */
-  private static calculateSharpeRatio(annualizedReturn: number, volatility: number): number {
-    const riskFreeRate = 0; // Could be updated to use current Selic rate
-    return (annualizedReturn - riskFreeRate) / volatility;
-  }
-
   // ✅ Método calculateMaxDrawdown REMOVIDO
   // Agora usamos PortfolioAnalyticsService.calculateDrawdown() diretamente
 
@@ -1142,7 +1085,8 @@ export class PortfolioMetricsService {
           totalReturn: safeDecimal(metrics.totalReturn) ?? 0,
           annualizedReturn: safeDecimal(metrics.annualizedReturn),
           volatility: safeDecimal(metrics.volatility),
-          sharpeRatio: safeDecimal(metrics.sharpeRatio),
+          // Sem CDI (falha do BCB), mantém o Sharpe já gravado em vez de apagá-lo
+          ...(metrics.sharpeUnavailable ? {} : { sharpeRatio: safeDecimal(metrics.sharpeRatio) }),
           maxDrawdown: safeDecimal(metrics.maxDrawdown),
           assetHoldings: metrics.holdings as unknown as Prisma.InputJsonValue,
           monthlyReturns: metrics.monthlyReturns as unknown as Prisma.InputJsonValue,

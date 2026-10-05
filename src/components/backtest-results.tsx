@@ -29,8 +29,11 @@ import {
 } from '@/components/portfolio-chart-parts';
 import { BacktestTransactions } from './backtest-transactions';
 import {
-  alignBenchmarkDates,
-  type BenchmarkData
+  cdiLevel,
+  priceLevel,
+  simulatePeriods,
+  type BenchmarkData,
+  type FlowPeriod
 } from '@/lib/benchmark-service';
 import {
   EMPTY_VALUE,
@@ -56,12 +59,7 @@ interface BacktestResult {
   finalValue: number;
   finalCashReserve?: number;
   totalDividendsReceived?: number;
-  monthlyReturns: Array<{
-    date: string;
-    return: number;
-    portfolioValue: number;
-    contribution: number;
-  }>;
+  monthlyReturns: MonthlyReturn[];
   assetPerformance: Array<{
     ticker: string;
     allocation: number;
@@ -88,7 +86,48 @@ interface BacktestResult {
   plannedInvestment?: number;
   missedContributions?: number;
   missedAmount?: number;
+  /** Premissas da simulação (ausente em execuções salvas no banco). */
+  assumptions?: {
+    dividends: 'reinvested' | 'cash';
+    jcpNetOfTax: boolean;
+    tradingCostRate: number;
+    totalTradingCosts: number;
+  };
 }
+
+/** Mês simulado. Os campos opcionais existem nas execuções feitas a partir de outubro de 2026. */
+interface MonthlyReturn {
+  date: string;
+  return: number;
+  portfolioValue: number;
+  contribution: number;
+  /** Período de preços do mês (`YYYY-MM-DD`): do fechamento da compra ao da avaliação. */
+  periodStart?: string;
+  periodEnd?: string;
+  /** Custos de operação do mês, em reais. */
+  tradingCosts?: number;
+  /** Proventos reais creditados no mês, em reais. */
+  dividends?: number;
+  /** Saldo com os mesmos aportes no CDI / no Ibovespa, calculado no servidor. */
+  cdiValue?: number;
+  ibovValue?: number;
+}
+
+/** Custo por operação usado pela simulação (corretagem + emolumentos). */
+const TRADING_COST_RATE = 0.0003;
+
+/**
+ * Período de preços de um mês. As barras mensais vêm datadas no dia 1 com o fechamento do fim do mês: o mês
+ * rotulado M compra no fechamento de M e avalia no de M+1. Execuções antigas não gravam o período; usa a mesma regra.
+ */
+function monthPeriod(month: Pick<MonthlyReturn, 'date' | 'periodStart' | 'periodEnd'>): { start: string; end: string } {
+  if (month.periodStart && month.periodEnd) return { start: month.periodStart, end: month.periodEnd };
+  const [year, monthNumber] = month.date.slice(0, 7).split('-').map(Number);
+  const iso = (offset: number) => new Date(Date.UTC(year, monthNumber - 1 + offset, 1)).toISOString().slice(0, 10);
+  return { start: iso(1), end: iso(2) };
+}
+
+type SimulationMethod = 'current' | 'legacy';
 
 interface BacktestConfig {
   name: string;
@@ -229,15 +268,26 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
   const [loadingBenchmarks, setLoadingBenchmarks] = useState(true);
   const [showBenchmarks, setShowBenchmarks] = useState(true);
 
-  // Período dos benchmarks: chaves primitivas para não buscar de novo quando só a identidade de `config` muda
-  const hasConfig = !!config;
+  // Execuções novas trazem o saldo no CDI e no Ibovespa de cada mês (calculado no servidor com BCB e Yahoo).
+  // Só execuções antigas buscam os benchmarks à parte.
+  const serverBenchmarks = useMemo(() => {
+    const months = result.monthlyReturns ?? [];
+    if (months.length === 0) return null;
+    const hasCdi = months.every(m => typeof m.cdiValue === 'number');
+    const hasIbov = months.every(m => typeof m.ibovValue === 'number');
+    return hasCdi || hasIbov ? { hasCdi, hasIbov } : null;
+  }, [result.monthlyReturns]);
+
+  // Período dos benchmarks (do primeiro aporte ao fim do último mês): chaves primitivas para não buscar de novo
+  // quando só a identidade de `config` muda
+  const hasConfig = !!config && !serverBenchmarks;
   const benchmarkRange = useMemo(() => {
     if (!result.monthlyReturns || result.monthlyReturns.length === 0) return null;
-    const times = result.monthlyReturns.map(entry => new Date(entry.date).getTime());
-    return {
-      start: new Date(Math.min(...times)).toISOString().split('T')[0],
-      end: new Date(Math.max(...times)).toISOString().split('T')[0],
-    };
+    const periods = result.monthlyReturns.map(monthPeriod);
+    const today = new Date().toISOString().slice(0, 10);
+    const start = periods.reduce((min, p) => (p.start < min ? p.start : min), periods[0].start);
+    const end = periods.reduce((max, p) => (p.end > max ? p.end : max), periods[0].end);
+    return { start: start < today ? start : today, end: end < today ? end : today };
   }, [result.monthlyReturns]);
   const benchmarkStart = benchmarkRange?.start;
   const benchmarkEnd = benchmarkRange?.end;
@@ -488,62 +538,42 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       return: month.return * 100,
     }));
 
-    if (!benchmarkData || !showBenchmarks || loadingBenchmarks) {
-      return portfolioData;
+    if (!showBenchmarks) return portfolioData;
+
+    if (serverBenchmarks) {
+      return portfolioData.map((data, index) => {
+        const month: MonthlyReturn = sortedReturns[index];
+        // Ponto inicial inferido (só o aporte): os benchmarks valem o mesmo aporte
+        const inferred = !result.monthlyReturns.includes(month);
+        return {
+          ...data,
+          cdi: serverBenchmarks.hasCdi ? (inferred ? month.portfolioValue : month.cdiValue ?? null) : null,
+          ibov: serverBenchmarks.hasIbov ? (inferred ? month.portfolioValue : month.ibovValue ?? null) : null,
+        };
+      });
     }
 
-    const backtestDates = sortedReturns.map(m => m.date);
-    const alignedCDI = alignBenchmarkDates(benchmarkData.cdi, backtestDates);
-    const alignedIBOV = alignBenchmarkDates(benchmarkData.ibov, backtestDates);
+    if (!benchmarkData || loadingBenchmarks || !config) return portfolioData;
 
-    // CDI: taxa diária (%) do Banco Central → taxa mensal média (21 dias úteis), com os mesmos aportes da carteira
-    const simulateCDIInvestment = (cdiData: Array<{ date: string; value: number }>) => {
-      if (cdiData.length === 0 || !config) return [];
-
-      const avgDailyRate = cdiData.reduce((sum, item) => sum + item.value, 0) / cdiData.length;
-      const avgMonthlyRate = Math.pow(1 + (avgDailyRate / 100), 21) - 1;
-
-      let accumulatedValue = (config.initialCapital || 0) + config.monthlyContribution;
-      const results: number[] = [accumulatedValue];
-
-      for (let i = 1; i < sortedReturns.length; i++) {
-        accumulatedValue = accumulatedValue * (1 + avgMonthlyRate);
-        accumulatedValue += config.monthlyContribution;
-        results.push(accumulatedValue);
-      }
-
-      return results;
-    };
-
-    // Ibovespa (índice de preço): aplica a variação mensal sobre o saldo, com os mesmos aportes
-    const simulateIBOVInvestment = (ibovData: Array<{ date: string; value: number }>) => {
-      if (ibovData.length === 0 || !config) return [];
-
-      let accumulatedValue = (config.initialCapital || 0) + config.monthlyContribution;
-      const results: number[] = [accumulatedValue];
-
-      for (let i = 1; i < sortedReturns.length; i++) {
-        const monthReturn = ibovData[i] && ibovData[i - 1]
-          ? (ibovData[i].value - ibovData[i - 1].value) / ibovData[i - 1].value
-          : 0;
-
-        accumulatedValue = accumulatedValue * (1 + monthReturn);
-        accumulatedValue += config.monthlyContribution;
-        results.push(accumulatedValue);
-      }
-
-      return results;
-    };
-
-    const cdiValues = simulateCDIInvestment(alignedCDI);
-    const ibovValues = simulateIBOVInvestment(alignedIBOV);
-
-    return portfolioData.map((data, index) => ({
-      ...data,
-      cdi: cdiValues[index] ?? null,
-      ibov: ibovValues[index] ?? null,
+    // Execuções antigas: CDI (capitalização diária) e Ibovespa recebendo os mesmos aportes no início do período de
+    // preços de cada mês e medidos no fim dele
+    const simulated = [...result.monthlyReturns].sort((a, b) => a.date.localeCompare(b.date));
+    const periods = simulated.map(monthPeriod);
+    const flows: FlowPeriod[] = simulated.map((month, index) => ({
+      ...periods[index],
+      amount: (index === 0 ? config.initialCapital || 0 : 0) + (month.contribution || 0),
     }));
-  }, [result.monthlyReturns, benchmarkData, showBenchmarks, loadingBenchmarks, config, transactions]);
+    const cdiValues = benchmarkData.cdi.length > 0 ? simulatePeriods(cdiLevel(benchmarkData.cdi), flows) : [];
+    const ibovValues = benchmarkData.ibov.length > 0 ? simulatePeriods(priceLevel(benchmarkData.ibov), flows) : [];
+    const byDate = new Map(simulated.map((month, index) => [month.date, index]));
+
+    return portfolioData.map((data, index) => {
+      const month = sortedReturns[index];
+      const position = byDate.get(month.date);
+      if (position === undefined) return { ...data, cdi: month.portfolioValue, ibov: month.portfolioValue };
+      return { ...data, cdi: cdiValues[position] ?? null, ibov: ibovValues[position] ?? null };
+    });
+  }, [result.monthlyReturns, serverBenchmarks, benchmarkData, showBenchmarks, loadingBenchmarks, config, transactions]);
 
   // Tabela mensal (mais recente primeiro), com a variação do patrimônio sobre o mês anterior
   const monthlyRows: MonthlyRow[] = useMemo(() => {
@@ -598,8 +628,10 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
   const bestMonth = monthlyReturnValues.length > 0 ? Math.max(...monthlyReturnValues) : null;
   const worstMonth = monthlyReturnValues.length > 0 ? Math.min(...monthlyReturnValues) : null;
 
-  const hasCDI = !!benchmarkData?.cdi && benchmarkData.cdi.length > 0;
-  const hasIBOV = !!benchmarkData?.ibov && benchmarkData.ibov.length > 0;
+  const benchmarksLoading = !serverBenchmarks && loadingBenchmarks;
+  const benchmarksReady = !!serverBenchmarks || (!!benchmarkData && !loadingBenchmarks);
+  const hasCDI = serverBenchmarks ? serverBenchmarks.hasCdi : !!benchmarkData?.cdi && benchmarkData.cdi.length > 0;
+  const hasIBOV = serverBenchmarks ? serverBenchmarks.hasIbov : !!benchmarkData?.ibov && benchmarkData.ibov.length > 0;
   const visibleSeries: ChartSeries[] = [
     SERIES.carteira,
     ...(showBenchmarks && hasCDI ? [SERIES.cdi] : []),
@@ -608,7 +640,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
 
   // Comparação final com os benchmarks (retorno sobre o capital investido, em %)
   const benchmarkSummary = (() => {
-    if (!showBenchmarks || !benchmarkData || chartData.length === 0) return null;
+    if (!showBenchmarks || !benchmarksReady || chartData.length === 0) return null;
     const last = chartData[chartData.length - 1] as { carteira: number; cdi?: number | null; ibov?: number | null };
     const finalCarteira = last?.carteira || 0;
     const finalCDI = last?.cdi || 0;
@@ -731,6 +763,43 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
     },
   ];
 
+  const sharpeValue = typeof result.sharpeRatio === 'number' ? formatNumber(result.sharpeRatio, { digits: 2 }) : EMPTY_VALUE;
+  // Premissas que valeram para esta execução. Execução recém-calculada traz `assumptions`; execução reaberta do banco
+  // é reconhecida pelos custos gravados em cada mês (só existem na metodologia atual).
+  const savedCosts = (result.monthlyReturns ?? []).filter(m => typeof m.tradingCosts === 'number');
+  const method: SimulationMethod = result.assumptions || savedCosts.length > 0 ? 'current' : 'legacy';
+  const assumptions = result.assumptions ?? (method === 'current'
+    ? {
+        dividends: 'reinvested' as const,
+        jcpNetOfTax: true,
+        tradingCostRate: TRADING_COST_RATE,
+        totalTradingCosts: savedCosts.reduce((total, m) => total + (m.tradingCosts ?? 0), 0),
+      }
+    : null);
+  const chartAssumption =
+    'CDI e Ibovespa no gráfico recebem os mesmos aportes, aplicados no fechamento usado na compra de cada mês. O Ibovespa é índice de preço, sem proventos.';
+  const assumptionItems = assumptions
+    ? [
+        'Preços de fechamento ajustados só por desdobramentos e grupamentos, sem desconto de proventos.',
+        `Proventos reais (dividendos e JCP) creditados pela data-com e ${
+          assumptions.dividends === 'cash' ? 'mantidos em caixa' : 'reinvestidos no mês seguinte'
+        }. JCP líquido de IRRF (15% até 2025, 17,5% a partir de 2026).`,
+        `Custo de ${formatPct(assumptions.tradingCostRate, { digits: 2 })} por compra ou venda (corretagem e emolumentos): ${formatBRL(
+          assumptions.totalTradingCosts
+        )} no período.`,
+        'Retorno anualizado, volatilidade e queda máxima medidos pela cota; Sharpe com o CDI do mesmo período.',
+        chartAssumption,
+        'Impostos sobre ganho de capital e spread não são considerados.',
+      ]
+    : [
+        'Preços de fechamento ajustados por proventos.',
+        'Proventos estimados pelo dividend yield médio informado e creditados em março, agosto e outubro, além do ajuste do preço.',
+        'Sem custos de operação.',
+        'Sharpe com taxa livre de risco fixa de 10% ao ano.',
+        chartAssumption,
+        'Impostos sobre ganho de capital e spread não são considerados.',
+      ];
+
   const volatilityReading =
     result.volatility < 0.15 ? 'Volatilidade baixa: oscilações contidas.' :
     result.volatility < 0.25 ? 'Volatilidade moderada.' :
@@ -755,10 +824,12 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       'Recuperações muito lentas após as quedas.'
     : null;
 
-  const sharpeReading = result.sharpeRatio
+  const riskFreeName = method === 'legacy' ? 'da taxa de 10% ao ano' : 'do CDI';
+  const sharpeReading = typeof result.sharpeRatio === 'number'
     ? result.sharpeRatio > 1 ? 'Sharpe acima de 1: retorno alto para o risco assumido.' :
       result.sharpeRatio > 0.5 ? 'Sharpe entre 0,5 e 1: retorno adequado para o risco.' :
-      'Sharpe abaixo de 0,5: retorno baixo para o risco assumido.'
+      result.sharpeRatio > 0 ? `Sharpe entre 0 e 0,5: pouco retorno acima ${riskFreeName} para o risco assumido.` :
+      `Sharpe negativo: a carteira rendeu menos que ${method === 'legacy' ? 'a taxa de 10% ao ano' : 'o CDI'} no período.`
     : null;
 
   const readings = [
@@ -825,7 +896,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
           label={<KpiLabel>Retorno anualizado</KpiLabel>}
           value={formatDeltaPct(result.annualizedReturn)}
           tone={toneOf(result.annualizedReturn)}
-          hint="Retorno composto equivalente por ano no período simulado."
+          hint="Retorno composto por ano medido pela cota, sem o efeito dos aportes."
         />
         <Stat
           className="bg-card p-3 sm:p-4"
@@ -837,8 +908,9 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
         <Stat
           className="bg-card p-3 sm:p-4"
           label={<KpiLabel>Índice de Sharpe</KpiLabel>}
-          value={result.sharpeRatio ? formatNumber(result.sharpeRatio, { digits: 2 }) : EMPTY_VALUE}
-          hint="Retorno acima da taxa livre de risco dividido pela volatilidade."
+          value={sharpeValue}
+          caption={method === 'legacy' ? 'taxa fixa de 10%' : 'com CDI'}
+          hint="(Retorno anualizado − CDI do mesmo período) ÷ volatilidade anualizada. Perto de zero: rendeu o mesmo que o CDI para o risco assumido."
         />
         <Stat
           className="bg-card p-3 sm:p-4"
@@ -856,7 +928,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
           title="Evolução do patrimônio"
           description="Carteira comparada ao mesmo valor aplicado no CDI e no Ibovespa, com os mesmos aportes."
           actions={
-            benchmarkData && !loadingBenchmarks && (hasCDI || hasIBOV) ? (
+            benchmarksReady && (hasCDI || hasIBOV) ? (
               <Button variant="outline" size="sm" onClick={() => setShowBenchmarks(!showBenchmarks)} aria-pressed={showBenchmarks}>
                 {showBenchmarks ? 'Ocultar CDI e Ibovespa' : 'Mostrar CDI e Ibovespa'}
               </Button>
@@ -864,7 +936,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
           }
         />
 
-        {loadingBenchmarks ? (
+        {benchmarksLoading ? (
           <Skeleton className="h-72 w-full sm:h-80" />
         ) : chartData.length > 0 ? (
           <>
@@ -958,6 +1030,23 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
         )}
       </section>
 
+      <section aria-labelledby="backtest-assumptions-title" className={cn(PANEL, 'space-y-3')}>
+        <h3 id="backtest-assumptions-title" className="text-sm font-medium text-foreground">
+          Premissas da simulação
+        </h3>
+        <ul className="list-disc space-y-1.5 pl-4 text-sm text-muted-foreground marker:text-border">
+          {assumptionItems.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+        {method === 'legacy' && (
+          <p className="text-xs leading-5 text-muted-foreground">
+            Esta execução foi salva com a metodologia anterior, que pode contar proventos em dobro. Rode a simulação de
+            novo para ver o resultado com os proventos reais e os custos de operação.
+          </p>
+        )}
+      </section>
+
       {/* Detalhes */}
       <Tabs defaultValue="overview" className="gap-4">
         <TabsList variant="underline">
@@ -976,9 +1065,11 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
                 { label: 'Capital próprio investido', value: formatBRL(result.totalInvested) },
                 result.finalCashReserve !== undefined && { label: 'Saldo em caixa', value: formatBRL(result.finalCashReserve || 0) },
                 totalDividends > 0 && {
-                  label: 'Proventos recebidos e reinvestidos',
+                  label: assumptions?.dividends === 'cash' ? 'Proventos recebidos' : 'Proventos recebidos e reinvestidos',
                   value: formatBRL(totalDividends),
-                  hint: 'Reinvestidos automaticamente; já estão incluídos no valor final e no ganho total.',
+                  hint: method === 'legacy'
+                    ? 'Estimados pelo dividend yield médio (metodologia anterior); já estão incluídos no valor final.'
+                    : 'Proventos reais pela data-com (JCP líquido de IRRF); já estão incluídos no valor final e no ganho total.',
                 },
                 totalDividends > 0 && result.totalInvested > 0 && {
                   label: 'Proventos sobre o investido',
@@ -1066,7 +1157,7 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
               rows={[
                 { label: 'Volatilidade anualizada', value: formatPct(result.volatility) },
                 { label: 'Drawdown máximo', value: formatPct(-result.maxDrawdown) },
-                { label: 'Índice de Sharpe', value: result.sharpeRatio ? formatNumber(result.sharpeRatio, { digits: 2 }) : EMPTY_VALUE },
+                { label: method === 'legacy' ? 'Índice de Sharpe (10% a.a.)' : 'Índice de Sharpe (CDI)', value: sharpeValue },
                 { label: 'Desvio padrão mensal', value: formatPct(result.volatility / Math.sqrt(12)) },
               ]}
             />

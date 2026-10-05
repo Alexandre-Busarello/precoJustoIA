@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { InfoHint } from "@/components/ui/info-hint";
-import { formatBRL, formatBRLCompact, formatDeltaPct, formatNumber, formatPct } from "@/lib/format";
+import { EMPTY_VALUE, formatBRL, formatBRLCompact, formatDeltaPct, formatNumber, formatPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { portfolioCache } from "@/lib/portfolio-cache";
 import {
@@ -53,12 +53,33 @@ interface AnalyticsData {
     return: number;
     returnAmount: number;
   }>;
+  /** Retorno acumulado por cota (carteira) e dos benchmarks, em pontos percentuais; `null` sem dados. */
   benchmarkComparison: Array<{
     date: string;
     portfolio: number;
-    cdi: number;
-    ibovespa: number;
+    cdi: number | null;
+    ibovespa: number | null;
+    ipca: number | null;
+    ipcaPlus6: number | null;
   }>;
+  /** Métricas de rentabilidade em frações (0,12 = 12%). */
+  performance: {
+    startDate: string;
+    endDate: string;
+    days: number;
+    twr: number;
+    twrAnnualized: number | null;
+    xirr: number | null;
+    capitalReturn: number;
+    volatility: number | null;
+    sharpe: number | null;
+    benchmarks: {
+      cdi: number | null;
+      ibovespa: number | null;
+      ipca: number | null;
+      ipcaPlus6: number | null;
+    };
+  };
   monthlyReturns: Array<{
     date: string;
     return: number;
@@ -137,7 +158,7 @@ function tooltipLabel(date: string, points: Array<{ date: string }>): string {
 const CHART_MARGIN = { top: 8, right: 8, bottom: 0, left: 0 };
 const GRID = <CartesianGrid stroke="var(--border)" vertical={false} />;
 
-function ChartFrame({ children, legend }: { children: ReactElement; legend?: ChartSeries[] }) {
+function ChartFrame({ children, legend }: { children: ReactElement; legend?: ReactNode }) {
   return (
     <figure className="space-y-3">
       <div className="h-64 w-full sm:h-80">
@@ -145,7 +166,7 @@ function ChartFrame({ children, legend }: { children: ReactElement; legend?: Cha
           {children}
         </ResponsiveContainer>
       </div>
-      {legend && <ChartLegend series={legend} />}
+      {legend}
     </figure>
   );
 }
@@ -155,11 +176,39 @@ const EVOLUTION_SERIES: ChartSeries[] = [
   { key: "invested", label: "Investido", color: "var(--chart-2)", dashed: true },
 ];
 
-const BENCHMARK_SERIES: ChartSeries[] = [
-  { key: "portfolio", label: "Carteira", color: "var(--chart-1)" },
-  { key: "cdi", label: "CDI", color: "var(--chart-2)", dashed: true },
-  { key: "ibovespa", label: "Ibovespa", color: "var(--chart-3)", dashed: true },
+/** Carteira em chart-1; benchmarks em chart-2 com tracejados distintos. */
+const BENCHMARK_SERIES: Array<ChartSeries & { dash?: string }> = [
+  { key: "portfolio", label: "Carteira (cota)", color: "var(--chart-1)" },
+  { key: "cdi", label: "CDI", color: "var(--chart-2)", dashed: true, dash: "6 3" },
+  { key: "ibovespa", label: "Ibovespa", color: "var(--chart-2)", dashed: true, dash: "2 3" },
+  { key: "ipca", label: "IPCA", color: "var(--chart-2)", dashed: true, dash: "10 3 2 3" },
 ];
+
+/** Legenda com o tracejado real de cada série (CDI, Ibovespa e IPCA usam a mesma cor). */
+function BenchmarkLegend({ series }: { series: Array<ChartSeries & { dash?: string }> }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      {series.map((item) => (
+        <span key={item.key} className="inline-flex items-center gap-1.5">
+          <svg width="24" height="4" aria-hidden="true">
+            <line x1="0" y1="2" x2="24" y2="2" stroke={item.color} strokeWidth="2" strokeDasharray={item.dash} />
+          </svg>
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Rótulo de KPI que quebra linha em vez de truncar (grade de 2 colunas a 320 px). */
+function KpiLabel({ children }: { children: ReactNode }) {
+  return <span className="whitespace-normal">{children}</span>;
+}
+
+/** Fração com sinal ou "—". */
+function formatOptionalDelta(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? formatDeltaPct(value) : EMPTY_VALUE;
+}
 
 const DRAWDOWN_SERIES: ChartSeries[] = [{ key: "drawdown", label: "Queda desde o pico", color: "var(--negative)" }];
 const MONTHLY_SERIES: ChartSeries[] = [{ key: "return", label: "Retorno", color: "var(--chart-1)" }];
@@ -248,34 +297,74 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
     );
   }
 
-  const { summary } = analytics;
+  const { summary, performance } = analytics;
   const averageMonthly = summary.averageMonthlyReturn;
+  const { benchmarks } = performance;
+  const shortPeriod = performance.days < 365;
+  const versus = (benchmark: number | null) => (benchmark === null ? null : (performance.twr - benchmark) * 100);
+  const versusIpcaPlus = versus(benchmarks.ipcaPlus6);
+  // Com menos de um ano, a TIR aparece acumulada no período (como a TWR), sem anualizar
+  const xirrShown =
+    performance.xirr === null ? null : shortPeriod ? (1 + performance.xirr) ** (Math.max(performance.days, 0) / 365) - 1 : performance.xirr;
 
   return (
     <div className="space-y-8">
-      <section aria-label="Resumo do desempenho" className="rounded-lg border border-border bg-card p-4 sm:p-5">
+      <section aria-label="Resumo do desempenho" className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
         <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4">
           <Stat
-            label="Retorno total"
+            label={<KpiLabel>Rentabilidade (TWR)</KpiLabel>}
+            value={formatDeltaPct(performance.twr)}
+            tone={toneOf(performance.twr * 100)}
+            caption={performance.twrAnnualized !== null ? `${formatDeltaPct(performance.twrAnnualized)} ao ano` : "Por cota, no período"}
+            hint="Rentabilidade por cota: mede só o desempenho dos ativos, sem o efeito de quando você aportou ou resgatou. É o padrão dos fundos."
+          />
+          <Stat
+            label={<KpiLabel>TIR (XIRR)</KpiLabel>}
+            value={formatOptionalDelta(xirrShown)}
+            tone={xirrShown !== null ? toneOf(xirrShown * 100) : "default"}
+            caption={shortPeriod ? "No período" : "Ao ano"}
+            hint={`Taxa interna de retorno dos seus aportes e resgates, nas datas em que aconteceram. Considera o momento de cada aporte.${
+              shortPeriod ? " Com menos de um ano de histórico, mostramos a taxa acumulada no período, sem anualizar." : ""
+            }`}
+          />
+          <Stat
+            label={<KpiLabel>Índice de Sharpe</KpiLabel>}
+            value={performance.sharpe !== null ? formatNumber(performance.sharpe, { digits: 2 }) : EMPTY_VALUE}
+            caption="Sobre o CDI"
+            hint="(Rentabilidade anualizada − CDI do mesmo período) ÷ volatilidade anualizada. Perto de zero: rendeu o mesmo que o CDI para o risco assumido."
+          />
+          <Stat
+            label={<KpiLabel>Volatilidade</KpiLabel>}
+            value={performance.volatility !== null ? formatPct(performance.volatility) : EMPTY_VALUE}
+            caption="Anualizada"
+            hint="Desvio padrão dos retornos mensais por cota, anualizado."
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-5 border-t border-border pt-4 lg:grid-cols-4">
+          <Stat
+            label={<KpiLabel>Retorno sobre o capital investido</KpiLabel>}
             value={formatDeltaPct(pp(summary.totalReturn))}
             tone={toneOf(summary.totalReturn)}
+            hint="(Patrimônio atual + resgates − aportes) ÷ aportes. Depende de quando e quanto você aportou; para comparar com índices, use a rentabilidade por cota."
           />
           <Stat
-            label="Diferença vs CDI"
-            value={formatPoints(summary.outperformanceCDI)}
-            tone={toneOf(summary.outperformanceCDI)}
-            caption={`CDI ${formatPct(pp(summary.cdiReturn))}`}
+            label={<KpiLabel>Diferença vs CDI</KpiLabel>}
+            value={benchmarks.cdi !== null ? formatPoints(summary.outperformanceCDI) : EMPTY_VALUE}
+            tone={benchmarks.cdi !== null ? toneOf(summary.outperformanceCDI) : "default"}
+            caption={`CDI ${formatOptionalDelta(benchmarks.cdi)}`}
           />
           <Stat
-            label="Diferença vs Ibovespa"
-            value={formatPoints(summary.outperformanceIbovespa)}
-            tone={toneOf(summary.outperformanceIbovespa)}
-            caption={`Ibovespa ${formatDeltaPct(pp(summary.ibovespaReturn))}`}
+            label={<KpiLabel>Diferença vs Ibovespa</KpiLabel>}
+            value={benchmarks.ibovespa !== null ? formatPoints(summary.outperformanceIbovespa) : EMPTY_VALUE}
+            tone={benchmarks.ibovespa !== null ? toneOf(summary.outperformanceIbovespa) : "default"}
+            caption={`Ibovespa ${formatOptionalDelta(benchmarks.ibovespa)}`}
           />
           <Stat
-            label="Volatilidade"
-            value={formatPct(pp(summary.volatility))}
-            caption="Desvio padrão mensal"
+            label={<KpiLabel>Diferença vs IPCA + 6%</KpiLabel>}
+            value={versusIpcaPlus !== null ? formatPoints(versusIpcaPlus) : EMPTY_VALUE}
+            tone={versusIpcaPlus !== null ? toneOf(versusIpcaPlus) : "default"}
+            caption={`IPCA + 6% ${formatOptionalDelta(benchmarks.ipcaPlus6)}`}
+            hint={`IPCA do período: ${formatOptionalDelta(benchmarks.ipca)}. IPCA + 6% ao ano é a referência de um título atrelado à inflação. O IPCA entra mês a mês, quando o IBGE divulga o índice, então o último mês pode ainda não estar incluído.`}
           />
         </div>
       </section>
@@ -290,7 +379,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
 
         <TabsContent value="evolution" className="space-y-4">
           <SectionHeader title="Evolução do patrimônio" description="Valor total da carteira e capital investido." as="h3" />
-          <ChartFrame legend={EVOLUTION_SERIES}>
+          <ChartFrame legend={<ChartLegend series={EVOLUTION_SERIES} />}>
             <AreaChart data={analytics.evolution} margin={CHART_MARGIN}>
               {GRID}
               <XAxis dataKey="date" tickFormatter={formatMonthTick} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
@@ -338,11 +427,11 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
 
         <TabsContent value="benchmark" className="space-y-4">
           <SectionHeader
-            title="Comparação com CDI e Ibovespa"
-            description="Retorno acumulado no mesmo período."
+            title="Comparação com CDI, Ibovespa e IPCA"
+            description="Rentabilidade por cota acumulada no mesmo período, sem o efeito dos aportes."
             as="h3"
           />
-          <ChartFrame legend={BENCHMARK_SERIES}>
+          <ChartFrame legend={<BenchmarkLegend series={BENCHMARK_SERIES} />}>
             <LineChart data={analytics.benchmarkComparison} margin={CHART_MARGIN}>
               {GRID}
               <XAxis dataKey="date" tickFormatter={formatMonthTick} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
@@ -373,9 +462,10 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
                   type="monotone"
                   dataKey={series.key}
                   stroke={series.color}
-                  strokeWidth={series.dashed ? 1.5 : 2}
-                  strokeDasharray={series.dashed ? "4 3" : undefined}
+                  strokeWidth={series.dash ? 1.5 : 2}
+                  strokeDasharray={series.dash}
                   dot={false}
+                  connectNulls
                   isAnimationActive={false}
                 />
               ))}
@@ -409,7 +499,7 @@ export function PortfolioAnalytics({ portfolioId }: PortfolioAnalyticsProps) {
             description="Períodos em que a carteira ficou abaixo do pico anterior."
             as="h3"
           />
-          <ChartFrame legend={DRAWDOWN_SERIES}>
+          <ChartFrame legend={<ChartLegend series={DRAWDOWN_SERIES} />}>
             <AreaChart data={analytics.drawdownHistory} margin={CHART_MARGIN}>
               {GRID}
               <XAxis dataKey="date" tickFormatter={formatMonthTick} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />

@@ -1,18 +1,39 @@
 /**
  * PORTFOLIO ANALYTICS SERVICE
- * 
+ *
  * Calcula dados analíticos avançados para carteiras:
  * - Evolução mensal do valor da carteira
- * - Comparação com benchmarks (CDI, Ibovespa)
- * - Métricas de performance ao longo do tempo
- * - Análise de retorno vs risco
+ * - Rentabilidade por cota (TWR), TIR (XIRR) e retorno sobre o capital investido
+ * - Comparação com benchmarks (CDI, Ibovespa, IPCA, IPCA + 6%)
+ * - Volatilidade, Sharpe com CDI e quedas desde o pico
  */
 
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { HistoricalDataService } from './historical-data-service';
 import { getLatestPrices as getQuotes, pricesToNumberMap } from './quote-service';
-import { fetchBenchmarkData, alignBenchmarkDates, type BenchmarkData } from './benchmark-service';
+import {
+  annualizeReturn,
+  annualizedVolatility,
+  cdiLevel,
+  computeTwr,
+  daysBetween,
+  fetchBenchmarkData,
+  ipcaLevel,
+  priceLevel,
+  returnBetween,
+  sharpeRatio,
+  toIsoDate,
+  xirr,
+  type BenchmarkLevel,
+  type ValuationPoint,
+  type XirrFlow,
+} from './benchmark-service';
+
+/** Juro real do benchmark IPCA + 6% a.a. (referência de NTN-B longa). */
+export const IPCA_PLUS_REAL_RATE = 0.06;
+/** Período mínimo, em dias, para um retorno contar como mês nas estatísticas mensais. */
+const MIN_FULL_PERIOD_DAYS = 25;
 
 /**
  * Ponto de evolução da carteira
@@ -23,18 +44,73 @@ export interface EvolutionPoint {
   invested: number; // Capital líquido investido (aportes - saques) para exibição no gráfico
   totalInvested: number; // Total bruto investido (aportes totais) para cálculos de benchmarks
   cashBalance: number; // Saldo em caixa
-  return: number; // Retorno total (%)
+  return: number; // Retorno sobre o capital investido (%)
   returnAmount: number; // Retorno em reais
 }
 
+type BenchmarkKey = 'cdi' | 'ibovespa' | 'ipca' | 'ipcaPlus6';
+
 /**
- * Benchmark comparison data
+ * Retorno acumulado desde o início do período, em pontos percentuais (12,3 = 12,3%).
+ * A carteira é medida por cota (TWR); `null` quando o benchmark não tem dados.
  */
 export interface BenchmarkComparison {
   date: string;
-  portfolio: number; // Retorno acumulado da carteira (%)
-  cdi: number; // Retorno acumulado do CDI (%)
-  ibovespa: number; // Retorno acumulado do Ibovespa (%)
+  portfolio: number;
+  cdi: number | null;
+  ibovespa: number | null;
+  ipca: number | null;
+  ipcaPlus6: number | null;
+}
+
+/** Métricas de rentabilidade do período, em frações (0,12 = 12%). */
+export interface PerformanceSummary {
+  startDate: string;
+  endDate: string;
+  days: number;
+  /** Rentabilidade por cota (TWR) acumulada. */
+  twr: number;
+  /** TWR anualizado; `null` com menos de um ano. */
+  twrAnnualized: number | null;
+  /** TIR anual dos aportes e resgates (XIRR). */
+  xirr: number | null;
+  /** Retorno sobre o capital investido: (patrimônio + resgates − aportes) / aportes. */
+  capitalReturn: number;
+  /** Volatilidade anualizada dos retornos mensais por cota. */
+  volatility: number | null;
+  /** Sharpe com o CDI do mesmo período. */
+  sharpe: number | null;
+  /** `false` quando o CDI não pôde ser obtido (o Sharpe fica `null` por falta de dado, não por falta de histórico). */
+  riskFreeAvailable: boolean;
+  /** Retorno acumulado de cada benchmark no período; `null` sem dados. */
+  benchmarks: Record<BenchmarkKey, number | null>;
+}
+
+export interface PerformanceResult {
+  benchmarkComparison: BenchmarkComparison[];
+  /** Retorno por cota de cada mês, em pontos percentuais, rotulado no início do mês. */
+  monthlyReturns: Array<{ date: string; return: number }>;
+  summary: PerformanceSummary;
+}
+
+function emptyPerformance(): PerformanceResult {
+  return {
+    benchmarkComparison: [],
+    monthlyReturns: [],
+    summary: {
+      startDate: '',
+      endDate: '',
+      days: 0,
+      twr: 0,
+      twrAnnualized: null,
+      xirr: null,
+      capitalReturn: 0,
+      volatility: null,
+      sharpe: null,
+      riskFreeAvailable: true,
+      benchmarks: { cdi: null, ibovespa: null, ipca: null, ipcaPlus6: null },
+    },
+  };
 }
 
 /**
@@ -65,18 +141,22 @@ export interface DrawdownPeriod {
 export interface PortfolioAnalytics {
   evolution: EvolutionPoint[];
   benchmarkComparison: BenchmarkComparison[];
+  /** Retorno por cota de cada mês (pontos percentuais). */
   monthlyReturns: {
     date: string;
     return: number;
   }[];
   drawdownHistory: DrawdownPoint[];
   drawdownPeriods: DrawdownPeriod[];
+  /** TWR, XIRR, Sharpe com CDI e benchmarks do período (frações). */
+  performance: PerformanceSummary;
+  /** Valores em pontos percentuais (12,3 = 12,3%). */
   summary: {
-    totalReturn: number;
-    cdiReturn: number;
-    ibovespaReturn: number;
-    outperformanceCDI: number;
-    outperformanceIbovespa: number;
+    totalReturn: number; // Retorno sobre o capital investido (%)
+    cdiReturn: number; // CDI acumulado no período (%)
+    ibovespaReturn: number; // Ibovespa acumulado no período (%)
+    outperformanceCDI: number; // TWR − CDI (p.p.)
+    outperformanceIbovespa: number; // TWR − Ibovespa (p.p.)
     bestMonth: {
       date: string;
       return: number;
@@ -86,7 +166,7 @@ export interface PortfolioAnalytics {
       return: number;
     };
     averageMonthlyReturn: number;
-    volatility: number;
+    volatility: number; // Desvio padrão mensal dos retornos por cota (%)
     currentDrawdown: number; // Drawdown atual (%)
     maxDrawdownDepth: number; // Maior drawdown histórico (%)
     averageRecoveryTime: number; // Tempo médio de recuperação (meses)
@@ -144,30 +224,18 @@ export class PortfolioAnalyticsService {
       return this.getEmptyAnalytics();
     }
 
-    // Calculate evolution
     const evolution = await this.calculateEvolution(portfolioId, transactions, portfolio.assets);
-    
-    // Calculate benchmark comparison
-    const benchmarkComparison = await this.calculateBenchmarkComparison(
-      evolution,
-      portfolio.startDate
-    );
-
-    // Calculate monthly returns
-    const monthlyReturns = this.calculateMonthlyReturns(evolution);
-
-    // Calculate drawdown history and periods
+    const performance = await this.calculatePerformance(evolution, transactions);
     const { drawdownHistory, drawdownPeriods } = this.calculateDrawdown(evolution);
-
-    // Calculate summary statistics
-    const summary = this.calculateSummary(evolution, benchmarkComparison, monthlyReturns, drawdownHistory, drawdownPeriods);
+    const summary = this.calculateSummary(evolution, performance, drawdownHistory, drawdownPeriods);
 
     return {
       evolution,
-      benchmarkComparison,
-      monthlyReturns,
+      benchmarkComparison: performance.benchmarkComparison,
+      monthlyReturns: performance.monthlyReturns,
       drawdownHistory,
       drawdownPeriods,
+      performance: performance.summary,
       summary
     };
   }
@@ -598,334 +666,105 @@ export class PortfolioAnalyticsService {
   }
 
   /**
-   * Calcula comparação com benchmarks (CDI e Ibovespa)
-   * Usa dados reais de benchmarks do backend via benchmark-service
+   * Rentabilidade por cota (TWR), TIR (XIRR), volatilidade, Sharpe com CDI e comparação com CDI, Ibovespa, IPCA e
+   * IPCA + 6%, todos no mesmo período da evolução.
+   *
+   * Os fluxos externos de cada ponto são a variação do capital líquido investido (aportes − resgates); proventos ficam
+   * dentro da carteira e contam como retorno. Aportes entre dois pontos mensais entram no ponto seguinte.
+   * A cota começa no primeiro ponto com capital investido.
+   * Método público para ser reutilizado por PortfolioMetricsService.
    */
-  private static async calculateBenchmarkComparison(
-    evolution: EvolutionPoint[],
-    startDate: Date
-  ): Promise<BenchmarkComparison[]> {
-    if (evolution.length === 0) return [];
+  public static async calculatePerformance(
+    fullEvolution: EvolutionPoint[],
+    transactions: Array<{ date: Date | string; type: string; amount: unknown }>
+  ): Promise<PerformanceResult> {
+    // A cota começa no primeiro ponto com capital investido (proventos lançados antes do 1º aporte não têm base)
+    const firstInvested = fullEvolution.findIndex(point => point.invested > 0);
+    if (firstInvested === -1) return emptyPerformance();
+    const evolution = fullEvolution.slice(firstInvested);
 
-    const comparison: BenchmarkComparison[] = [];
+    const points: ValuationPoint[] = evolution.map((point, index) => ({
+      date: point.date,
+      value: point.value,
+      flow: point.invested - (index > 0 ? evolution[index - 1].invested : 0),
+    }));
+    const twr = computeTwr(points);
+    const startDate = evolution[0].date;
+    const endDate = evolution[evolution.length - 1].date;
+    const days = daysBetween(startDate, endDate);
 
-    try {
-      // Obter datas do período da evolução
-      const sortedEvolution = [...evolution].sort((a, b) => 
-        new Date(a.date).getTime() - new Date(b.date).getTime()
-      );
-      
-      const firstDate = new Date(sortedEvolution[0].date);
-      const lastDate = new Date(sortedEvolution[sortedEvolution.length - 1].date);
-      
-      console.log(`📊 [BENCHMARK] Buscando dados reais de benchmarks de ${firstDate.toISOString().split('T')[0]} até ${lastDate.toISOString().split('T')[0]}`);
-      
-      // Buscar dados reais de benchmarks
-      const benchmarkData: BenchmarkData = await fetchBenchmarkData(firstDate, lastDate);
-      
-      // Extrair datas da evolução para alinhamento
-      const evolutionDates = sortedEvolution.map(e => e.date);
-      
-      // Alinhar dados de benchmarks com as datas da evolução
-      const alignedCDI = alignBenchmarkDates(benchmarkData.cdi, evolutionDates);
-      const alignedIBOV = alignBenchmarkDates(benchmarkData.ibov, evolutionDates);
-      
-      console.log(`📊 [BENCHMARK] CDI: ${alignedCDI.length} pontos alinhados, IBOV: ${alignedIBOV.length} pontos alinhados`);
-      
-      // Calcular aportes mensais médios baseado na evolução
-      // O primeiro ponto tem o investimento inicial, depois calculamos diferenças
-      // 🔧 IMPORTANTE: Usar totalInvested (bruto) para benchmarks, não invested (líquido)
-      let previousTotalInvested = sortedEvolution[0].totalInvested || 0;
-      const monthlyContributions: number[] = [0]; // Primeiro mês não tem aporte adicional
-      
-      for (let i = 1; i < sortedEvolution.length; i++) {
-        const currentTotalInvested = sortedEvolution[i].totalInvested || 0;
-        const contribution = Math.max(0, currentTotalInvested - previousTotalInvested);
-        monthlyContributions.push(contribution);
-        previousTotalInvested = currentTotalInvested;
-      }
-      
-      // Simular investimento no CDI com aportes mensais
-      const simulateCDIInvestment = (cdiData: Array<{ date: string; value: number }>) => {
-        if (cdiData.length === 0 || sortedEvolution.length === 0) return [];
-        
-        // O Banco Central retorna o CDI como taxa diária (%)
-        // Valores típicos: 0.03% a 0.06% ao dia
-        // Agrupar dados por mês e calcular taxa mensal para cada mês
-        // Criar um mapa de mês -> taxa mensal
-        const monthlyRateMap = new Map<string, number>();
-        
-        // Calcular taxa média diária geral como fallback
-        const avgDailyRateFallback = cdiData.length > 0
-          ? cdiData.reduce((sum, item) => sum + item.value, 0) / cdiData.length
-          : 0;
-        const monthlyRateFallback = avgDailyRateFallback > 0
-          ? Math.pow(1 + (avgDailyRateFallback / 100), 21) - 1
-          : 0;
-        
-        // Agrupar dados CDI por mês
-        const cdiByMonth = new Map<string, number[]>();
-        for (const item of cdiData) {
-          const monthKey = item.date.substring(0, 7); // YYYY-MM
-          if (!cdiByMonth.has(monthKey)) {
-            cdiByMonth.set(monthKey, []);
-          }
-          cdiByMonth.get(monthKey)!.push(item.value);
-        }
-        
-        // Calcular taxa mensal para cada mês
-        for (const [monthKey, values] of cdiByMonth) {
-          const avgDailyRate = values.reduce((sum, v) => sum + v, 0) / values.length;
-          const monthlyRate = avgDailyRate > 0
-            ? Math.pow(1 + (avgDailyRate / 100), 21) - 1
-            : 0;
-          monthlyRateMap.set(monthKey, monthlyRate);
-        }
-        
-        if (monthlyRateMap.size > 0) {
-          const avgMonthlyRate = Array.from(monthlyRateMap.values()).reduce((sum, r) => sum + r, 0) / monthlyRateMap.size;
-          console.log(`📊 [BENCHMARK CDI] Taxa mensal média: ${(avgMonthlyRate * 100).toFixed(3)}% a.m.`);
-        }
-        
-        // Simular investimento com aportes mensais
-        // 🔧 IMPORTANTE: Usar totalInvested (bruto) para simulação de benchmarks
-        let accumulatedValue = sortedEvolution[0].totalInvested || 0;
-        const results: number[] = [accumulatedValue];
-        
-        for (let i = 1; i < sortedEvolution.length; i++) {
-          // Buscar taxa mensal do período entre o ponto anterior e o atual
-          // Usar o mês do ponto atual (que representa o final do período)
-          const evolutionDate = sortedEvolution[i].date;
-          const monthKey = evolutionDate.substring(0, 7); // YYYY-MM
-          
-          // Tentar usar taxa do mês atual, se não houver, usar do mês anterior ou fallback
-          let monthlyRate = monthlyRateMap.get(monthKey);
-          
-          // Se não encontrou, tentar mês anterior
-          if (monthlyRate === undefined && i > 0) {
-            const prevDate = sortedEvolution[i - 1].date;
-            const prevMonthKey = prevDate.substring(0, 7);
-            monthlyRate = monthlyRateMap.get(prevMonthKey);
-          }
-          
-          // Se ainda não encontrou, usar fallback
-          if (monthlyRate === undefined) {
-            monthlyRate = monthlyRateFallback;
-          }
-          
-          // Aplicar rendimento CDI mensal sobre saldo atual
-          accumulatedValue = accumulatedValue * (1 + monthlyRate);
-          
-          // Adicionar novo aporte após rendimento
-          accumulatedValue += monthlyContributions[i] || 0;
-          
-          results.push(accumulatedValue);
-        }
-        
-        return results;
-      };
-      
-      // Simular investimento no IBOV com aportes mensais
-      const simulateIBOVInvestment = (ibovData: Array<{ date: string; value: number }>) => {
-        if (ibovData.length === 0 || sortedEvolution.length === 0) return [];
-        
-        // IBOV é índice de preço, calculamos variação percentual mês a mês
-        // 🔧 IMPORTANTE: Usar totalInvested (bruto) para simulação de benchmarks
-        let accumulatedValue = sortedEvolution[0].totalInvested || 0;
-        const results: number[] = [accumulatedValue];
-        
-        for (let i = 1; i < sortedEvolution.length; i++) {
-          // Buscar valores IBOV do mês atual e anterior usando as datas
-          const currentDate = sortedEvolution[i].date;
-          const previousDate = sortedEvolution[i - 1].date;
-          
-          const currentIbov = ibovData.find(item => item.date === currentDate);
-          const previousIbov = ibovData.find(item => item.date === previousDate);
-          
-          // Calcular retorno mensal do IBOV
-          let monthReturn = 0;
-          if (currentIbov && previousIbov && previousIbov.value > 0) {
-            monthReturn = (currentIbov.value - previousIbov.value) / previousIbov.value;
-          }
-          
-          // Aplicar retorno sobre saldo atual
-          accumulatedValue = accumulatedValue * (1 + monthReturn);
-          
-          // Adicionar novo aporte
-          accumulatedValue += monthlyContributions[i] || 0;
-          
-          results.push(accumulatedValue);
-        }
-        
-        return results;
-      };
-      
-      const cdiValues = simulateCDIInvestment(alignedCDI);
-      const ibovValues = simulateIBOVInvestment(alignedIBOV);
-      
-      // Calcular retornos acumulados em percentual para cada ponto
-      for (let i = 0; i < sortedEvolution.length; i++) {
-        const point = sortedEvolution[i];
-        // 🔧 IMPORTANTE: Usar totalInvested (bruto) para cálculos de benchmarks
-        // Isso garante que benchmarks sejam comparados com o total investido, não com o líquido
-        const totalInvestedBruto = point.totalInvested || 1; // Evitar divisão por zero
-        
-        // Retorno da carteira já está calculado em point.return
-        const portfolioReturn = point.return;
-        
-        // Calcular retorno acumulado do CDI
-        const cdiValue = cdiValues[i] || totalInvestedBruto;
-        const cdiReturn = totalInvestedBruto > 0 
-          ? ((cdiValue - totalInvestedBruto) / totalInvestedBruto) * 100 
-          : 0;
-        
-        // Calcular retorno acumulado do IBOV
-        const ibovValue = ibovValues[i] || totalInvestedBruto;
-        const ibovReturn = totalInvestedBruto > 0 
-          ? ((ibovValue - totalInvestedBruto) / totalInvestedBruto) * 100 
-          : 0;
-        
-        comparison.push({
-          date: point.date,
-          portfolio: portfolioReturn,
-          cdi: cdiReturn,
-          ibovespa: ibovReturn
-        });
-      }
-      
-      console.log(`✅ [BENCHMARK] Comparação calculada para ${comparison.length} pontos`);
-      if (comparison.length > 0) {
-        const last = comparison[comparison.length - 1];
-        console.log(`📊 [BENCHMARK] Último ponto - Carteira: ${last.portfolio.toFixed(2)}%, CDI: ${last.cdi.toFixed(2)}%, IBOV: ${last.ibovespa.toFixed(2)}%`);
-      }
-      
-    } catch (error) {
-      console.error('❌ [BENCHMARK] Erro ao calcular comparação com benchmarks:', error);
-      // Fallback: retornar comparação vazia ou com valores zero
-      // A interface espera retornos em percentual, então retornamos zeros
-      for (const point of evolution) {
-        comparison.push({
-          date: point.date,
-          portfolio: point.return,
-          cdi: 0,
-          ibovespa: 0
-        });
-      }
+    const benchmarkData = await fetchBenchmarkData(new Date(`${startDate}T00:00:00Z`), new Date(`${endDate}T00:00:00Z`), {
+      ipca: true,
+    });
+    const levels: Record<BenchmarkKey, BenchmarkLevel> = {
+      cdi: cdiLevel(benchmarkData.cdi),
+      ibovespa: priceLevel(benchmarkData.ibov),
+      ipca: ipcaLevel(benchmarkData.ipca),
+      ipcaPlus6: ipcaLevel(benchmarkData.ipca, IPCA_PLUS_REAL_RATE),
+    };
+    const cumulative = (key: BenchmarkKey, date: string) => returnBetween(levels[key], startDate, date);
+    const toPoints = (value: number | null) => (value === null ? null : value * 100);
+
+    const benchmarkComparison: BenchmarkComparison[] = twr.quotas.map(({ date, quota }) => ({
+      date,
+      portfolio: (quota - 1) * 100,
+      cdi: toPoints(cumulative('cdi', date)),
+      ibovespa: toPoints(cumulative('ibovespa', date)),
+      ipca: toPoints(cumulative('ipca', date)),
+      ipcaPlus6: toPoints(cumulative('ipcaPlus6', date)),
+    }));
+
+    // Retornos por período rotulados no início do período (o mês medido)
+    const previousDate = new Map(evolution.slice(1).map((point, index) => [point.date, evolution[index].date]));
+    // Só meses completos entram nas estatísticas mensais (o mês em andamento entra apenas na rentabilidade acumulada):
+    // um período de poucos dias tratado como mês distorce melhor/pior mês, volatilidade e a anualização do Sharpe.
+    const periods = twr.periodReturns
+      .map(({ date, return: value }) => ({ from: previousDate.get(date), to: date, value }))
+      .filter((period): period is { from: string; to: string; value: number } => period.from !== undefined)
+      .filter((period) => daysBetween(period.from, period.to) >= MIN_FULL_PERIOD_DAYS);
+    const monthlyReturns = periods.map((period) => ({ date: period.from, return: period.value * 100 }));
+
+    const portfolioReturns = periods.map((period) => period.value);
+    const cdiReturns = periods.map((period) => returnBetween(levels.cdi, period.from, period.to));
+    const sharpe = cdiReturns.every((value): value is number => value !== null)
+      ? sharpeRatio(portfolioReturns, cdiReturns)
+      : null;
+
+    const externalFlows: XirrFlow[] = [];
+    for (const tx of transactions) {
+      const amount = Number(tx.amount);
+      if (!Number.isFinite(amount) || amount === 0) continue;
+      const date = toIsoDate(tx.date instanceof Date ? tx.date : new Date(tx.date));
+      if (tx.type === 'CASH_CREDIT' || tx.type === 'MONTHLY_CONTRIBUTION') externalFlows.push({ date, amount: -amount });
+      else if (tx.type === 'CASH_DEBIT') externalFlows.push({ date, amount });
     }
+    const last = evolution[evolution.length - 1];
+    const lastFlowDate = externalFlows.reduce((max, flow) => (flow.date > max ? flow.date : max), endDate);
+    const internalRate = xirr([...externalFlows, { date: lastFlowDate, amount: last.value }]);
 
-    return comparison;
+    return {
+      benchmarkComparison,
+      monthlyReturns,
+      summary: {
+        startDate,
+        endDate,
+        days,
+        twr: twr.cumulative,
+        twrAnnualized: annualizeReturn(twr.cumulative, days),
+        xirr: internalRate,
+        capitalReturn: last.return / 100,
+        volatility: annualizedVolatility(portfolioReturns),
+        sharpe,
+        riskFreeAvailable: benchmarkData.cdi.length > 0,
+        benchmarks: {
+          cdi: cumulative('cdi', endDate),
+          ibovespa: cumulative('ibovespa', endDate),
+          ipca: cumulative('ipca', endDate),
+          ipcaPlus6: cumulative('ipcaPlus6', endDate),
+        },
+      },
+    };
   }
-
-  /**
-   * Calcula retornos mensais
-   * Cada mês mostra a variação entre pontos consecutivos
-   * Se houver um ponto "hoje" no meio do mês, ele representa o retorno parcial desse mês
-   */
-  private static calculateMonthlyReturns(
-    evolution: EvolutionPoint[]
-  ): { date: string; return: number }[] {
-    const monthlyReturns: { date: string; return: number }[] = [];
-
-    console.log(`📊 [MONTHLY RETURNS] Calculando retornos mensais de ${evolution.length} pontos`);
-    console.log(`📊 [MONTHLY RETURNS] Evolution completo:`, JSON.stringify(evolution.map(e => ({
-      date: e.date,
-      value: e.value.toFixed(2),
-      invested: e.invested.toFixed(2),
-      cashBalance: e.cashBalance.toFixed(2),
-      return: e.return.toFixed(2) + '%',
-      returnAmount: e.returnAmount.toFixed(2)
-    })), null, 2));
-
-    if (evolution.length === 0) return monthlyReturns;
-
-    // Agrupar pontos por mês para saber quais são "início do mês" e quais são "hoje"
-    const pointsByMonth = new Map<string, EvolutionPoint[]>();
-    
-    for (const point of evolution) {
-      const monthKey = point.date.substring(0, 7); // YYYY-MM
-      if (!pointsByMonth.has(monthKey)) {
-        pointsByMonth.set(monthKey, []);
-      }
-      pointsByMonth.get(monthKey)!.push(point);
-    }
-
-    // Para cada mês, calcular retorno
-    for (let i = 0; i < evolution.length; i++) {
-      const currentPoint = evolution[i];
-      const currentMonth = currentPoint.date.substring(0, 7);
-      const nextPoint = evolution[i + 1];
-      
-      // Se há próximo ponto, calcular diferença
-      if (nextPoint) {
-        const nextMonth = nextPoint.date.substring(0, 7);
-        
-        // Se o próximo ponto é do MESMO mês, pular (o próximo ponto vai mostrar o retorno do mês)
-        if (currentMonth === nextMonth) {
-          console.log(`📅 [MONTHLY RETURNS] ${currentPoint.date}: pulando (há ponto mais recente no mesmo mês)`);
-          continue;
-        }
-        
-        // Se o próximo ponto é de outro mês, calcular retorno deste mês
-        if (currentPoint.value > 0) {
-          // Verificar se houve aporte/saque (mudança em invested)
-          const investedChange = nextPoint.invested - currentPoint.invested;
-          
-          let monthReturn;
-          if (investedChange !== 0) {
-            // Houve aporte ou saque - ajustar o cálculo
-            // Valor esperado = valor anterior + aporte/saque
-            const expectedValue = currentPoint.value + investedChange;
-            monthReturn = ((nextPoint.value - expectedValue) / expectedValue) * 100;
-            
-            console.log(`📅 [MONTHLY RETURNS] ${currentMonth}: ${monthReturn.toFixed(2)}% (${currentPoint.value.toFixed(2)} → ${nextPoint.value.toFixed(2)}, com ${investedChange > 0 ? 'aporte' : 'saque'} de R$ ${Math.abs(investedChange).toFixed(2)})`);
-          } else {
-            // Sem aporte/saque - cálculo simples
-            monthReturn = ((nextPoint.value - currentPoint.value) / currentPoint.value) * 100;
-            
-            console.log(`📅 [MONTHLY RETURNS] ${currentMonth}: ${monthReturn.toFixed(2)}% (${currentPoint.value.toFixed(2)} → ${nextPoint.value.toFixed(2)})`);
-          }
-          
-          monthlyReturns.push({
-            date: currentPoint.date,
-            return: monthReturn
-          });
-        }
-      } else {
-        // Último ponto (não há próximo)
-        // Se é o único ponto do mês ou o mais recente do mês, mostrar retorno desde o início
-        const prevPoint = evolution[i - 1];
-        
-        if (prevPoint && prevPoint.value > 0) {
-          // Verificar se houve aporte/saque (mudança em invested)
-          const investedChange = currentPoint.invested - prevPoint.invested;
-          
-          let monthReturn;
-          if (investedChange !== 0) {
-            // Houve aporte ou saque - ajustar o cálculo
-            const expectedValue = prevPoint.value + investedChange;
-            monthReturn = ((currentPoint.value - expectedValue) / expectedValue) * 100;
-            
-            console.log(`📅 [MONTHLY RETURNS] ${currentMonth}: ${monthReturn.toFixed(2)}% (${prevPoint.value.toFixed(2)} → ${currentPoint.value.toFixed(2)}, com ${investedChange > 0 ? 'aporte' : 'saque'} de R$ ${Math.abs(investedChange).toFixed(2)}, parcial até hoje)`);
-          } else {
-            // Sem aporte/saque - cálculo simples
-            monthReturn = ((currentPoint.value - prevPoint.value) / prevPoint.value) * 100;
-            
-            console.log(`📅 [MONTHLY RETURNS] ${currentMonth}: ${monthReturn.toFixed(2)}% (${prevPoint.value.toFixed(2)} → ${currentPoint.value.toFixed(2)}, parcial até hoje)`);
-          }
-          
-          monthlyReturns.push({
-            date: currentPoint.date,
-            return: monthReturn
-          });
-        }
-      }
-    }
-
-    console.log(`✅ [MONTHLY RETURNS] Total de ${monthlyReturns.length} retornos mensais calculados`);
-
-    return monthlyReturns;
-  }
-
 
   /**
    * Calcula histórico de drawdown e períodos
@@ -1021,76 +860,46 @@ export class PortfolioAnalyticsService {
   }
 
   /**
-   * Calcula estatísticas resumidas
+   * Calcula estatísticas resumidas (em pontos percentuais)
    */
   private static calculateSummary(
     evolution: EvolutionPoint[],
-    benchmarkComparison: BenchmarkComparison[],
-    monthlyReturns: { date: string; return: number }[],
+    performance: PerformanceResult,
     drawdownHistory: DrawdownPoint[],
     drawdownPeriods: DrawdownPeriod[]
-  ) {
-    if (evolution.length === 0) {
-      return {
-        totalReturn: 0,
-        cdiReturn: 0,
-        ibovespaReturn: 0,
-        outperformanceCDI: 0,
-        outperformanceIbovespa: 0,
-        bestMonth: { date: '', return: 0 },
-        worstMonth: { date: '', return: 0 },
-        averageMonthlyReturn: 0,
-        volatility: 0,
-        currentDrawdown: 0,
-        maxDrawdownDepth: 0,
-        averageRecoveryTime: 0,
-        drawdownCount: 0
-      };
-    }
+  ): PortfolioAnalytics['summary'] {
+    const monthlyReturns = performance.monthlyReturns;
+    if (evolution.length === 0) return emptySummary();
 
     const lastEvolution = evolution[evolution.length - 1];
-    const lastBenchmark = benchmarkComparison[benchmarkComparison.length - 1];
+    const { twr, benchmarks } = performance.summary;
+    const toPoints = (value: number | null) => (value ?? 0) * 100;
 
-    // Find best and worst months
-    // Se só há 1 mês com dados, mostrar apenas esse (não duplicar)
+    // Melhor e pior mês; com um único mês, só o melhor é exibido
     let bestMonth = monthlyReturns[0] || { date: '', return: 0 };
     let worstMonth = monthlyReturns.length > 1 ? monthlyReturns[0] : { date: '', return: 0 };
-
     for (const month of monthlyReturns) {
       if (month.return > bestMonth.return) bestMonth = month;
       if (monthlyReturns.length > 1 && month.return < worstMonth.return) worstMonth = month;
     }
-    
-    // Se só há um mês, o pior é vazio (evitar duplicação)
-    if (monthlyReturns.length === 1) {
-      worstMonth = { date: '', return: 0 };
-    }
 
-    // Calculate average monthly return
     const avgMonthlyReturn = monthlyReturns.length > 0
       ? monthlyReturns.reduce((sum, m) => sum + m.return, 0) / monthlyReturns.length
       : 0;
 
-    // Calculate volatility MENSAL (standard deviation of monthly returns)
-    // Nota: Esta é a volatilidade MENSAL para análise detalhada
+    // Volatilidade MENSAL (desvio padrão dos retornos mensais por cota)
     let volatility = 0;
     if (monthlyReturns.length > 1) {
-      const variance = monthlyReturns.reduce((sum, m) => {
-        const diff = m.return - avgMonthlyReturn;
-        return sum + diff * diff;
-      }, 0) / monthlyReturns.length;
+      const variance = monthlyReturns.reduce((sum, m) => sum + (m.return - avgMonthlyReturn) ** 2, 0) / (monthlyReturns.length - 1);
       volatility = Math.sqrt(variance);
     }
 
-    // Calculate drawdown metrics
-    const currentDrawdown = drawdownHistory.length > 0 
+    const currentDrawdown = drawdownHistory.length > 0
       ? Math.abs(drawdownHistory[drawdownHistory.length - 1].drawdown)
       : 0;
-    
     const maxDrawdownDepth = drawdownPeriods.length > 0
       ? Math.max(...drawdownPeriods.map(p => p.depth))
       : 0;
-    
     const recoveredPeriods = drawdownPeriods.filter(p => p.recovered);
     const averageRecoveryTime = recoveredPeriods.length > 0
       ? recoveredPeriods.reduce((sum, p) => sum + p.duration, 0) / recoveredPeriods.length
@@ -1098,10 +907,10 @@ export class PortfolioAnalyticsService {
 
     return {
       totalReturn: lastEvolution.return,
-      cdiReturn: lastBenchmark?.cdi || 0,
-      ibovespaReturn: lastBenchmark?.ibovespa || 0,
-      outperformanceCDI: lastEvolution.return - (lastBenchmark?.cdi || 0),
-      outperformanceIbovespa: lastEvolution.return - (lastBenchmark?.ibovespa || 0),
+      cdiReturn: toPoints(benchmarks.cdi),
+      ibovespaReturn: toPoints(benchmarks.ibovespa),
+      outperformanceCDI: (twr - (benchmarks.cdi ?? 0)) * 100,
+      outperformanceIbovespa: (twr - (benchmarks.ibovespa ?? 0)) * 100,
       bestMonth,
       worstMonth,
       averageMonthlyReturn: avgMonthlyReturn,
@@ -1123,22 +932,26 @@ export class PortfolioAnalyticsService {
       monthlyReturns: [],
       drawdownHistory: [],
       drawdownPeriods: [],
-      summary: {
-        totalReturn: 0,
-        cdiReturn: 0,
-        ibovespaReturn: 0,
-        outperformanceCDI: 0,
-        outperformanceIbovespa: 0,
-        bestMonth: { date: '', return: 0 },
-        worstMonth: { date: '', return: 0 },
-        averageMonthlyReturn: 0,
-        volatility: 0,
-        currentDrawdown: 0,
-        maxDrawdownDepth: 0,
-        averageRecoveryTime: 0,
-        drawdownCount: 0
-      }
+      performance: emptyPerformance().summary,
+      summary: emptySummary()
     };
   }
 }
 
+function emptySummary(): PortfolioAnalytics['summary'] {
+  return {
+    totalReturn: 0,
+    cdiReturn: 0,
+    ibovespaReturn: 0,
+    outperformanceCDI: 0,
+    outperformanceIbovespa: 0,
+    bestMonth: { date: '', return: 0 },
+    worstMonth: { date: '', return: 0 },
+    averageMonthlyReturn: 0,
+    volatility: 0,
+    currentDrawdown: 0,
+    maxDrawdownDepth: 0,
+    averageRecoveryTime: 0,
+    drawdownCount: 0
+  };
+}

@@ -194,6 +194,35 @@
   }
 }
 
+/* Faixa de índices (MarketTickerBar): desliza só no desktop, quando não cabe, e respeita "reduzir movimento". */
+@keyframes market-ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.market-ticker__copy {
+  display: none;
+}
+@media (min-width: 48rem) and (prefers-reduced-motion: no-preference) {
+  .market-ticker[data-animate] {
+    overflow: hidden;
+    mask-image: linear-gradient(to right, transparent, #000 2rem, #000 calc(100% - 2rem), transparent);
+  }
+  .market-ticker[data-animate] .market-ticker__copy {
+    display: flex;
+  }
+  .market-ticker[data-animate] .market-ticker__track {
+    animation: market-ticker var(--ticker-duration, 45s) linear infinite;
+  }
+  .market-ticker[data-animate]:hover .market-ticker__track,
+  .market-ticker[data-animate]:focus-within .market-ticker__track {
+    animation-play-state: paused;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

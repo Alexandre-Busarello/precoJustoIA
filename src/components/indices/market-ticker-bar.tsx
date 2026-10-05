@@ -1,11 +1,12 @@
 /**
- * Faixa de índices do mercado (estática, sem animação).
- * Usada em /dashboard e /indices; no mobile rola na horizontal.
+ * Faixa de índices do mercado. Usada em /dashboard e /indices.
+ * No desktop (≥ md) desliza devagar quando os índices não cabem, pausa com o mouse ou o foco e fica parada para quem
+ * pede menos movimento no sistema. No mobile rola com o dedo.
  */
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { formatDeltaPct, formatNumber } from '@/lib/format';
@@ -171,6 +172,25 @@ function IndexItem({ index }: { index: MarketIndex }) {
 export function MarketTickerBar({ className }: MarketTickerBarProps) {
   const [indices, setIndices] = useState<MarketIndex[]>([]);
   const [loading, setLoading] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const copyRef = useRef<HTMLDivElement>(null);
+  /** Largura de uma cópia da lista quando ela não cabe no contêiner (só então a faixa desliza). */
+  const [overflowWidth, setOverflowWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const copy = copyRef.current;
+    if (!container || !copy || loading) return;
+    const measure = () => {
+      const width = copy.scrollWidth;
+      setOverflowWidth(width > container.clientWidth ? width : null);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    observer.observe(copy);
+    return () => observer.disconnect();
+  }, [loading, indices]);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,21 +236,38 @@ export function MarketTickerBar({ className }: MarketTickerBarProps) {
 
   if (!loading && indices.length === 0) return null;
 
+  const animate = !loading && overflowWidth !== null;
+
   return (
     <div
-      className={cn('no-scrollbar overflow-x-auto rounded-lg border border-border bg-card', className)}
+      ref={containerRef}
+      className={cn('market-ticker no-scrollbar overflow-x-auto rounded-lg border border-border bg-card', className)}
+      data-animate={animate ? '' : undefined}
       aria-label="Índices do mercado"
       role="region"
     >
-      <div className="flex w-max min-w-full items-center gap-6 px-4 text-sm">
-        {loading
-          ? Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className="flex min-h-10 items-center gap-2">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-4 w-12" />
-              </div>
-            ))
-          : indices.map((index) => <IndexItem key={index.ticker} index={index} />)}
+      <div
+        className="market-ticker__track flex w-max min-w-full text-sm"
+        data-marquee
+        // ~40 px por segundo, qualquer que seja a quantidade de índices
+        style={animate ? ({ '--ticker-duration': `${Math.round(overflowWidth / 40)}s` } as CSSProperties) : undefined}
+      >
+        <div ref={copyRef} className="flex shrink-0 items-center gap-6 px-4">
+          {loading
+            ? Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="flex min-h-10 items-center gap-2">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-12" />
+                </div>
+              ))
+            : indices.map((index) => <IndexItem key={index.ticker} index={index} />)}
+        </div>
+        {animate && (
+          // Segunda cópia só para o laço contínuo da animação; leitores de tela e teclado ignoram.
+          <div className="market-ticker__copy flex shrink-0 items-center gap-6 px-4" aria-hidden inert>
+            {indices.map((index) => <IndexItem key={index.ticker} index={index} />)}
+          </div>
+        )}
       </div>
     </div>
   );

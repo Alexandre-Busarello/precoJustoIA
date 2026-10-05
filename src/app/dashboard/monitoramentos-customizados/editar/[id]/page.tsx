@@ -10,6 +10,7 @@ import type { TriggerConfig } from '@/lib/custom-trigger-service';
 import CustomMonitorForm from '@/components/custom-monitor-form';
 import { PageHeader } from '@/components/page-header';
 import { AlertsTabs } from '@/components/alerts-tabs';
+import { isPrefillType } from '../../monitor-fields';
 
 export const metadata: Metadata = {
   title: 'Editar monitoramento',
@@ -25,8 +26,25 @@ interface MonitorWithCompany {
   company: { id: number; ticker: string; name: string; logoUrl: string | null };
 }
 
-export default async function EditCustomMonitorPage({ params }: { params: Promise<{ id: string }> }) {
+function firstParam(value: string | string[] | undefined): string | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw ? raw.trim() : null;
+}
+
+export default async function EditCustomMonitorPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { id: monitorId } = await params;
+  const query = await searchParams;
+  // `?type=` vem do redirecionamento da criação quando o ativo já tem monitoramento ativo
+  // Só tipos conhecidos pré-preenchem um critério; ausentes ou inválidos são ignorados.
+  const rawType = firstParam(query.type);
+  const type = isPrefillType(rawType) ? rawType : null;
+  const fromCreate = firstParam(query.origem) === 'criar';
 
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -49,7 +67,9 @@ export default async function EditCustomMonitorPage({ params }: { params: Promis
           },
         },
       }),
-    { monitorId }
+    { monitorId },
+    // Leitura por usuário: sem cache, para não abrir a edição com critérios antigos
+    { skipCache: true }
   )) as MonitorWithCompany | null;
 
   if (!monitor) {
@@ -60,11 +80,26 @@ export default async function EditCustomMonitorPage({ params }: { params: Promis
     redirect('/dashboard/monitoramentos-customizados');
   }
 
+  const ticker = monitor.company.ticker;
+  const isPaused = monitor.isActive === false;
+  let description = isPaused
+    ? 'Este monitoramento está pausado. Ajuste os critérios ou reative para voltar a receber avisos.'
+    : 'Ajuste os critérios ou pause o monitoramento.';
+  if (fromCreate) {
+    const opening = isPaused ? `Você já tem um monitoramento pausado de ${ticker}.` : `Você já monitora ${ticker}.`;
+    const next = type
+      ? `O novo critério já aparece junto aos atuais: revise${isPaused ? ', reative' : ''} e salve.`
+      : isPaused
+        ? 'Ajuste os critérios e reative para voltar a receber avisos.'
+        : 'Ajuste os critérios ou pause o monitoramento.';
+    description = `${opening} ${next}`;
+  }
+
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
       <PageHeader
         title={`Editar monitoramento de ${monitor.company.ticker}`}
-        description="Ajuste os critérios ou pause o monitoramento."
+        description={description}
         breadcrumb={[
           { label: 'Monitoramentos', href: '/dashboard/monitoramentos-customizados' },
           { label: monitor.company.ticker },
@@ -80,6 +115,7 @@ export default async function EditCustomMonitorPage({ params }: { params: Promis
           triggerConfig: (monitor.triggerConfig || {}) as TriggerConfig,
           isActive: monitor.isActive ?? true,
         }}
+        focusField={type}
       />
     </div>
   );

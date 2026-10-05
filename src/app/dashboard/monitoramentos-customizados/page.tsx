@@ -8,7 +8,7 @@ import { authOptions } from '@/lib/auth';
 import { getCurrentUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
-import type { TriggerConfig } from '@/lib/custom-trigger-service';
+import { checkMonitorLimit, type TriggerConfig } from '@/lib/custom-trigger-service';
 import CustomMonitorsList from '@/components/custom-monitors-list';
 import { MonitorLimitBanner } from '@/components/monitor-limit-banner';
 import { PageHeader } from '@/components/page-header';
@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
   title: 'Monitoramentos',
-  description: 'Gerencie seus monitoramentos de ações com preço-alvo e limites de indicadores',
+  description: 'Gerencie seus alertas de preço-teto Bazin, desconto vs preço justo, dividend yield e indicadores',
 };
 
 interface MonitorRow {
@@ -26,6 +26,7 @@ interface MonitorRow {
   isActive: boolean | null;
   createdAt: Date;
   lastTriggeredAt: Date | null;
+  isAlertActive: boolean | null;
   triggerConfig: unknown;
   company: { id: number; ticker: string; name: string; logoUrl: string | null } | null;
 }
@@ -53,7 +54,9 @@ export default async function CustomMonitorsPage() {
         },
         orderBy: { createdAt: 'desc' },
       }),
-    { userId: user.id }
+    { userId: user.id },
+    // Lista do próprio usuário: sem cache, para refletir na hora o que acabou de ser criado ou editado
+    { skipCache: true }
   )) as MonitorRow[];
 
   const monitors = monitorsRaw
@@ -68,15 +71,16 @@ export default async function CustomMonitorsPage() {
       isActive: m.isActive ?? true,
       createdAt: m.createdAt,
       lastTriggeredAt: m.lastTriggeredAt,
+      isAlertActive: m.isAlertActive ?? false,
     }));
 
   const activeCount = monitors.filter((m) => m.isActive).length;
   const pausedCount = monitors.length - activeCount;
-  const maxMonitors = user.isPremium ? null : 1; // null = sem limite
-  const isLimitReached = maxMonitors !== null && activeCount >= maxMonitors;
+  const { allowed, max: maxMonitors } = checkMonitorLimit(user.isPremium, activeCount); // max null = sem limite
+  const isLimitReached = !allowed;
   const summary =
     monitors.length === 0
-      ? 'Preço-alvo e limites de indicadores para os ativos que você acompanha.'
+      ? 'Preço-teto, desconto vs preço justo, dividend yield e indicadores dos ativos que você acompanha.'
       : `${monitors.length} ${monitors.length === 1 ? 'monitoramento' : 'monitoramentos'}${
           pausedCount > 0 ? ` · ${pausedCount} ${pausedCount === 1 ? 'pausado' : 'pausados'}` : ''
         }`;
@@ -115,6 +119,8 @@ export default async function CustomMonitorsPage() {
         <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
           <li>Os critérios são verificados periodicamente com os dados mais recentes do ativo.</li>
           <li>Quando qualquer um dos critérios é atingido, você recebe um aviso com um resumo gerado por IA.</li>
+          <li>Preço-teto Bazin: média de dividendos e JCP dos últimos 5 anos completos dividida pelo DY-alvo (6% por padrão).</li>
+          <li>Desconto vs preço justo usa o preço justo do modelo escolhido; DY 12 meses soma os proventos com data-com no último ano.</li>
           <li>Você pode pausar, editar ou remover um monitoramento a qualquer momento.</li>
         </ul>
       </section>

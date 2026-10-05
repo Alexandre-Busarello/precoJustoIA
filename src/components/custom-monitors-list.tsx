@@ -34,6 +34,8 @@ interface Monitor {
   isActive: boolean;
   createdAt: Date;
   lastTriggeredAt: Date | null;
+  /** Critério atingido na última verificação (o aviso não se repete enquanto continuar atingido). */
+  isAlertActive?: boolean;
 }
 
 interface CustomMonitorsListProps {
@@ -70,7 +72,7 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
         body: JSON.stringify({ isActive: next }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Erro ao atualizar monitoramento');
+      if (!response.ok) throw new Error(data.message || data.error || 'Erro ao atualizar monitoramento');
 
       const updated = data.monitor;
       setMonitorsList((list) =>
@@ -127,7 +129,8 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
       <div className="rounded-lg border border-dashed border-border bg-card px-4 py-10 text-center">
         <p className="text-sm font-medium text-foreground">Nenhum monitoramento criado</p>
         <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-          Defina um preço-alvo ou limites de indicadores e receba um aviso quando o ativo chegar lá.
+          Receba um aviso quando o preço ficar abaixo do preço-teto Bazin ou do preço justo, quando o dividend yield subir
+          ou quando um indicador chegar ao valor que você definiu.
         </p>
         <Button asChild size="sm" className="mt-4">
           <Link href="/dashboard/monitoramentos-customizados/criar">Criar monitoramento</Link>
@@ -144,24 +147,25 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
           const busy = busyId === monitor.id;
           return (
             <li key={monitor.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex min-w-0 items-start gap-3">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
                 <CompanyLogo ticker={monitor.ticker} companyName={monitor.companyName} logoUrl={monitor.companyLogoUrl} size={36} />
-                <div className="min-w-0 space-y-2">
+                <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Link
                       href={`/acao/${monitor.ticker.toLowerCase()}`}
-                      className="font-medium text-foreground underline-offset-4 hover:underline"
+                      className="-my-2.5 inline-flex min-h-11 items-center font-medium text-foreground underline-offset-4 hover:underline sm:my-0 sm:min-h-0"
                     >
                       {monitor.ticker}
                     </Link>
                     <Badge variant={monitor.isActive ? 'positive' : 'neutral'}>{monitor.isActive ? 'Ativo' : 'Pausado'}</Badge>
+                    {monitor.isActive && monitor.isAlertActive && <Badge variant="brand">Critério atingido</Badge>}
                   </div>
                   <p className="truncate text-sm text-muted-foreground">{monitor.companyName}</p>
                   {conditions.length > 0 ? (
-                    <ul className="flex flex-wrap gap-1.5" aria-label="Critérios">
+                    <ul className="flex min-w-0 flex-wrap gap-1.5" aria-label="Critérios">
                       {conditions.map((condition) => (
-                        <li key={condition}>
-                          <Badge variant="neutral" className="tabular-nums">
+                        <li key={condition} className="max-w-full">
+                          <Badge variant="neutral" className="h-auto max-w-full whitespace-normal text-left tabular-nums">
                             {condition}
                           </Badge>
                         </li>
@@ -171,8 +175,18 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
                     <p className="text-xs text-muted-foreground">Sem critérios definidos</p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Criado em {formatDate(monitor.createdAt)}
-                    {monitor.lastTriggeredAt && ` · último aviso ${formatDate(monitor.lastTriggeredAt, { style: 'relative' })}`}
+                    {monitor.lastTriggeredAt ? (
+                      <time
+                        dateTime={new Date(monitor.lastTriggeredAt).toISOString()}
+                        // Tempo relativo muda entre o render do servidor e a hidratação (virada de minuto)
+                        suppressHydrationWarning
+                        title={formatDate(monitor.lastTriggeredAt, { style: 'datetime' })}>
+                        Último aviso {formatDate(monitor.lastTriggeredAt, { style: 'relative' })}
+                      </time>
+                    ) : (
+                      'Nenhum aviso ainda'
+                    )}
+                    {` · criado em ${formatDate(monitor.createdAt)}`}
                   </p>
                 </div>
               </div>

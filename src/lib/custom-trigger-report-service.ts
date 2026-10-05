@@ -5,7 +5,9 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { TriggerConfig } from './custom-trigger-service';
+import { FAIR_VALUE_MODEL_LABEL, type TriggerConfig } from './custom-trigger-service';
+import { formatBRL, formatNumber, formatPct } from './format';
+import { formatAlertPct } from '@/app/dashboard/monitoramentos-customizados/monitor-fields';
 
 export interface CustomTriggerReportParams {
   ticker: string;
@@ -16,6 +18,10 @@ export interface CustomTriggerReportParams {
     pvp?: number;
     score?: number;
     currentPrice?: number;
+    bazinCeiling?: number;
+    fairValue?: number;
+    discount?: number;
+    dyTtm?: number;
   };
   reasons: string[];
 }
@@ -115,7 +121,7 @@ function generateFallbackExplanation(
   // Explicar cada tipo de filtro
   if (triggerConfig.minPl !== undefined || triggerConfig.maxPl !== undefined) {
     explanation += '**P/L (Preço sobre Lucro)**: Indica quantas vezes o preço da ação está em relação ao lucro por ação. ';
-    explanation += 'Um P/L baixo pode indicar que a ação está barata em relação aos lucros.\n\n';
+    explanation += 'Um P/L menor significa que o mercado paga menos por real de lucro; compare com o histórico e com empresas do mesmo setor.\n\n';
   }
 
   if (triggerConfig.minPvp !== undefined || triggerConfig.maxPvp !== undefined) {
@@ -129,8 +135,24 @@ function generateFallbackExplanation(
   }
 
   if (triggerConfig.priceReached || triggerConfig.priceBelow || triggerConfig.priceAbove) {
-    explanation += '**Preço da Ação**: O preço atual atingiu um nível configurado no gatilho. ';
-    explanation += 'Isso pode indicar oportunidades de entrada ou saída, dependendo da estratégia.\n\n';
+    explanation += '**Preço da ação**: o preço atual atingiu um nível configurado no gatilho. ';
+    explanation += 'Use o aviso como ponto de partida para revisar os fundamentos, não como decisão isolada.\n\n';
+  }
+
+  if (triggerConfig.bazinCeiling) {
+    explanation += `**Preço-teto Bazin**: média anual dos proventos (dividendos + JCP) dos últimos 5 anos completos dividida pelo DY-alvo de ${formatAlertPct(triggerConfig.bazinCeiling.targetYield)}. `;
+    explanation += 'Abaixo do teto, o rendimento histórico em proventos supera o DY-alvo. É uma estimativa baseada no passado.\n\n';
+  }
+
+  if (triggerConfig.fairValueDiscount) {
+    const label = FAIR_VALUE_MODEL_LABEL[triggerConfig.fairValueDiscount.model] ?? triggerConfig.fairValueDiscount.model;
+    explanation += `**Desconto vs preço justo (${label})**: o preço está pelo menos ${formatAlertPct(triggerConfig.fairValueDiscount.minDiscount)} abaixo do preço justo estimado pelo modelo. `;
+    explanation += 'O preço justo é uma estimativa e depende das premissas do modelo.\n\n';
+  }
+
+  if (triggerConfig.dyTtmAbove) {
+    explanation += `**Dividend yield 12 meses**: soma dos proventos com data-com nos últimos 12 meses dividida pelo preço atual, acima de ${formatAlertPct(triggerConfig.dyTtmAbove.minDy)}. `;
+    explanation += 'Proventos passados não garantem pagamentos futuros.\n\n';
   }
 
   return explanation;
@@ -146,15 +168,15 @@ export function addEducationalContent(triggerType: keyof TriggerConfig): string 
 O **P/L (Preço sobre Lucro)** é um dos indicadores mais usados na análise de ações. Ele mostra quantas vezes o preço da ação está em relação ao lucro por ação.
 
 **Como interpretar:**
-- **P/L baixo (< 10)**: Pode indicar que a ação está barata em relação aos lucros
+- **P/L baixo (< 10)**: O mercado paga menos por real de lucro; pode refletir desconto ou risco maior
 - **P/L médio (10-20)**: Considerado normal para muitas empresas
-- **P/L alto (> 20)**: Pode indicar expectativas de crescimento ou supervalorização
+- **P/L alto (> 20)**: Pode refletir expectativa de crescimento ou preço exigente
 
 **Importante**: O P/L deve ser analisado em conjunto com outros indicadores e comparado com empresas do mesmo setor.`,
 
     maxPl: `## Entendendo o P/L Máximo
 
-Quando o P/L está acima de um valor máximo configurado, pode indicar que a ação está cara em relação aos lucros atuais.
+Quando o P/L está acima de um valor máximo configurado, significa que o mercado paga mais por real de lucro do que o limite que você definiu.
 
 **O que observar:**
 - Verifique se há expectativas de crescimento que justifiquem o P/L elevado
@@ -166,7 +188,7 @@ Quando o P/L está acima de um valor máximo configurado, pode indicar que a aç
 O **P/VP (Preço sobre Valor Patrimonial)** compara o preço da ação com o valor patrimonial por ação.
 
 **Como interpretar:**
-- **P/VP < 1**: Ação negociando abaixo do valor contábil (pode ser oportunidade)
+- **P/VP < 1**: Ação negociando abaixo do valor contábil
 - **P/VP = 1**: Preço igual ao valor patrimonial
 - **P/VP > 1**: Ação negociando acima do valor contábil
 
@@ -174,7 +196,7 @@ O **P/VP (Preço sobre Valor Patrimonial)** compara o preço da ação com o val
 
     maxPvp: `## Entendendo o P/VP Máximo
 
-Um P/VP acima do máximo configurado pode indicar que a ação está cara em relação ao patrimônio líquido.
+Um P/VP acima do máximo configurado significa que o mercado paga mais por real de patrimônio do que o limite que você definiu.
 
 **O que considerar:**
 - Empresas de tecnologia e serviços tendem a ter P/VP mais alto
@@ -208,12 +230,40 @@ Quando o score está abaixo de um máximo configurado, pode indicar deterioraç�
 
 Alertas de preço ajudam a identificar quando uma ação atinge níveis específicos de interesse.
 
-**Estratégias comuns:**
-- **Preço atingido**: Pode indicar oportunidade de entrada ou saída
-- **Preço abaixo**: Pode sinalizar compra em níveis de suporte
-- **Preço acima**: Pode indicar realização de lucros ou alerta de supervalorização
+**Tipos de alerta:**
+- **Preço atingido**: a cotação chegou ao valor que você definiu
+- **Preço abaixo**: a cotação caiu abaixo do valor definido
+- **Preço acima**: a cotação subiu acima do valor definido
 
 **Lembre-se**: Preço sozinho não é suficiente. Sempre analise os fundamentos.`,
+
+    bazinCeiling: `## Entendendo o preço-teto Bazin
+
+O **método Bazin** estima um preço-teto a partir dos proventos: média anual de dividendos + JCP dos últimos 5 anos completos dividida pelo dividend yield desejado (6% no método original).
+
+**Como interpretar:**
+- **Preço abaixo do teto**: o rendimento histórico em proventos supera o DY-alvo
+- **Preço acima do teto**: o rendimento histórico fica abaixo do DY-alvo
+
+**Importante**: o cálculo olha para o passado. Verifique se o lucro e o payout sustentam os proventos.`,
+
+    fairValueDiscount: `## Entendendo o desconto vs preço justo
+
+O **desconto** compara o preço atual com o preço justo estimado por um modelo de valuation: desconto = 1 − preço ÷ preço justo.
+
+**Como interpretar:**
+- Quanto maior o desconto, maior a distância entre o preço e a estimativa do modelo
+- Cada modelo usa premissas próprias (lucro, crescimento, dividendos, taxa de desconto)
+
+**Importante**: preço justo é uma estimativa, não um valor garantido.`,
+
+    dyTtmAbove: `## Entendendo o dividend yield de 12 meses
+
+O **DY 12 meses** soma os proventos com data-com nos últimos 12 meses e divide pelo preço atual.
+
+**O que observar:**
+- Proventos extraordinários podem inflar o DY de um ano específico
+- Compare com a média histórica e com o payout da empresa`,
   };
 
   return educationalContent[triggerType] || '';
@@ -239,18 +289,26 @@ export async function generateCustomTriggerReport(
 
   // Preparar dados da empresa para o final do relatório
   const companyDataSection = Object.entries(companyData)
-    .filter(([_, value]) => value !== undefined)
+    .filter(([, value]) => value !== undefined)
     .map(([key, value]) => {
       const labels: Record<string, string> = {
         pl: 'P/L',
         pvp: 'P/VP',
-        score: 'Score Geral',
-        currentPrice: 'Preço Atual',
+        score: 'Score geral',
+        currentPrice: 'Preço atual',
+        bazinCeiling: 'Preço-teto Bazin',
+        fairValue: 'Preço justo do modelo',
+        discount: 'Desconto vs preço justo',
+        dyTtm: 'Dividend yield 12 meses',
       };
       const label = labels[key] || key;
-      const formattedValue = key === 'currentPrice' 
-        ? `R$ ${Number(value).toFixed(2)}`
-        : Number(value).toFixed(2);
+      const money = new Set(['currentPrice', 'bazinCeiling', 'fairValue']);
+      const percent = new Set(['discount', 'dyTtm']);
+      const formattedValue = money.has(key)
+        ? formatBRL(Number(value))
+        : percent.has(key)
+          ? formatPct(Number(value))
+          : formatNumber(Number(value), { digits: 2 });
       return `- **${label}**: ${formattedValue}`;
     })
     .join('\n');

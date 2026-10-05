@@ -9,10 +9,11 @@ import { safeQueryWithParams } from '@/lib/prisma-wrapper';
 import CustomMonitorForm, { type MonitorCompany } from '@/components/custom-monitor-form';
 import { PageHeader } from '@/components/page-header';
 import { AlertsTabs } from '@/components/alerts-tabs';
+import { isPrefillType } from '../monitor-fields';
 
 export const metadata: Metadata = {
   title: 'Criar monitoramento',
-  description: 'Configure um preço-alvo ou limites de indicadores e receba um aviso quando o ativo atingir',
+  description: 'Receba um aviso quando o preço ficar abaixo do preço-teto Bazin, do preço justo ou atingir um DY ou indicador',
 };
 
 const TICKER_PATTERN = /^[A-Z0-9]{4,12}$/;
@@ -56,6 +57,21 @@ export default async function CreateCustomMonitorPage({
       )) as MonitorCompany | null)
     : null;
 
+  // Já existe monitoramento deste ativo: abre a edição (com o novo critério, se houver, junto aos atuais)
+  // em vez de criar outro. Prioriza o ativo; se só houver um pausado, abre o pausado para o usuário reativar.
+  if (defaultCompany) {
+    const existing = await prisma.userAssetMonitor.findFirst({
+      where: { userId: user.id, companyId: defaultCompany.id },
+      orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }],
+      select: { id: true },
+    });
+    if (existing) {
+      const qs = new URLSearchParams({ origem: 'criar' });
+      if (isPrefillType(type)) qs.set('type', type);
+      redirect(`/dashboard/monitoramentos-customizados/editar/${existing.id}?${qs.toString()}`);
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
       <PageHeader
@@ -71,7 +87,7 @@ export default async function CreateCustomMonitorPage({
         ]}
       />
       <AlertsTabs />
-      <CustomMonitorForm defaultCompany={defaultCompany} focusField={type} />
+      <CustomMonitorForm defaultCompany={defaultCompany} focusField={isPrefillType(type) ? type : null} />
     </div>
   );
 }

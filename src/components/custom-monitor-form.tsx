@@ -11,92 +11,49 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AssetSearchInput } from '@/components/asset-search-input';
 import { MonitorLimitBanner } from '@/components/monitor-limit-banner';
 import { formatBRL, formatMultiple, formatNumber, formatPct } from '@/lib/format';
-import type { TriggerConfig } from '@/lib/custom-trigger-service';
+import type { FairValueModel, TriggerConfig } from '@/lib/custom-trigger-service';
+import {
+  ADVANCED_GROUPS,
+  BASIC_RANGES,
+  PRICE_FIELDS,
+  formatAlertPct,
+  isAlertType,
+  isMonitorFormKey,
+  type AlertType,
+  type ConfigKey,
+  type FieldKind,
+  type RangeField,
+} from '@/app/dashboard/monitoramentos-customizados/monitor-fields';
 
-type ConfigKey = keyof TriggerConfig;
+/** Mesmos rótulos de `FAIR_VALUE_MODEL_LABEL` (o serviço é server-only); o `Record` garante todos os modelos. */
+const FAIR_VALUE_MODEL_OPTIONS: Record<FairValueModel, string> = {
+  graham: 'Graham',
+  fcd: 'Fluxo de caixa descontado',
+  gordon: 'Gordon',
+  barsi: 'Barsi',
+  bazin: 'Bazin',
+  lynch: 'Peter Lynch',
+  bankPvp: 'P/VP justo (bancos)',
+};
+const DEFAULT_FAIR_VALUE_MODEL: FairValueModel = 'graham';
+const DEFAULT_BAZIN_TARGET_YIELD = 0.06;
+/** Valores sugeridos quando o formulário abre por `?type=` (o usuário pode trocar antes de salvar). */
+const DEFAULT_FAIR_VALUE_MIN_DISCOUNT = 0.2;
+const DEFAULT_DY_TTM_MIN = 0.08;
 
-/** `money` em R$, `percent` digitado em % e salvo como fração, `multiple`/`number` como digitado, `integer` sem casas. */
-type FieldKind = 'money' | 'percent' | 'multiple' | 'number' | 'integer';
+/** Percentual de alerta: sem casas quando inteiro (6%), uma casa caso contrário (6,5%). Igual no formulário e na lista. */
 
-interface SingleField {
-  key: ConfigKey;
-  label: string;
-  kind: FieldKind;
-  placeholder: string;
-}
 
-interface RangeField {
-  label: string;
-  min: ConfigKey;
-  max: ConfigKey;
-  kind: FieldKind;
-  placeholders: [string, string];
-}
+const ALERT_INPUT_ID: Record<AlertType, string> = {
+  bazin_ceiling: 'monitor-bazin-yield',
+  fair_value_discount: 'monitor-fair-discount',
+  dy_ttm_above: 'monitor-dy-ttm',
+};
 
-interface RangeGroup {
-  title: string;
-  fields: RangeField[];
-}
-
-const PRICE_FIELDS: SingleField[] = [
-  { key: 'priceBelow', label: 'Preço abaixo de', kind: 'money', placeholder: '30,00' },
-  { key: 'priceAbove', label: 'Preço acima de', kind: 'money', placeholder: '100,00' },
-  { key: 'priceReached', label: 'Preço atingir', kind: 'money', placeholder: '50,00' },
-];
-
-const BASIC_RANGES: RangeField[] = [
-  { label: 'P/L', min: 'minPl', max: 'maxPl', kind: 'multiple', placeholders: ['5', '20'] },
-  { label: 'P/VP', min: 'minPvp', max: 'maxPvp', kind: 'multiple', placeholders: ['0,5', '2'] },
-  { label: 'Score', min: 'minScore', max: 'maxScore', kind: 'integer', placeholders: ['60', '90'] },
-];
-
-const ADVANCED_GROUPS: RangeGroup[] = [
-  {
-    title: 'Indicadores que oscilam com o preço',
-    fields: [
-      { label: 'Forward P/L', min: 'minForwardPE', max: 'maxForwardPE', kind: 'multiple', placeholders: ['5', '20'] },
-      { label: 'Earnings yield', min: 'minEarningsYield', max: 'maxEarningsYield', kind: 'percent', placeholders: ['5', '20'] },
-      { label: 'Dividend yield', min: 'minDy', max: 'maxDy', kind: 'percent', placeholders: ['5', '15'] },
-      { label: 'EV/EBITDA', min: 'minEvEbitda', max: 'maxEvEbitda', kind: 'multiple', placeholders: ['5', '15'] },
-      { label: 'P/Receita (PSR)', min: 'minPsr', max: 'maxPsr', kind: 'multiple', placeholders: ['0,5', '5'] },
-      { label: 'LPA', min: 'minLpa', max: 'maxLpa', kind: 'money', placeholders: ['1,00', '10,00'] },
-      { label: 'VPA', min: 'minVpa', max: 'maxVpa', kind: 'money', placeholders: ['10,00', '50,00'] },
-    ],
-  },
-  {
-    title: 'Rentabilidade',
-    fields: [
-      { label: 'ROE', min: 'minRoe', max: 'maxRoe', kind: 'percent', placeholders: ['15', '50'] },
-      { label: 'ROIC', min: 'minRoic', max: 'maxRoic', kind: 'percent', placeholders: ['10', '40'] },
-      { label: 'ROA', min: 'minRoa', max: 'maxRoa', kind: 'percent', placeholders: ['5', '20'] },
-    ],
-  },
-  {
-    title: 'Margens',
-    fields: [
-      { label: 'Margem bruta', min: 'minMargemBruta', max: 'maxMargemBruta', kind: 'percent', placeholders: ['20', '80'] },
-      { label: 'Margem EBITDA', min: 'minMargemEbitda', max: 'maxMargemEbitda', kind: 'percent', placeholders: ['15', '50'] },
-      { label: 'Margem líquida', min: 'minMargemLiquida', max: 'maxMargemLiquida', kind: 'percent', placeholders: ['10', '30'] },
-    ],
-  },
-  {
-    title: 'Endividamento',
-    fields: [
-      { label: 'Dívida líquida/PL', min: 'minDividaLiquidaPl', max: 'maxDividaLiquidaPl', kind: 'number', placeholders: ['0', '1'] },
-      { label: 'Dívida/patrimônio', min: 'minDebtToEquity', max: 'maxDebtToEquity', kind: 'number', placeholders: ['0', '1'] },
-    ],
-  },
-  {
-    title: 'Crescimento e proventos',
-    fields: [
-      { label: 'CAGR de lucros 5 anos', min: 'minCagrLucros5a', max: 'maxCagrLucros5a', kind: 'percent', placeholders: ['10', '50'] },
-      { label: 'Payout', min: 'minPayout', max: 'maxPayout', kind: 'percent', placeholders: ['20', '80'] },
-    ],
-  },
-];
 
 const FIELD_KIND = new Map<ConfigKey, FieldKind>();
 const FIELD_LABEL = new Map<ConfigKey, string>();
@@ -131,6 +88,16 @@ function formatValue(value: number, kind: FieldKind): string {
 /** Descreve os critérios de um monitoramento em frases curtas pt-BR (ex.: "P/L ≤ 20,0x", "Preço abaixo de R$ 30,00"). */
 export function describeTriggerConfig(config: TriggerConfig): string[] {
   const parts: string[] = [];
+  if (config.bazinCeiling) {
+    parts.push(`Preço abaixo do teto Bazin (DY-alvo ${formatAlertPct(config.bazinCeiling.targetYield)})`);
+  }
+  if (config.fairValueDiscount) {
+    const model = FAIR_VALUE_MODEL_OPTIONS[config.fairValueDiscount.model] ?? config.fairValueDiscount.model;
+    parts.push(`Desconto ≥ ${formatAlertPct(config.fairValueDiscount.minDiscount)} vs ${model}`);
+  }
+  if (config.dyTtmAbove) {
+    parts.push(`DY 12 meses ≥ ${formatAlertPct(config.dyTtmAbove.minDy)}`);
+  }
   for (const field of PRICE_FIELDS) {
     const value = config[field.key];
     if (typeof value === 'number') parts.push(`${field.label} ${formatValue(value, field.kind)}`);
@@ -144,9 +111,6 @@ export function describeTriggerConfig(config: TriggerConfig): string[] {
   return parts;
 }
 
-function isMonitorFormKey(value: string | null | undefined): value is ConfigKey {
-  return !!value && FIELD_KIND.has(value as ConfigKey);
-}
 
 type Drafts = Partial<Record<ConfigKey, string>>;
 
@@ -174,6 +138,46 @@ function draftsFromConfig(config: TriggerConfig): Drafts {
   return drafts;
 }
 
+interface DecimalInputProps {
+  id: string;
+  kind: FieldKind;
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  invalid?: boolean;
+}
+
+/** Campo numérico pt-BR: teclado decimal no celular, prefixo R$ ou sufixo % conforme o tipo. */
+function DecimalInput({ id, kind, label, placeholder, value, onChange, invalid = false }: DecimalInputProps) {
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <Label htmlFor={id} className="text-xs font-normal text-muted-foreground">
+        {label}
+      </Label>
+      <div className="relative">
+        {kind === 'money' && (
+          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">R$</span>
+        )}
+        <Input
+          id={id}
+          type="text"
+          inputMode={kind === 'integer' ? 'numeric' : 'decimal'}
+          autoComplete="off"
+          placeholder={`ex.: ${placeholder}`}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-invalid={invalid || undefined}
+          className={cn('tabular-nums', kind === 'money' && 'pl-10', kind === 'percent' && 'pr-8')}
+        />
+        {kind === 'percent' && (
+          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">%</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export interface MonitorCompany {
   id: number;
   ticker: string;
@@ -191,7 +195,10 @@ interface CustomMonitorFormProps {
   };
   /** Empresa pré-selecionada na criação (ex.: `?ticker=PETR4` vindo da página do ativo). */
   defaultCompany?: MonitorCompany | null;
-  /** Campo a destacar ao abrir (ex.: `?type=priceBelow`). Valores desconhecidos são ignorados. */
+  /**
+   * Alerta ou campo a destacar ao abrir (`?type=`): `bazin_ceiling`, `fair_value_discount`, `dy_ttm_above`
+   * ou um critério numérico (ex.: `priceBelow`). Valores desconhecidos são ignorados.
+   */
   focusField?: string | null;
 }
 
@@ -205,14 +212,33 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
       ? { id: initialData.companyId, ticker: initialData.ticker, name: initialData.companyName }
       : defaultCompany ?? null
   );
-  const [drafts, setDrafts] = useState<Drafts>(() => draftsFromConfig(initialData?.triggerConfig ?? {}));
+  const initialConfig = initialData?.triggerConfig ?? {};
+  const alertType = isAlertType(focusField) ? focusField : null;
+  const [drafts, setDrafts] = useState<Drafts>(() => draftsFromConfig(initialConfig));
+  const [bazinEnabled, setBazinEnabled] = useState(() => !!initialConfig.bazinCeiling || alertType === 'bazin_ceiling');
+  const [bazinYield, setBazinYield] = useState(() =>
+    toDraft(initialConfig.bazinCeiling?.targetYield ?? DEFAULT_BAZIN_TARGET_YIELD, 'percent')
+  );
+  const [fairModel, setFairModel] = useState<FairValueModel>(
+    () => initialConfig.fairValueDiscount?.model ?? DEFAULT_FAIR_VALUE_MODEL
+  );
+  const [fairDiscount, setFairDiscount] = useState(() =>
+    toDraft(
+      initialConfig.fairValueDiscount?.minDiscount ??
+        (alertType === 'fair_value_discount' ? DEFAULT_FAIR_VALUE_MIN_DISCOUNT : undefined),
+      'percent'
+    )
+  );
+  const [dyTtm, setDyTtm] = useState(() =>
+    toDraft(initialConfig.dyTtmAbove?.minDy ?? (alertType === 'dy_ttm_above' ? DEFAULT_DY_TTM_MIN : undefined), 'percent')
+  );
   const [isActive, setIsActive] = useState(initialData?.isActive ?? true);
   const focusKey = isMonitorFormKey(focusField) ? focusField : null;
   const [showAdvanced, setShowAdvanced] = useState(() => {
     if (focusKey && ADVANCED_KEYS.has(focusKey)) return true;
     return Object.keys(draftsFromConfig(initialData?.triggerConfig ?? {})).some((k) => ADVANCED_KEYS.has(k as ConfigKey));
   });
-  const [invalid, setInvalid] = useState<Set<ConfigKey>>(() => new Set());
+  const [invalid, setInvalid] = useState<Set<string>>(() => new Set());
 
   // Limites do plano (só na criação)
   useEffect(() => {
@@ -221,7 +247,10 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
     fetch('/api/user-asset-monitor')
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled && data.success && data.limits) setLimits(data.limits);
+        if (cancelled || !data.success || !data.limits) return;
+        setLimits(data.limits);
+        // Limite atingido: mostra o aviso do topo em vez do campo focado pela URL
+        if (data.limits.max !== null && data.limits.current >= data.limits.max) window.scrollTo({ top: 0 });
       })
       .catch((err) => console.error('Erro ao buscar limites:', err));
     return () => {
@@ -229,28 +258,33 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
     };
   }, [initialData]);
 
-  // Foco no campo pedido pela URL, ou no primeiro campo de preço quando a empresa já veio preenchida
+  // Foco no alerta/campo pedido pela URL, ou no primeiro campo de preço quando a empresa já veio preenchida
   useEffect(() => {
-    const target = focusKey ?? (defaultCompany && !initialData ? 'priceBelow' : null);
+    const requested = alertType ? ALERT_INPUT_ID[alertType] : focusKey ? `monitor-${focusKey}` : null;
+    const target = requested ?? (defaultCompany && !initialData ? 'monitor-priceBelow' : null);
     if (!target) return;
-    const el = document.getElementById(`monitor-${target}`);
-    if (el instanceof HTMLInputElement) el.focus({ preventScroll: !focusKey });
-  }, [focusKey, defaultCompany, initialData]);
+    const el = document.getElementById(target);
+    if (el instanceof HTMLInputElement) el.focus({ preventScroll: !requested });
+    if (requested && el) el.scrollIntoView({ block: 'center' });
+  }, [alertType, focusKey, defaultCompany, initialData]);
+
+  const clearInvalid = (key: string) => {
+    if (!invalid.has(key)) return;
+    setInvalid((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  };
 
   const setDraft = (key: ConfigKey, value: string) => {
     setDrafts((prev) => ({ ...prev, [key]: value }));
-    if (invalid.has(key)) {
-      setInvalid((prev) => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
+    clearInvalid(key);
   };
 
-  const buildConfig = (): { config: TriggerConfig; errors: string[]; badKeys: Set<ConfigKey> } => {
+  const buildConfig = (): { config: TriggerConfig; errors: string[]; badKeys: Set<string> } => {
     const errors: string[] = [];
-    const badKeys = new Set<ConfigKey>();
+    const badKeys = new Set<string>();
     const values: Partial<Record<ConfigKey, number>> = {};
 
     for (const [key, kind] of FIELD_KIND) {
@@ -274,11 +308,41 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
       }
     }
 
+    /** Percentual digitado → fração; registra erro fora de (0, max]. */
+    const readPercent = (raw: string, key: string, label: string, maxPct: number, maxInclusive = true): number | undefined => {
+      const parsed = parseDecimal(raw);
+      if (parsed === undefined) return undefined;
+      const outOfRange = Number.isNaN(parsed) || parsed <= 0 || (maxInclusive ? parsed > maxPct : parsed >= maxPct);
+      if (outOfRange) {
+        errors.push(`${label}: informe um valor entre 0 e ${maxPct}%`);
+        badKeys.add(key);
+        return undefined;
+      }
+      return parsed / 100;
+    };
+
+    const alerts: Pick<TriggerConfig, 'bazinCeiling' | 'fairValueDiscount' | 'dyTtmAbove'> = {};
+    if (bazinEnabled) {
+      const targetYield = readPercent(bazinYield, 'bazinYield', 'DY-alvo do preço-teto Bazin', 100);
+      if (targetYield !== undefined) alerts.bazinCeiling = { targetYield };
+      else if (!badKeys.has('bazinYield')) {
+        errors.push('DY-alvo do preço-teto Bazin: informe o percentual');
+        badKeys.add('bazinYield');
+      }
+    }
+    const minDiscount = readPercent(fairDiscount, 'fairDiscount', 'Desconto mínimo vs preço justo', 100, false);
+    if (minDiscount !== undefined) alerts.fairValueDiscount = { model: fairModel, minDiscount };
+    const minDy = readPercent(dyTtm, 'dyTtm', 'DY 12 meses mínimo', 100);
+    if (minDy !== undefined) alerts.dyTtmAbove = { minDy };
+
     // Preserva critérios que este formulário não edita (ex.: criados por outras telas)
     const preserved: TriggerConfig = { ...(initialData?.triggerConfig ?? {}) };
     for (const key of FIELD_KIND.keys()) delete preserved[key];
+    delete preserved.bazinCeiling;
+    delete preserved.fairValueDiscount;
+    delete preserved.dyTtmAbove;
 
-    return { config: { ...preserved, ...values }, errors, badKeys };
+    return { config: { ...preserved, ...values, ...alerts }, errors, badKeys };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -296,7 +360,11 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
       return;
     }
     if (!Object.values(config).some((value) => value !== undefined && value !== null)) {
-      toast({ title: 'Defina pelo menos um critério', description: 'Por exemplo, um preço-alvo ou um P/L máximo.', variant: 'destructive' });
+      toast({
+        title: 'Defina pelo menos um critério',
+        description: 'Por exemplo, o preço-teto Bazin, um preço-alvo ou um P/L máximo.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -318,7 +386,7 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
           if (data.limits) setLimits(data.limits);
           toast({
             title: 'Limite do plano gratuito atingido',
-            description: data.message || 'Desative um monitoramento existente ou veja os planos.',
+            description: data.message || 'Pause ou remova um monitoramento para criar outro, ou veja os planos.',
             variant: 'destructive',
           });
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -327,10 +395,17 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
         throw new Error(data.error || data.message || 'Erro ao salvar monitoramento');
       }
 
-      toast({
-        title: initialData ? 'Monitoramento atualizado' : 'Monitoramento criado',
-        description: `Você será avisado quando ${selectedCompany.ticker} atingir um dos critérios.`,
-      });
+      toast(
+        data.merged
+          ? {
+              title: `Critérios somados ao monitoramento de ${selectedCompany.ticker}`,
+              description: 'Você já monitorava este ativo. Os critérios anteriores foram mantidos.',
+            }
+          : {
+              title: initialData ? 'Monitoramento atualizado' : 'Monitoramento criado',
+              description: `Você será avisado quando ${selectedCompany.ticker} atingir um dos critérios.`,
+            }
+      );
       router.push('/dashboard/monitoramentos-customizados');
       router.refresh();
     } catch (error) {
@@ -346,32 +421,23 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
   };
 
   const isLimitReached = !initialData && !!limits && limits.max !== null && limits.current >= limits.max;
+  const typedBazinYield = parseDecimal(bazinYield);
+  const bazinTargetLabel = formatAlertPct(
+    typedBazinYield !== undefined && Number.isFinite(typedBazinYield) && typedBazinYield > 0
+      ? typedBazinYield / 100
+      : DEFAULT_BAZIN_TARGET_YIELD
+  );
 
   const renderInput = (key: ConfigKey, kind: FieldKind, placeholder: string, label: string) => (
-    <div className="min-w-0 space-y-1.5">
-      <Label htmlFor={`monitor-${key}`} className="text-xs font-normal text-muted-foreground">
-        {label}
-      </Label>
-      <div className="relative">
-        {kind === 'money' && (
-          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">R$</span>
-        )}
-        <Input
-          id={`monitor-${key}`}
-          type="text"
-          inputMode={kind === 'integer' ? 'numeric' : 'decimal'}
-          autoComplete="off"
-          placeholder={`ex.: ${placeholder}`}
-          value={drafts[key] ?? ''}
-          onChange={(e) => setDraft(key, e.target.value)}
-          aria-invalid={invalid.has(key) || undefined}
-          className={cn('tabular-nums', kind === 'money' && 'pl-10', kind === 'percent' && 'pr-8')}
-        />
-        {kind === 'percent' && (
-          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">%</span>
-        )}
-      </div>
-    </div>
+    <DecimalInput
+      id={`monitor-${key}`}
+      kind={kind}
+      label={label}
+      placeholder={placeholder}
+      value={drafts[key] ?? ''}
+      onChange={(value) => setDraft(key, value)}
+      invalid={invalid.has(key)}
+    />
   );
 
   const renderRange = (range: RangeField) => (
@@ -401,7 +467,7 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
               <p className="truncate text-sm text-muted-foreground">{selectedCompany.name}</p>
             </div>
             {!initialData && (
-              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedCompany(null)}>
+              <Button type="button" variant="outline" size="sm" className="min-h-11 md:min-h-0" onClick={() => setSelectedCompany(null)}>
                 Trocar
               </Button>
             )}
@@ -413,6 +479,119 @@ export default function CustomMonitorForm({ initialData, defaultCompany, focusFi
           />
         )}
         {initialData && <p className="text-xs text-muted-foreground">O ativo não pode ser trocado depois de criado.</p>}
+      </section>
+
+      <section className="space-y-3" aria-labelledby="monitor-valuation">
+        <div className="space-y-1">
+          <h2 id="monitor-valuation" className="text-lg font-semibold tracking-tight text-foreground">
+            Preço-teto, preço justo e proventos
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Avisos calculados com os proventos e os modelos de valuation do ativo. Os valores são estimativas e o aviso não é recomendação de investimento.
+          </p>
+        </div>
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+          <li className="space-y-3 px-4 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-0.5">
+                <Label htmlFor="monitor-bazin-enabled" className="text-sm font-medium text-foreground">
+                  Preço-teto Bazin
+                </Label>
+                <p id="monitor-bazin-help" className="text-sm text-muted-foreground">
+                  Avise quando o preço ficar abaixo do preço-teto Bazin (DY-alvo {bazinTargetLabel}). O teto é a média
+                  de dividendos e JCP dos últimos 5 anos completos dividida pelo DY-alvo.
+                </p>
+              </div>
+              <Switch
+                id="monitor-bazin-enabled"
+                checked={bazinEnabled}
+                onCheckedChange={(checked) => {
+                  setBazinEnabled(checked);
+                  if (!checked) clearInvalid('bazinYield');
+                }}
+                aria-describedby="monitor-bazin-help"
+                className="relative mt-0.5 after:absolute after:-inset-2.5"
+              />
+            </div>
+            {bazinEnabled && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <DecimalInput
+                  id={ALERT_INPUT_ID.bazin_ceiling}
+                  kind="percent"
+                  label="DY-alvo"
+                  placeholder="6"
+                  value={bazinYield}
+                  onChange={(value) => {
+                    setBazinYield(value);
+                    clearInvalid('bazinYield');
+                  }}
+                  invalid={invalid.has('bazinYield')}
+                />
+              </div>
+            )}
+          </li>
+          <li className="space-y-3 px-4 py-4">
+            <div className="space-y-0.5">
+              <h3 className="text-sm font-medium text-foreground">Desconto vs preço justo</h3>
+              <p className="text-sm text-muted-foreground">
+                Avise quando o preço estiver pelo menos o percentual informado abaixo do preço justo estimado pelo modelo.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="min-w-0 space-y-1.5">
+                <Label htmlFor="monitor-fair-model" className="text-xs font-normal text-muted-foreground">
+                  Modelo
+                </Label>
+                <Select value={fairModel} onValueChange={(value) => setFairModel(value as FairValueModel)}>
+                  <SelectTrigger id="monitor-fair-model" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(FAIR_VALUE_MODEL_OPTIONS) as Array<[FairValueModel, string]>).map(([model, label]) => (
+                      <SelectItem key={model} value={model}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <DecimalInput
+                id={ALERT_INPUT_ID.fair_value_discount}
+                kind="percent"
+                label="Desconto mínimo"
+                placeholder="20"
+                value={fairDiscount}
+                onChange={(value) => {
+                  setFairDiscount(value);
+                  clearInvalid('fairDiscount');
+                }}
+                invalid={invalid.has('fairDiscount')}
+              />
+            </div>
+          </li>
+          <li className="space-y-3 px-4 py-4">
+            <div className="space-y-0.5">
+              <h3 className="text-sm font-medium text-foreground">Dividend yield de 12 meses</h3>
+              <p className="text-sm text-muted-foreground">
+                Avise quando os proventos dos últimos 12 meses divididos pelo preço atual passarem do mínimo.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <DecimalInput
+                id={ALERT_INPUT_ID.dy_ttm_above}
+                kind="percent"
+                label="DY mínimo"
+                placeholder="8"
+                value={dyTtm}
+                onChange={(value) => {
+                  setDyTtm(value);
+                  clearInvalid('dyTtm');
+                }}
+                invalid={invalid.has('dyTtm')}
+              />
+            </div>
+          </li>
+        </ul>
       </section>
 
       <section className="space-y-3" aria-labelledby="monitor-price">

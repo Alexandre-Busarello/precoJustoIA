@@ -40,7 +40,7 @@ export function MonitorLimitBanner({ current, max, showUpgrade = false }: Monito
             </span>{' '}
             {noun}.{' '}
             {isLimitReached
-              ? 'Desative um monitoramento para criar outro, ou veja os planos para ter monitoramentos sem limite.'
+              ? 'Pause ou remova um monitoramento para criar outro, ou veja os planos para ter monitoramentos sem limite.'
               : 'No Premium não há limite.'}
           </p>
         </div>

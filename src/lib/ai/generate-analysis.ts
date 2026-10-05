@@ -1,4 +1,3 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { prisma } from '@/lib/prisma';
 import { safeQueryWithParams } from '@/lib/prisma-wrapper';
@@ -648,6 +647,8 @@ export async function generateAnalysisInternal(params: {
 }) {
   const { ticker, name, sector, currentPrice, financials, includeStatements = false, fundamentalChangeContext } = params
 
+  validateGeminiConfig()
+
   // Validar dados obrigatórios
   if (!ticker || !name || !currentPrice || !financials) {
     throw new Error('Dados obrigatórios ausentes: ticker, name, currentPrice, financials')
@@ -788,34 +789,3 @@ export async function generateAnalysisInternal(params: {
   }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    validateGeminiConfig();
-
-    const body = await request.json();
-    const { ticker, name, sector, currentPrice, financials, includeStatements = false } = body;
-
-    // Usar função interna
-    const result = await generateAnalysisInternal({
-      ticker,
-      name,
-      sector,
-      currentPrice,
-      financials,
-      includeStatements
-    });
-
-    return NextResponse.json(result);
-
-  } catch (error) {
-    console.error('Erro na análise com IA:', error);
-    
-    return NextResponse.json(
-      { 
-        error: 'Erro ao gerar análise', 
-        details: error instanceof Error ? error.message : 'Erro desconhecido' 
-      },
-      { status: 500 }
-    );
-  }
-}

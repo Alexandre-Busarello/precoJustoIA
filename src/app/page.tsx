@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     locale: "pt_BR",
     images: [
       {
-        url: "https://precojusto.ai/og-image.jpg",
+        url: "https://precojusto.ai/icons/og-default.png",
         width: 1200,
         height: 630,
         alt: "Preço Justo AI: valuation de ações da B3",
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     title: "Preço Justo AI: preço justo e valuation de ações da B3",
     description: "O preço justo de cada ação da B3, calculado por 8 modelos de valuation.",
     creator: "@precojustoai",
-    images: ["https://precojusto.ai/og-image.jpg"],
+    images: ["https://precojusto.ai/icons/og-default.png"],
   },
   robots: {
     index: true,
@@ -62,7 +62,7 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-    canonical: "https://precojusto.ai",
+    canonical: "/",
   },
 }
 

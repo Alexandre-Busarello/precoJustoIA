@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     template: "%s | Preço Justo AI"
   },
   description: "Análise fundamentalista gratuita de ações B3 com IA. Modelos consagrados: Graham, Método Barsi, Fórmula Mágica + 5 estratégias. Rankings e comparador de +500 empresas.",
-  keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, como investir em ações, melhores ações B3, valuation ações, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações bovespa, comparador ações B3, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista",
+  keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, como investir em ações, valuation ações, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações bovespa, comparador ações B3, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista",
   authors: [{ name: "Preço Justo AI" }],
   creator: "Preço Justo AI",
   publisher: "Preço Justo AI",
@@ -51,24 +51,9 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  alternates: {
-    canonical: '/',
-  },
+  // O favicon vem de src/app/favicon.ico (convenção de arquivo do Next)
   icons: {
-    icon: [
-      {
-        url: '/favicon.ico',
-        type: 'image/x-icon',
-        sizes: 'any',
-      },
-    ],
-    shortcut: '/favicon.ico',
-    apple: [
-      {
-        url: '/favicon.ico',
-        sizes: '180x180',
-      },
-    ],
+    apple: [{ url: '/icons/apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
   },
   openGraph: {
     type: 'website',
@@ -79,7 +64,7 @@ export const metadata: Metadata = {
     description: 'Análise fundamentalista gratuita de ações B3 com IA. Modelos consagrados: Graham, Método Barsi, Fórmula Mágica + 5 estratégias. Rankings e comparador de +500 empresas.',
     images: [
       {
-        url: 'https://precojusto.ai/logo-preco-justo.png',
+        url: 'https://precojusto.ai/icons/og-default.png',
         width: 1200,
         height: 630,
         alt: 'Preço Justo AI - Análise Fundamentalista com IA',
@@ -90,7 +75,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Preço Justo AI - Análise Fundamentalista com IA',
     description: 'Plataforma completa de análise fundamentalista com IA para ações da B3.',
-    images: ['/logo-preco-justo.png'],
+    images: ['https://precojusto.ai/icons/og-default.png'],
     creator: '@PrecoJustoAI',
     site: '@PrecoJustoAI',
   },
@@ -104,9 +89,6 @@ export const metadata: Metadata = {
       'max-image-preview': 'large',
       'max-snippet': -1,
     },
-  },
-  verification: {
-    google: 'your-google-verification-code', // Substitua pelo seu código do Google Search Console
   },
   category: 'finance',
 };
@@ -129,26 +111,16 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <head>
-        {/* Favicon explícito para máxima compatibilidade com Google */}
-        <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon" />
-        <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-        <link rel="apple-touch-icon" href="/favicon.ico" sizes="180x180" />
-        <link rel="manifest" href="/site.webmanifest" />
-        <meta name="msapplication-TileColor" content="#ffffff" />
-        <meta name="msapplication-config" content="/browserconfig.xml" />
         <StructuredData type="website" />
         <StructuredData type="organization" />
         <StructuredData type="product" />
       </head>
       <body className="font-sans antialiased bg-background text-foreground">
-        {/* Google Analytics & Google Ads */}
+        {/* Um único gtag.js atende GA4 e Google Ads. A fila (dataLayer/gtag) nasce cedo
+            para que pixels de conversão disparados antes do carregamento não se percam. */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-G7T3PKSEY4"
-          strategy="afterInteractive"
-        />
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=AW-17611977676"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
         <Script id="google-tags" strategy="afterInteractive">
           {`

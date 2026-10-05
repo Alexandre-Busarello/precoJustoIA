@@ -62,11 +62,10 @@ const nextConfig: NextConfig = {
   ],
   async redirects() {
     return [
-      // {
-      //   source: '/:ticker',
-      //   destination: '/acao/:ticker',
-      //   permanent: true, // 301 redirect para SEO
-      // },
+      { source: '/upgrade', destination: '/checkout', statusCode: 301 },
+      { source: '/upgrade/:path*', destination: '/checkout', statusCode: 301 },
+      { source: '/backtesting-carteiras', destination: '/backtest', permanent: true },
+      { source: '/comparador-etfs', destination: '/comparador?tipo=etfs', permanent: true },
     ]
   },
   async rewrites() {

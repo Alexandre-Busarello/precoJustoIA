@@ -1,4 +1,3 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 
 // Validar se a API key do Gemini está configurada
@@ -110,6 +109,8 @@ export async function reviewAnalysisInternal(params: {
 }) {
   const { analysis, ticker, name } = params
 
+  validateGeminiConfig()
+
   // Validar dados obrigatórios
   if (!analysis || !ticker || !name) {
     throw new Error('Dados obrigatórios ausentes: analysis, ticker, name')
@@ -187,31 +188,3 @@ export async function reviewAnalysisInternal(params: {
   }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    validateGeminiConfig();
-
-    const body = await request.json();
-    const { analysis, ticker, name } = body;
-
-    // Usar função interna
-    const result = await reviewAnalysisInternal({
-      analysis,
-      ticker,
-      name
-    });
-
-    return NextResponse.json(result);
-
-  } catch (error) {
-    console.error('Erro na revisão da análise:', error);
-    
-    return NextResponse.json(
-      { 
-        error: 'Erro ao revisar análise', 
-        details: error instanceof Error ? error.message : 'Erro desconhecido' 
-      },
-      { status: 500 }
-    );
-  }
-}

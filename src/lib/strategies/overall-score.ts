@@ -1,6 +1,5 @@
 import { StrategyAnalysis } from "./types";
-import { toNumber } from "./base-strategy";
-import { BDRDataService } from "../bdr-data-service";
+import { isBDRTickerSymbol, toNumber } from "./base-strategy";
 
 // Interface para score geral
 export interface OverallScore {
@@ -1705,8 +1704,7 @@ function calculateAverageMetrics(
 
 // === FUNÇÃO PARA DETECTAR SE É BDR ===
 function isBDRTicker(ticker?: string | null): boolean {
-  if (!ticker) return false;
-  return BDRDataService.isBDR(ticker);
+  return isBDRTickerSymbol(ticker);
 }
 
 // === FUNÇÃO PARA OBTER BENCHMARKS SETORIAIS ===

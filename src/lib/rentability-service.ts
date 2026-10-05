@@ -9,16 +9,42 @@
  */
 
 import { prisma } from './prisma'
+import { getMacroAssumptions } from './finance/macro'
 import { PortfolioMetricsService } from './portfolio-metrics-service'
 import { getCompaniesData } from './rank-builder-service'
 import { toNumber } from './strategies/base-strategy'
 
 export type StrategySource = 'FIXED_RATE' | 'PORTFOLIO' | 'RANKING' | 'MANUAL_TICKERS'
 
+/**
+ * Piso das estimativas por carteira, ranking e tickers: 5% a.a. É uma hipótese de simulação, não uma garantia
+ * de retorno.
+ */
+export const SIMULATION_FLOOR_RATE = 0.05
+
+/** Fração do CDI que sobra após o IR de renda fixa na menor alíquota (15%, aplicações acima de 2 anos). */
+export const CDI_NET_FACTOR = 0.85
+
+/** CDI líquido de IR (fração a.a.) a partir do CDI bruto anual. */
+export function cdiNetRate(cdiAnnual: number): number {
+  return cdiAnnual * CDI_NET_FACTOR
+}
+
+/**
+ * CDI líquido (CDI × 0,85) com as premissas macro vigentes: a alternativa sem risco para comparar com a
+ * rentabilidade estimada. Nunca lança erro (as premissas caem para o fallback).
+ */
+export async function getCdiNetRate(): Promise<number> {
+  const macro = await getMacroAssumptions()
+  return cdiNetRate(macro.cdi)
+}
+
 export interface RentabilityResult {
   annualRate: number // Taxa anual (ex: 0.12 = 12%)
   source: StrategySource
   details?: {
+    /** CDI líquido de IR (fração a.a.), alternativa sem risco para comparação. */
+    cdiNetRate?: number
     portfolioId?: string
     portfolioName?: string
     rankingId?: string
@@ -135,7 +161,7 @@ export async function getPortfolioAverageReturn(
     const averageReturn = weightedReturn / totalAllocation
 
     return {
-      annualRate: Math.max(0.05, averageReturn), // Mínimo 5% ao ano
+      annualRate: Math.max(SIMULATION_FLOOR_RATE, averageReturn),
       source: 'PORTFOLIO',
       details: {
         portfolioId: portfolio.id,
@@ -205,7 +231,7 @@ export async function getRankingReturn(
     const averageReturn = totalReturn / count
 
     return {
-      annualRate: Math.max(0.05, averageReturn),
+      annualRate: Math.max(SIMULATION_FLOOR_RATE, averageReturn),
       source: 'RANKING',
       details: {
         rankingId: ranking.id,
@@ -264,7 +290,7 @@ export async function getTickersReturn(
     const averageReturn = totalReturn / count
 
     return {
-      annualRate: Math.max(0.05, averageReturn),
+      annualRate: Math.max(SIMULATION_FLOOR_RATE, averageReturn),
       source: 'MANUAL_TICKERS',
       details: {
         tickers: validTickers,
@@ -279,9 +305,22 @@ export async function getTickersReturn(
 }
 
 /**
- * Resolve rentabilidade baseada na estratégia configurada
+ * Resolve rentabilidade baseada na estratégia configurada, sempre acompanhada do CDI líquido
+ * (`details.cdiNetRate`) como alternativa sem risco.
  */
 export async function resolveRentability(params: {
+  strategyType: StrategySource
+  userId?: string
+  manualRate?: number
+  portfolioId?: string
+  rankingId?: string
+  manualTickers?: string[]
+}): Promise<RentabilityResult> {
+  const [result, cdiNet] = await Promise.all([resolveStrategyRentability(params), getCdiNetRate()])
+  return { ...result, details: { ...result.details, cdiNetRate: cdiNet } }
+}
+
+async function resolveStrategyRentability(params: {
   strategyType: StrategySource
   userId?: string
   manualRate?: number

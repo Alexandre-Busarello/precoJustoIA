@@ -46,20 +46,8 @@ interface CompanyPreviewResponse {
     gordon?: boolean;
     fundamentalist?: boolean;
   };
-  // Campos com blur (não retornar valores reais)
-  overallScore: null; // Sempre null para anônimo
-  valuation: {
-    status: 'green' | 'yellow' | 'red';
-    label: string;
-  };
-  technical: {
-    status: 'green' | 'yellow' | 'red';
-    label: string;
-  };
-  sentiment: {
-    status: 'green' | 'yellow' | 'red';
-    label: string;
-  };
+  // Preview anônimo: score, valuation, técnico e sentimento ficam só na página completa do ativo.
+  overallScore: null;
   currentPrice: number;
 }
 
@@ -72,7 +60,7 @@ export async function GET(
     const ticker = resolvedParams.ticker.toUpperCase();
 
     // Cache key para preview (sempre anônimo para landing page)
-    const cacheKey = `company-preview:v2:${ticker}`;
+    const cacheKey = `company-preview:v3:${ticker}`;
 
     // Verificar cache
     const cachedData = await cache.get<CompanyPreviewResponse>(cacheKey);
@@ -109,27 +97,27 @@ export async function GET(
       
       const trimmed = conclusion.trim();
       
-      // Se já está formatado (contém emojis ou markdown), retornar como está
-      if (trimmed.includes('✅') || trimmed.includes('⚠️') || trimmed.includes('📊') || trimmed.includes('**')) {
-        return trimmed;
+      // Já formatado (markdown): retornar como está, sem os emojis de versões antigas.
+      if (trimmed.includes('**')) {
+        return trimmed.replace(/^(✅|⚠️|📊)\s*/u, '');
       }
       
       // Formatar valores raw com labels descritivos
       switch (trimmed) {
         case 'AJUSTE_DIVIDENDOS':
-          return '✅ **Ajuste por Dividendos** - A variação de preço foi causada por ajuste de dividendos, não indicando perda de fundamento estrutural.';
+          return '**Ajuste por dividendos**: a variação de preço foi causada por ajuste de dividendos, sem indicar perda de fundamento estrutural.';
         case 'AJUSTE_BONIFICACAO':
-          return '✅ **Ajuste por Bonificação** - A variação de preço foi causada por ajuste após distribuição de ações gratuitas (bonificação), não indicando perda de fundamento estrutural.';
+          return '**Ajuste por bonificação**: a variação de preço foi causada por ajuste após distribuição de ações gratuitas (bonificação), sem indicar perda de fundamento estrutural.';
         case 'PERDA_DE_FUNDAMENTO':
-          return '⚠️ **PERDA DE FUNDAMENTO DETECTADA** - A análise indica possível deterioração dos fundamentos da empresa.';
+          return '**Possível perda de fundamento**: a análise indica possível deterioração dos fundamentos da empresa.';
         case 'VOLATILIDADE_ESPERADA':
-          return '📊 **Volatilidade Esperada** - A variação está dentro da volatilidade normal esperada para este ativo.';
+          return '**Volatilidade esperada**: a variação está dentro da volatilidade normal para este ativo.';
         case 'MOVIMENTO_MERCADO':
-          return '✅ **Movimento Normal de Mercado** - A variação reflete movimentos normais do mercado, sem indicação de problemas fundamentais.';
+          return '**Movimento normal de mercado**: a variação reflete movimentos normais do mercado, sem indicação de problemas fundamentais.';
         case 'NOTICIA_ATIPICA':
-          return '✅ **Reação a Notícia Atípica** - A variação foi causada por notícia específica, não indicando mudança estrutural nos fundamentos.';
+          return '**Reação a notícia atípica**: a variação foi causada por notícia específica, sem indicar mudança estrutural nos fundamentos.';
         case 'AJUSTE_TECNICO':
-          return '✅ **Ajuste Técnico** - A variação é um ajuste técnico normal, sem impacto nos fundamentos.';
+          return '**Ajuste técnico**: a variação é um ajuste técnico normal, sem impacto nos fundamentos.';
         default:
           return trimmed;
       }
@@ -276,7 +264,6 @@ export async function GET(
     });
 
     const currentPrice = analysisResult?.currentPrice || 0;
-    const overallScore = analysisResult?.overallScore?.score || null;
 
     // Extrair estratégias (versão anônima: apenas Graham e Bazin com status, outras apenas indicar existência)
     const strategies: CompanyPreviewResponse['strategies'] = {};
@@ -309,23 +296,6 @@ export async function GET(
         strategies.fundamentalist = true;
       }
     }
-
-    // Valores mockados para preview anônimo (não retornar valores reais)
-    // Usar valores atrativos com cores apropriadas para gerar interesse
-    const mockValuation = {
-      status: 'green' as const,
-      label: '+25.5%', // Mock: valor positivo atrativo
-    };
-
-    const mockTechnical = {
-      status: 'green' as const,
-      label: 'Compra', // Mock: status positivo
-    };
-
-    const mockSentiment = {
-      status: 'green' as const,
-      label: 'Positivo', // Mock: sentimento positivo
-    };
 
     const response: CompanyPreviewResponse = {
       success: true,
@@ -405,16 +375,13 @@ export async function GET(
         
         return {
           id: flag.id,
-          flagType: 'Situação Crítica Detectada pela IA', // Título amigável
+          flagType: 'Situação crítica detectada pela IA',
           reason: friendlyReason,
           reportId: flag.reportId,
         };
       }),
       strategies,
-      overallScore: null, // Sempre null para anônimo (com blur no frontend)
-      valuation: mockValuation, // Valores mockados para preview
-      technical: mockTechnical, // Valores mockados para preview
-      sentiment: mockSentiment, // Valores mockados para preview
+      overallScore: null,
       currentPrice,
     };
 

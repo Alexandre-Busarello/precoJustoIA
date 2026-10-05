@@ -15,13 +15,24 @@ export interface OverallScore {
     | "Péssimo";
   strengths: string[];
   weaknesses: string[];
-  recommendation:
-    | "Empresa Excelente"
-    | "Empresa Boa"
-    | "Empresa Regular"
-    | "Empresa Fraca"
-    | "Empresa Péssima";
+  /** Mantido por compatibilidade: tem o mesmo valor de `qualityLabel` (nota de qualidade, não recomendação). */
+  recommendation: QualityLabel;
+  /** Rótulo de qualidade derivado da nota ("Qualidade alta", "Qualidade boa"…). */
+  qualityLabel?: QualityLabel;
+  /** Critérios com dado disponível (`used`) entre os aplicáveis (`total`): "nota baseada em X de Y critérios". */
+  dataCoverage?: DataCoverage;
   statementsAnalysis?: StatementsAnalysis; // Análise das demonstrações financeiras
+}
+
+export type QualityLabel =
+  | "Qualidade alta"
+  | "Qualidade boa"
+  | "Qualidade moderada"
+  | "Qualidade baixa";
+
+export interface DataCoverage {
+  used: number;
+  total: number;
 }
 
 // Interface para dados financeiros
@@ -4091,7 +4102,135 @@ export interface PenaltyInfo {
   flagId: string;
 }
 
+
+/** Critérios que compõem o score geral. */
+export type OverallCriterion =
+  | "graham"
+  | "lowPE"
+  | "magicFormula"
+  | "fcd"
+  | "fundamentalist"
+  | "statements"
+  | "dividendYield"
+  | "barsi"
+  | "gordon";
+
+const DIVIDEND_CRITERIA: readonly OverallCriterion[] = ["dividendYield", "barsi", "gordon"];
+
+/**
+ * Pesos relativos antes da normalização. BDRs dão menos peso a valuation e dividendos (múltiplos naturalmente
+ * mais altos e empresas que reinvestem mais) e mais peso à qualidade operacional.
+ */
+const BASE_WEIGHTS: Record<"br" | "bdr", Record<OverallCriterion, number>> = {
+  br: {
+    graham: 8,
+    lowPE: 15,
+    magicFormula: 13,
+    fcd: 10,
+    fundamentalist: 20,
+    statements: 20,
+    dividendYield: 4,
+    barsi: 4,
+    gordon: 1,
+  },
+  bdr: {
+    graham: 5,
+    lowPE: 10,
+    magicFormula: 18,
+    fcd: 6,
+    fundamentalist: 25,
+    statements: 26,
+    dividendYield: 2.5,
+    barsi: 2.5,
+    gordon: 1,
+  },
+};
+
+/**
+ * Pesos normalizados (somam 1) dos critérios aplicáveis. Sem estratégias de dividendos, o peso delas é
+ * redistribuído proporcionalmente entre os demais critérios.
+ */
+export function overallScoreWeights({
+  isBDR = false,
+  includeDividends = true,
+}: { isBDR?: boolean; includeDividends?: boolean } = {}): Record<OverallCriterion, number> {
+  const base = BASE_WEIGHTS[isBDR ? "bdr" : "br"];
+  const keys = Object.keys(base) as OverallCriterion[];
+  const applicable = keys.filter((key) => includeDividends || !DIVIDEND_CRITERIA.includes(key));
+  const total = applicable.reduce((acc, key) => acc + base[key], 0);
+  const weights = {} as Record<OverallCriterion, number>;
+  for (const key of keys) weights[key] = applicable.includes(key) ? base[key] / total : 0;
+  return weights;
+}
+
+/** Rótulo de qualidade pela nota final (mesmos cortes das notas A, B, C e D/F). */
+export function qualityLabelFromScore(score: number): QualityLabel {
+  if (score >= 85) return "Qualidade alta";
+  if (score >= 70) return "Qualidade boa";
+  if (score >= 50) return "Qualidade moderada";
+  return "Qualidade baixa";
+}
+
+function gradeFromScore(score: number): { grade: OverallScore["grade"]; classification: OverallScore["classification"] } {
+  if (score >= 95) return { grade: "A+", classification: "Excelente" };
+  if (score >= 90) return { grade: "A", classification: "Excelente" };
+  if (score >= 85) return { grade: "A-", classification: "Muito Bom" };
+  if (score >= 80) return { grade: "B+", classification: "Muito Bom" };
+  if (score >= 75) return { grade: "B", classification: "Bom" };
+  if (score >= 70) return { grade: "B-", classification: "Bom" };
+  if (score >= 65) return { grade: "C+", classification: "Regular" };
+  if (score >= 60) return { grade: "C", classification: "Regular" };
+  if (score >= 50) return { grade: "C-", classification: "Regular" };
+  if (score >= 30) return { grade: "D", classification: "Fraco" };
+  return { grade: "F", classification: "Péssimo" };
+}
+
+const CRITERION_NAMES: Record<OverallCriterion, string> = {
+  graham: "Graham (Valor Intrínseco)",
+  dividendYield: "Dividend Yield",
+  lowPE: "Low P/E",
+  magicFormula: "Fórmula Mágica",
+  fcd: "Fluxo de Caixa Descontado",
+  gordon: "Gordon (Dividendos)",
+  barsi: "Método Barsi",
+  fundamentalist: "Fundamentalista 3+1",
+  statements: "Demonstrações Financeiras",
+};
+
+const CRITERION_DESCRIPTIONS: Record<OverallCriterion, string> = {
+  graham: "Compara o preço com o valor intrínseco de Graham (raiz de 22,5 × LPA × VPA)",
+  dividendYield: "Analisa a qualidade e a sustentabilidade dos dividendos pagos",
+  lowPE: "Verifica se o P/L está entre 3 e 15 (25 para BDRs), com filtros de rentabilidade, margem, liquidez e endividamento",
+  magicFormula: "Fórmula de Greenblatt: combina retorno sobre o capital (ROIC) alto com earnings yield (EBIT/EV) alto",
+  fcd: "Calcula o valor presente dos fluxos de caixa futuros da empresa",
+  gordon: "Valuation baseado no crescimento perpétuo de dividendos",
+  barsi: "Método Barsi: dividendos consistentes em setores perenes, com preço-teto pelo dividend yield",
+  fundamentalist: "Análise de qualidade, preço, endividamento e dividendos",
+  statements: "Análise dos balanços, DRE e demonstrações de fluxo de caixa",
+};
+
+/**
+ * Penalização progressiva quando o potencial (upside, em %) é pequeno: < 5% → −50%, < 10% → −25%,
+ * < 15% → −10%, < 20% → −5% do score do modelo.
+ */
+function progressivePenalty(upside: number | null | undefined, score: number): number {
+  if (upside === null || upside === undefined || upside >= 20) return score;
+  let penaltyPercent = 0.05;
+  if (upside < 5) penaltyPercent = 0.5;
+  else if (upside < 10) penaltyPercent = 0.25;
+  else if (upside < 15) penaltyPercent = 0.1;
+  return Math.max(0, Math.round(score * (1 - penaltyPercent)));
+}
+
 // === FUNÇÃO CENTRALIZADA PARA CALCULAR SCORE GERAL ===
+/**
+ * Score geral (0-100) pela média ponderada dos critérios com dado disponível, seguida das penalizações por
+ * endividamento, margem, risco das demonstrações e flag de perda de fundamentos.
+ *
+ * - Os pesos somam 1 (com ou sem estratégias de dividendos).
+ * - Critério sem dado é neutro: sai do numerador e do denominador, e `dataCoverage` informa quantos foram usados.
+ * - O sentimento de mercado (`financialData.youtubeAnalysis`) não entra na nota; é exibido à parte.
+ */
 export function calculateOverallScore(
   strategies: {
     graham: StrategyAnalysis | null;
@@ -4101,7 +4240,7 @@ export function calculateOverallScore(
     fcd: StrategyAnalysis | null;
     gordon: StrategyAnalysis | null;
     fundamentalist: StrategyAnalysis | null;
-    barsi: StrategyAnalysis | null;
+    barsi?: StrategyAnalysis | null;
   },
   financialData: FinancialData,
   currentPrice: number,
@@ -4109,958 +4248,282 @@ export function calculateOverallScore(
   includeBreakdown: boolean = false,
   activeFlag?: { id: string; reason: string } | null
 ): OverallScore | OverallScoreWithBreakdown {
-  // Verificar se há análise do YouTube
-  const hasYouTubeAnalysis = !!financialData.youtubeAnalysis?.score;
-  // Detectar se é BDR para ajustar pesos das estratégias e penalizações
-  const isBDR = statementsData?.company?.ticker 
-    ? isBDRTicker(statementsData.company.ticker) 
-    : false;
+  const isBDR = statementsData?.company?.ticker ? isBDRTicker(statementsData.company.ticker) : false;
 
-  // Se há YouTube, redistribuir pesos: 10% YouTube + 90% distribuído proporcionalmente
-  const baseMultiplier = hasYouTubeAnalysis ? 0.9 : 1.0;
-
-  // Verificar condições para estratégias de dividendos
+  // Estratégias de dividendos só entram quando a empresa tem lucro e payout relevante (> 30%).
   const payout = financialData.payout ?? null;
   const lpa = financialData.lpa ?? null;
-  const dy = financialData.dy ?? null; // Dividend yield
+  const dy = financialData.dy ?? null;
   const hasPositiveProfit = lpa !== null && lpa > 0;
-  const hasRelevantPayout = payout !== null && payout > 0.30; // > 30%
-  
-  // Lógica condicional: considerar estratégias de dividendos apenas se:
-  // - Empresa tem lucro positivo E payout relevante (> 30%)
-  // Se não tem lucro OU não tem payout relevante, significa problemas financeiros e deve penalizar
+  const hasKnownLoss = lpa !== null && lpa <= 0;
+  const hasRelevantPayout = payout !== null && payout > 0.3;
   const shouldConsiderDividendStrategies = hasPositiveProfit && hasRelevantPayout;
-  
-  // Se empresa tem lucro positivo mas payout < 30%, é sinal que reinveste (não penalizar, mas não considerar estratégias de dividendos)
-  // Também considerar reinvestimento se payout for zero OU dividend yield for zero (são equivalentes quando payout é zero)
-  const hasZeroPayout = payout === 0;
+  // Lucro positivo com payout baixo ou zero indica reinvestimento: não penaliza, só deixa os dividendos de fora.
+  const hasLowPayout = payout !== null && payout >= 0 && payout <= 0.3;
   const hasZeroDividendYield = dy !== null && dy === 0;
-  const hasLowPayout = payout !== null && payout > 0 && payout <= 0.30;
-  const isReinvesting = hasPositiveProfit && (hasLowPayout || hasZeroPayout || hasZeroDividendYield);
+  const isReinvesting = hasPositiveProfit && (hasLowPayout || hasZeroDividendYield);
 
-  // === AJUSTE DE PESOS BASE PARA BDRs ===
-  // Para BDRs (mercado internacional), reduzir peso de estratégias baseadas em valuation
-  // e aumentar peso de estratégias baseadas em qualidade operacional
-  let baseWeights = {
-    graham: 0.08,
-    lowPE: 0.15,
-    magicFormula: 0.13,
-    fcd: 0.10,
-    fundamentalist: 0.20,
-    statements: 0.20,
-  };
+  const weights = overallScoreWeights({ isBDR, includeDividends: shouldConsiderDividendStrategies });
+  const applicable = (Object.keys(weights) as OverallCriterion[]).filter((key) => weights[key] > 0);
 
-  if (isBDR) {
-    // Ajustar pesos para mercado internacional:
-    // - Reduzir valuation strategies (Graham, FCD): múltiplos naturalmente mais altos
-    // - Reduzir Low PE: P/E médio é mais alto no mercado americano (~20-25 vs ~10-15 Brasil)
-    // - Aumentar qualidade operacional (Magic Formula, Fundamentalist, Statements): mais relevante para empresas internacionais
-    baseWeights = {
-      graham: 0.05,        // 5% (vs 8% Brasil) - valuation menos relevante com múltiplos altos
-      lowPE: 0.10,         // 10% (vs 15% Brasil) - P/E médio mais alto no mercado americano
-      magicFormula: 0.18,  // 18% (vs 13% Brasil) - qualidade operacional mais importante
-      fcd: 0.06,           // 6% (vs 10% Brasil) - valuation menos relevante
-      fundamentalist: 0.25, // 25% (vs 20% Brasil) - análise fundamentalista mais relevante
-      statements: 0.26,    // 26% (vs 20% Brasil) - demonstrações financeiras mais importantes
-    };
-  }
-
-  // Distribuir peso das estratégias de dividendos entre dividendYield, barsi e gordon
-  // Gordon deve ter menor peso
-  // Total de peso para dividendos: 0.08 (dividendYield original) + 0.01 (gordon original) = 0.09
-  // Nova distribuição: dividendYield: 4%, barsi: 4%, gordon: 1% = 9% total
-  // Para BDRs, reduzir peso de dividendos também (empresas americanas reinvestem mais)
-  const dividendStrategiesBaseWeight = isBDR ? 0.06 : 0.09; // 6% para BDRs, 9% para Brasil
-  const dividendStrategiesTotalWeight = dividendStrategiesBaseWeight * baseMultiplier;
-  const dividendYieldWeight = shouldConsiderDividendStrategies ? (isBDR ? 0.025 : 0.04) * baseMultiplier : 0;
-  const barsiWeight = shouldConsiderDividendStrategies ? (isBDR ? 0.025 : 0.04) * baseMultiplier : 0;
-  const gordonWeight = shouldConsiderDividendStrategies ? (isBDR ? 0.01 : 0.01) * baseMultiplier : 0;
-  
-  // Redistribuir o peso não usado das estratégias de dividendos para outras estratégias
-  // Se não considerar estratégias de dividendos, redistribuir o peso proporcionalmente
-  const unusedDividendWeight = shouldConsiderDividendStrategies ? 0 : dividendStrategiesTotalWeight;
-  // Peso total das outras estratégias (sem dividendos e sem YouTube)
-  // Excluir FCD da redistribuição pois ele já tem peso fixo
-  const redistributionBase = baseWeights.graham + baseWeights.lowPE + baseWeights.magicFormula + baseWeights.fundamentalist + baseWeights.statements;
-  const redistributionFactor = unusedDividendWeight > 0 && redistributionBase > 0 
-    ? 1.0 + (unusedDividendWeight / redistributionBase) 
-    : 1.0;
-  
-  // Calcular pesos finais com redistribuição proporcional
-  const weights = {
-    graham: baseWeights.graham * baseMultiplier * redistributionFactor,
-    dividendYield: dividendYieldWeight,
-    lowPE: baseWeights.lowPE * baseMultiplier * redistributionFactor,
-    magicFormula: baseWeights.magicFormula * baseMultiplier * redistributionFactor,
-    fcd: baseWeights.fcd * baseMultiplier * redistributionFactor,
-    gordon: gordonWeight,
-    barsi: barsiWeight,
-    fundamentalist: baseWeights.fundamentalist * baseMultiplier * redistributionFactor,
-    statements: baseWeights.statements * baseMultiplier * redistributionFactor,
-    youtube: hasYouTubeAnalysis ? 0.1 : 0, // 10% se disponível, 0% caso contrário
-  };
-
-  let totalScore = 0;
-  let totalWeight = 0;
   const strengths: string[] = [];
   const weaknesses: string[] = [];
-  const contributions: ScoreContribution[] = [];
-
-  // Função auxiliar para verificar se o preço atual está compatível com o preço justo
-  const isPriceCompatibleWithFairValue = (
-    fairValue: number | null,
-    upside: number | null
-  ): boolean => {
-    if (!fairValue || !upside || currentPrice <= 0) return false;
-    // Considera compatível se o upside for positivo (preço atual menor que preço justo)
-    // ou se o downside for menor que 20% (preço atual até 20% acima do preço justo)
-    return upside >= 10;
+  const used: Array<{ key: OverallCriterion; score: number; eligible: boolean }> = [];
+  const addCriterion = (key: OverallCriterion, score: number, eligible: boolean) => {
+    if (weights[key] > 0) used.push({ key, score, eligible });
   };
 
   /**
-   * Calcula penalização progressiva baseada no upside
-   * @param upside - Upside em porcentagem (pode ser null)
-   * @param originalScore - Score original da estratégia
-   * @returns Score após aplicar penalização progressiva
+   * Modelos de valuation com preço justo. Sem preço justo, o modelo vale 0 quando a empresa tem prejuízo conhecido
+   * (o modelo não se aplica por fundamento ruim) e fica de fora quando faltam dados.
    */
-  const calculateProgressivePenalty = (
-    upside: number | null,
-    originalScore: number
-  ): number => {
-    if (upside === null || upside === undefined) {
-      return originalScore; // Sem penalização se upside não calculável
-    }
-    
-    let penaltyPercent = 0;
-    
-    if (upside < 5) {
-      penaltyPercent = 0.50; // 50% de penalização
-    } else if (upside < 10) {
-      penaltyPercent = 0.25; // 25% de penalização
-    } else if (upside < 15) {
-      penaltyPercent = 0.10; // 10% de penalização
-    } else if (upside < 20) {
-      penaltyPercent = 0.05; // 5% de penalização
-    }
-    
-    // Aplicar penalização: reduzir o score pela porcentagem calculada
-    const penalizedScore = originalScore * (1 - penaltyPercent);
-    
-    // Garantir que o score não fique negativo
-    return Math.max(0, Math.round(penalizedScore));
+  const valuationScore = (analysis: StrategyAnalysis): number | null => {
+    if (analysis.fairValue) return progressivePenalty(analysis.upside, analysis.score);
+    return hasKnownLoss ? 0 : null;
   };
 
-  // Função auxiliar para obter descrição da estratégia
-  const getStrategyDescription = (key: string): string => {
-    const descriptions: Record<string, string> = {
-      graham: 'Avalia se a ação está sendo negociada abaixo do seu valor intrínseco calculado',
-      dividendYield: 'Analisa a qualidade e sustentabilidade dos dividendos pagos',
-      lowPE: 'Verifica se o P/L está abaixo da média do setor indicando subavaliação',
-      magicFormula: 'Combina ROE elevado com P/L baixo para identificar boas empresas baratas',
-      fcd: 'Calcula o valor presente dos fluxos de caixa futuros da empresa',
-      gordon: 'Valuation baseado no crescimento perpétuo de dividendos',
-      barsi: 'Método Barsi: Buy and Hold de dividendos em setores perenes com preço teto',
-      fundamentalist: 'Análise completa de qualidade, preço, endividamento e dividendos',
-      statements: 'Análise profunda dos balanços, DRE e demonstrações de fluxo de caixa',
-      youtube: 'Sentimento agregado de múltiplas fontes especializadas de mercado'
-    };
-    return descriptions[key] || '';
-  };
-
-  // Graham Analysis
-  if (strategies.graham) {
-    const grahamWeight = weights.graham;
-    const isPriceCompatible = isPriceCompatibleWithFairValue(
-      strategies.graham.fairValue,
-      strategies.graham.upside
-    );
-
-    // Aplicar penalização progressiva sempre que upside < 20
-    let grahamScoreUsed = strategies.graham.score;
-    if (strategies.graham.fairValue && strategies.graham.upside !== null && strategies.graham.upside !== undefined) {
-      if (strategies.graham.upside < 20) {
-        grahamScoreUsed = calculateProgressivePenalty(strategies.graham.upside, strategies.graham.score);
-      }
-    }
-
-    if (isPriceCompatible) {
-      const grahamContribution = grahamScoreUsed * grahamWeight;
-      totalScore += grahamContribution;
-
-      if (strategies.graham.isEligible && strategies.graham.score >= 80) {
-        strengths.push("Fundamentos sólidos (Graham)");
-      } else if (strategies.graham.score < 60) {
-        weaknesses.push("Fundamentos fracos (Graham)");
-      }
-    } else if (strategies.graham.fairValue) {
-      const grahamContribution = grahamScoreUsed * grahamWeight;
-      totalScore += grahamContribution;
-
-      if (
-        strategies.graham.fairValue &&
-        strategies.graham.upside &&
-        strategies.graham.upside < -20
-      ) {
+  const graham = strategies.graham;
+  if (graham) {
+    const score = valuationScore(graham);
+    if (score !== null) {
+      addCriterion("graham", score, !!graham.isEligible);
+      if (graham.fairValue && graham.upside !== null && graham.upside !== undefined && graham.upside < -20) {
         weaknesses.push("Margem de segurança negativa (Graham)");
+      } else if (graham.fairValue && graham.upside !== null && graham.upside >= 10) {
+        if (graham.isEligible && graham.score >= 80) strengths.push("Fundamentos sólidos (Graham)");
+        else if (graham.score < 60) weaknesses.push("Fundamentos fracos (Graham)");
       }
-    }
-    totalWeight += grahamWeight;
-    
-    if (includeBreakdown) {
-      const grahamPoints = grahamScoreUsed * grahamWeight;
-      contributions.push({
-        name: 'Graham (Valor Intrínseco)',
-        score: grahamScoreUsed,
-        weight: grahamWeight,
-        points: grahamPoints,
-        eligible: strategies.graham.isEligible || false,
-        description: getStrategyDescription('graham')
-      });
     }
   }
 
-  // Dividend Yield Analysis - Condicional baseado em payout e lucro
-  if (strategies.dividendYield && shouldConsiderDividendStrategies) {
-    const dyWeight = weights.dividendYield;
-    const dyContribution = strategies.dividendYield.score * dyWeight;
-    totalScore += dyContribution;
-    totalWeight += dyWeight;
-
-    if (
-      strategies.dividendYield.isEligible &&
-      strategies.dividendYield.score >= 80
-    ) {
-      strengths.push("Dividendos sustentáveis");
-    } else if (strategies.dividendYield.score < 60) {
-      weaknesses.push("Dividendos em risco");
-    }
-    
-    if (includeBreakdown) {
-      contributions.push({
-        name: 'Dividend Yield',
-        score: strategies.dividendYield.score,
-        weight: dyWeight,
-        points: dyContribution,
-        eligible: strategies.dividendYield.isEligible || false,
-        description: getStrategyDescription('dividendYield')
-      });
-    }
+  const dividendYield = strategies.dividendYield;
+  if (shouldConsiderDividendStrategies && dividendYield) {
+    addCriterion("dividendYield", dividendYield.score, !!dividendYield.isEligible);
+    if (dividendYield.isEligible && dividendYield.score >= 80) strengths.push("Dividendos sustentáveis");
+    else if (dividendYield.score < 60) weaknesses.push("Dividendos em risco");
   } else if (!shouldConsiderDividendStrategies && !isReinvesting) {
-    // Se não tem lucro OU não tem payout relevante, significa problemas financeiros
-    // Aplicar penalização pelos indicadores de dividendos
-    if (!hasPositiveProfit) {
-      weaknesses.push("Empresa sem lucro - indicadores de dividendos não aplicáveis");
-    } else if (!hasRelevantPayout) {
-      weaknesses.push("Payout muito baixo - empresa pode ter problemas financeiros");
+    if (hasKnownLoss) weaknesses.push("Empresa sem lucro: indicadores de dividendos não aplicáveis");
+    else if (hasPositiveProfit && payout !== null && !hasRelevantPayout) {
+      weaknesses.push("Payout muito baixo: empresa pode ter problemas financeiros");
     }
   }
 
-  // Low PE Analysis (não tem fairValue, sempre considera)
-  if (strategies.lowPE) {
-    const lowPEWeight = weights.lowPE;
-    const lowPEContribution = strategies.lowPE.score * lowPEWeight;
-    totalScore += lowPEContribution;
-    totalWeight += lowPEWeight;
+  const lowPE = strategies.lowPE;
+  if (lowPE) {
+    addCriterion("lowPE", lowPE.score, !!lowPE.isEligible);
+    if (lowPE.isEligible && lowPE.score >= 80) strengths.push("P/L baixo com qualidade");
+    else if (lowPE.score < 60) weaknesses.push("Não atende aos critérios do modelo P/L baixo");
+  }
 
-    if (strategies.lowPE.isEligible && strategies.lowPE.score >= 80) {
-      strengths.push("Boa oportunidade de valor");
-    } else if (strategies.lowPE.score < 60) {
-      weaknesses.push("Possível value trap");
-    }
-    
-    if (includeBreakdown) {
-      contributions.push({
-        name: 'Low P/E',
-        score: strategies.lowPE.score,
-        weight: lowPEWeight,
-        points: lowPEContribution,
-        eligible: strategies.lowPE.isEligible || false,
-        description: getStrategyDescription('lowPE')
-      });
+  const magicFormula = strategies.magicFormula;
+  if (magicFormula) {
+    addCriterion("magicFormula", magicFormula.score, !!magicFormula.isEligible);
+    if (magicFormula.isEligible && magicFormula.score >= 80) strengths.push("Excelente qualidade operacional");
+    else if (magicFormula.score < 60) weaknesses.push("Qualidade operacional questionável");
+  }
+
+  const fcd = strategies.fcd;
+  if (fcd) {
+    const score = valuationScore(fcd);
+    if (score !== null) {
+      addCriterion("fcd", score, !!fcd.isEligible);
+      if (fcd.fairValue && fcd.upside !== null && fcd.upside !== undefined) {
+        if (fcd.upside > 20) strengths.push("Alto potencial pelo fluxo de caixa descontado");
+        else if (fcd.upside < 10) weaknesses.push("Preço com pouca margem de segurança (FCD)");
+      }
     }
   }
 
-  // Magic Formula Analysis (não tem fairValue, sempre considera)
-  if (strategies.magicFormula) {
-    const mfWeight = weights.magicFormula;
-    const mfContribution = strategies.magicFormula.score * mfWeight;
-    totalScore += mfContribution;
-    totalWeight += mfWeight;
-
-    if (
-      strategies.magicFormula.isEligible &&
-      strategies.magicFormula.score >= 80
-    ) {
-      strengths.push("Excelente qualidade operacional");
-    } else if (strategies.magicFormula.score < 60) {
-      weaknesses.push("Qualidade operacional questionável");
+  const gordon = strategies.gordon;
+  if (shouldConsiderDividendStrategies && gordon) {
+    let score: number | null = hasKnownLoss ? 0 : null;
+    if (gordon.fairValue) {
+      // Gordon não usa a penalização progressiva: abaixo de 10% de potencial (exclusive) o modelo vale 25.
+      score = gordon.upside !== null && gordon.upside !== undefined && gordon.upside < 10 ? 25 : gordon.score;
     }
-    
-    if (includeBreakdown) {
-      contributions.push({
-        name: 'Fórmula Mágica',
-        score: strategies.magicFormula.score,
-        weight: mfWeight,
-        points: mfContribution,
-        eligible: strategies.magicFormula.isEligible || false,
-        description: getStrategyDescription('magicFormula')
-      });
+    if (score !== null) {
+      addCriterion("gordon", score, !!gordon.isEligible);
+      if (gordon.fairValue && gordon.upside !== null && gordon.upside !== undefined) {
+        if (gordon.upside < 0) weaknesses.push("Preço acima do valor justo por dividendos (Gordon)");
+        else if (gordon.upside >= 10 && gordon.isEligible && gordon.score >= 80) strengths.push("Excelente para renda passiva (Gordon)");
+        else if (gordon.upside >= 10 && gordon.score < 60) weaknesses.push("Dividendos inconsistentes");
+      }
     }
   }
 
-  // FCD Analysis
-  if (strategies.fcd) {
-    const fcdWeight = weights.fcd;
-    const isPriceCompatible = isPriceCompatibleWithFairValue(
-      strategies.fcd.fairValue,
-      strategies.fcd.upside
-    );
-
-    // Aplicar penalização progressiva sempre que upside < 20
-    let fcdScoreUsed = strategies.fcd.score;
-    if (strategies.fcd.fairValue && strategies.fcd.upside !== null && strategies.fcd.upside !== undefined) {
-      if (strategies.fcd.upside < 20) {
-        fcdScoreUsed = calculateProgressivePenalty(strategies.fcd.upside, strategies.fcd.score);
+  const barsi = strategies.barsi;
+  if (shouldConsiderDividendStrategies && barsi) {
+    const score = valuationScore(barsi);
+    if (score !== null) {
+      addCriterion("barsi", score, !!barsi.isEligible);
+      if (barsi.fairValue && barsi.upside !== null && barsi.upside !== undefined) {
+        if (barsi.upside < 0) weaknesses.push("Preço acima do teto do Método Barsi");
+        else if (barsi.upside >= 10 && barsi.isEligible && barsi.score >= 80) strengths.push("Aprovada no Método Barsi");
+        else if (barsi.upside >= 10 && barsi.score < 60) weaknesses.push("Não atende critérios do Método Barsi");
       }
-    }
-
-    // Sempre inclui o peso, mas penaliza se incompatível
-    if (isPriceCompatible) {
-      const fcdContribution = fcdScoreUsed * fcdWeight;
-      totalScore += fcdContribution;
-
-      if (
-        strategies.fcd.fairValue &&
-        strategies.fcd.upside &&
-        strategies.fcd.upside > 20
-      ) {
-        strengths.push("Alto potencial de valorização");
-      }
-    } else if (strategies.fcd.fairValue) {
-      const fcdContribution = fcdScoreUsed * fcdWeight;
-      totalScore += fcdContribution;
-
-      if (
-        strategies.fcd.fairValue &&
-        strategies.fcd.upside &&
-        strategies.fcd.upside < 10
-      ) {
-        weaknesses.push("Preço com pouca margem de segurança (FCD)");
-      }
-    }
-    totalWeight += fcdWeight;
-    
-    if (includeBreakdown) {
-      contributions.push({
-        name: 'Fluxo de Caixa Descontado',
-        score: fcdScoreUsed,
-        weight: fcdWeight,
-        points: fcdScoreUsed * fcdWeight,
-        eligible: strategies.fcd.isEligible || false,
-        description: getStrategyDescription('fcd')
-      });
     }
   }
 
-  // Gordon Analysis - Condicional baseado em payout e lucro
-  if (strategies.gordon && shouldConsiderDividendStrategies) {
-    const gordonWeight = weights.gordon;
-    const isPriceCompatible = isPriceCompatibleWithFairValue(
-      strategies.gordon.fairValue,
-      strategies.gordon.upside
-    );
-
-    let gordonScoreUsed = strategies.gordon.score;
-    // Sempre inclui o peso, mas penaliza se incompatível
-    if (isPriceCompatible) {
-      const gordonContribution = strategies.gordon.score * gordonWeight;
-      totalScore += gordonContribution;
-
-      if (strategies.gordon.isEligible && strategies.gordon.score >= 80) {
-        strengths.push("Excelente para renda passiva (Gordon)");
-      } else if (strategies.gordon.score < 60) {
-        weaknesses.push("Dividendos inconsistentes");
-      }
-    } else if (strategies.gordon.fairValue) {
-      // Penaliza com score baixo se preço incompatível
-      gordonScoreUsed =
-        strategies.gordon.fairValue &&
-        strategies.gordon.upside &&
-        strategies.gordon.upside < 15
-          ? 25
-          : strategies.gordon.score;
-      const gordonContribution = gordonScoreUsed * gordonWeight;
-      totalScore += gordonContribution;
-
-      if (
-        strategies.gordon.fairValue &&
-        strategies.gordon.upside &&
-        strategies.gordon.upside < 0
-      ) {
-        weaknesses.push("Preço abaixo do valor justo por dividendos");
-      }
-    }
-    totalWeight += gordonWeight;
-    
-    if (includeBreakdown) {
-      contributions.push({
-        name: 'Gordon (Dividendos)',
-        score: gordonScoreUsed,
-        weight: gordonWeight,
-        points: gordonScoreUsed * gordonWeight,
-        eligible: strategies.gordon.isEligible || false,
-        description: getStrategyDescription('gordon')
-      });
-    }
+  const fundamentalist = strategies.fundamentalist;
+  if (fundamentalist) {
+    addCriterion("fundamentalist", fundamentalist.score, !!fundamentalist.isEligible);
+    if (fundamentalist.isEligible && fundamentalist.score >= 80) strengths.push("Excelente análise fundamentalista simplificada");
+    else if (fundamentalist.score >= 70) strengths.push("Boa análise fundamentalista");
+    else if (fundamentalist.score < 60) weaknesses.push("Fundamentos fracos na análise 3+1");
   }
 
-  // Barsi Analysis - Condicional baseado em payout e lucro
-  if (strategies.barsi && shouldConsiderDividendStrategies) {
-    const barsiWeight = weights.barsi;
-    const isPriceCompatible = isPriceCompatibleWithFairValue(
-      strategies.barsi.fairValue,
-      strategies.barsi.upside
-    );
-
-    // Aplicar penalização progressiva sempre que upside < 20 (usando discountFromCeiling)
-    let barsiScoreUsed = strategies.barsi.score;
-    if (strategies.barsi.fairValue && strategies.barsi.upside !== null && strategies.barsi.upside !== undefined) {
-      if (strategies.barsi.upside < 20) {
-        barsiScoreUsed = calculateProgressivePenalty(strategies.barsi.upside, strategies.barsi.score);
-      }
-    }
-
-    // Sempre inclui o peso, mas penaliza se incompatível
-    if (isPriceCompatible) {
-      const barsiContribution = barsiScoreUsed * barsiWeight;
-      totalScore += barsiContribution;
-
-      if (strategies.barsi.isEligible && strategies.barsi.score >= 80) {
-        strengths.push("Aprovada no Método Barsi");
-      } else if (strategies.barsi.score < 60) {
-        weaknesses.push("Não atende critérios do Método Barsi");
-      }
-    } else if (strategies.barsi.fairValue) {
-      const barsiContribution = barsiScoreUsed * barsiWeight;
-      totalScore += barsiContribution;
-
-      if (
-        strategies.barsi.fairValue &&
-        strategies.barsi.upside &&
-        strategies.barsi.upside < 0
-      ) {
-        weaknesses.push("Preço acima do teto do Método Barsi");
-      }
-    }
-    totalWeight += barsiWeight;
-    
-    if (includeBreakdown) {
-      contributions.push({
-        name: 'Método Barsi',
-        score: barsiScoreUsed,
-        weight: barsiWeight,
-        points: barsiScoreUsed * barsiWeight,
-        eligible: strategies.barsi.isEligible || false,
-        description: getStrategyDescription('barsi')
-      });
-    }
-  }
-
-  // Fundamentalist Analysis (não tem fairValue, sempre considera)
-  if (strategies.fundamentalist) {
-    const fundamentalistWeight = weights.fundamentalist;
-    const fundamentalistContribution =
-      strategies.fundamentalist.score * fundamentalistWeight;
-    totalScore += fundamentalistContribution;
-    totalWeight += fundamentalistWeight;
-
-    if (
-      strategies.fundamentalist.isEligible &&
-      strategies.fundamentalist.score >= 80
-    ) {
-      strengths.push("Excelente análise fundamentalista simplificada");
-    } else if (strategies.fundamentalist.score >= 70) {
-      strengths.push("Boa análise fundamentalista");
-    } else if (strategies.fundamentalist.score < 60) {
-      weaknesses.push("Fundamentos fracos na análise 3+1");
-    }
-    
-    if (includeBreakdown) {
-      contributions.push({
-        name: 'Fundamentalista 3+1',
-        score: strategies.fundamentalist.score,
-        weight: fundamentalistWeight,
-        points: fundamentalistContribution,
-        eligible: strategies.fundamentalist.isEligible || false,
-        description: getStrategyDescription('fundamentalist')
-      });
-    }
-  }
-
-  // Análise das Demonstrações Financeiras
   let statementsAnalysis: StatementsAnalysis | null = null;
   if (statementsData) {
     statementsAnalysis = analyzeFinancialStatements(statementsData);
-    const statementsWeight = weights.statements;
-
-    // Aplicar penalização severa para risco crítico
     let adjustedStatementsScore = statementsAnalysis.score;
     if (statementsAnalysis.riskLevel === "CRITICAL") {
-      // Penalização severa: reduzir o score das demonstrações para no máximo 20
       adjustedStatementsScore = Math.min(statementsAnalysis.score, 20);
-      weaknesses.push(
-        "🚨 RISCO CRÍTICO: Demonstrações financeiras indicam sérios problemas"
-      );
+      weaknesses.push("Risco crítico: demonstrações financeiras indicam sérios problemas");
     } else if (statementsAnalysis.riskLevel === "HIGH") {
-      // Penalização moderada para alto risco
       adjustedStatementsScore = Math.min(statementsAnalysis.score, 40);
-      weaknesses.push("⚠️ ALTO RISCO: Demonstrações financeiras preocupantes");
-    } else if (
-      statementsAnalysis.riskLevel === "LOW" &&
-      statementsAnalysis.score >= 80
-    ) {
+      weaknesses.push("Risco alto: demonstrações financeiras preocupantes");
+    } else if (statementsAnalysis.riskLevel === "LOW" && statementsAnalysis.score >= 80) {
       strengths.push("Demonstrações financeiras saudáveis");
     }
+    addCriterion("statements", adjustedStatementsScore, adjustedStatementsScore >= 60);
 
-    const statementsContribution = adjustedStatementsScore * statementsWeight;
-    totalScore += statementsContribution;
-    totalWeight += statementsWeight;
+    if (statementsAnalysis.companyStrength === "VERY_STRONG") strengths.push("Empresa muito robusta financeiramente");
+    else if (statementsAnalysis.companyStrength === "STRONG") strengths.push("Empresa robusta financeiramente");
+    else if (statementsAnalysis.companyStrength === "WEAK") weaknesses.push("Empresa financeiramente frágil");
 
-    // Adicionar força da empresa como contexto
-    if (statementsAnalysis.companyStrength === "VERY_STRONG") {
-      strengths.push("Empresa muito robusta financeiramente");
-    } else if (statementsAnalysis.companyStrength === "STRONG") {
-      strengths.push("Empresa robusta financeiramente");
-    } else if (statementsAnalysis.companyStrength === "WEAK") {
-      weaknesses.push("Empresa financeiramente frágil");
+    for (const flag of statementsAnalysis.redFlags.slice(0, 3)) {
+      if (!weaknesses.includes(flag)) weaknesses.push(flag);
     }
-
-    // Adicionar red flags específicos (limitado para não sobrecarregar)
-    statementsAnalysis.redFlags.slice(0, 3).forEach((flag) => {
-      if (!weaknesses.includes(flag)) {
-        weaknesses.push(flag);
-      }
-    });
-
-    // Adicionar sinais positivos específicos (limitado para não sobrecarregar)
-    statementsAnalysis.positiveSignals.slice(0, 3).forEach((signal) => {
-      if (!strengths.includes(signal)) {
-        strengths.push(signal);
-      }
-    });
-    
-    if (includeBreakdown) {
-      contributions.push({
-        name: 'Demonstrações Financeiras',
-        score: adjustedStatementsScore,
-        weight: statementsWeight,
-        points: statementsContribution,
-        eligible: adjustedStatementsScore >= 60,
-        description: getStrategyDescription('statements')
-      });
+    for (const signal of statementsAnalysis.positiveSignals.slice(0, 3)) {
+      if (!strengths.includes(signal)) strengths.push(signal);
     }
   }
 
-  // Análise do YouTube
-  if (hasYouTubeAnalysis && financialData.youtubeAnalysis) {
-    const youtubeWeight = weights.youtube;
-    const youtubeScore = financialData.youtubeAnalysis.score;
-    const youtubeContribution = youtubeScore * youtubeWeight;
-
-    totalScore += youtubeContribution;
-    totalWeight += youtubeWeight;
-
-    // Adicionar pontos fortes/fracos baseados no score do YouTube
-    if (youtubeScore >= 70) {
-      strengths.push("Sentimento positivo em análises recentes");
-    } else if (youtubeScore <= 40) {
-      weaknesses.push("Sentimento negativo em análises recentes");
-    }
-
-    // Adicionar pontos positivos específicos do YouTube (máximo 2)
-    if (
-      financialData.youtubeAnalysis.positivePoints &&
-      financialData.youtubeAnalysis.positivePoints.length > 0
-    ) {
-      const topPositives = financialData.youtubeAnalysis.positivePoints.slice(
-        0,
-        2
-      );
-      topPositives.forEach((point) => {
-        if (!strengths.includes(point)) {
-          strengths.push(`${point}`);
-        }
-      });
-    }
-
-    // Adicionar pontos negativos específicos do YouTube (máximo 2)
-    if (
-      financialData.youtubeAnalysis.negativePoints &&
-      financialData.youtubeAnalysis.negativePoints.length > 0
-    ) {
-      const topNegatives = financialData.youtubeAnalysis.negativePoints.slice(
-        0,
-        2
-      );
-      topNegatives.forEach((point) => {
-        if (!weaknesses.includes(point)) {
-          weaknesses.push(`${point}`);
-        }
-      });
-    }
-    
-    if (includeBreakdown) {
-      contributions.push({
-        name: 'Sentimento de Mercado',
-        score: youtubeScore,
-        weight: youtubeWeight,
-        points: youtubeContribution,
-        eligible: youtubeScore >= 70,
-        description: getStrategyDescription('youtube')
-      });
-    }
-  }
-
-  // Calcular score final
-  // IMPORTANTE: O score geral deve ser igual à soma das contribuições (totalScore)
-  // Não fazer normalização por totalWeight - a soma das contribuições JÁ É o score
-  // O rawScore e o finalScore inicial devem ser iguais à soma das contribuições
-  const rawScoreBeforePenalties = totalScore; // Soma das contribuições individuais
+  // Média ponderada só entre os critérios com dado: o peso dos ausentes sai do denominador.
+  const usedWeight = used.reduce((acc, item) => acc + weights[item.key], 0);
+  const contributions: ScoreContribution[] = used.map((item) => {
+    const weight = usedWeight > 0 ? weights[item.key] / usedWeight : 0;
+    return {
+      name: CRITERION_NAMES[item.key],
+      score: item.score,
+      weight,
+      points: item.score * weight,
+      eligible: item.eligible,
+      description: CRITERION_DESCRIPTIONS[item.key],
+    };
+  });
+  const rawScoreBeforePenalties = contributions.reduce((acc, c) => acc + c.points, 0);
+  const dataCoverage: DataCoverage = { used: used.length, total: applicable.length };
   let finalScore = Math.round(rawScoreBeforePenalties);
 
-  // Obter dados financeiros para análise de penalizações
   const roe = toNumber(financialData.roe);
   const liquidezCorrente = toNumber(financialData.liquidezCorrente);
   const dividaLiquidaPl = toNumber(financialData.dividaLiquidaPl);
   const margemLiquida = toNumber(financialData.margemLiquida);
 
-  // isBDR já foi detectado no início da função, reutilizar aqui
-
-  // Aplicar penalização por endividamento elevado
-  // Para BDRs, usar limites mais altos (mercado americano aceita mais alavancagem)
+  // Penalização por endividamento (limites mais altos para BDRs: o mercado americano aceita mais alavancagem).
   if (dividaLiquidaPl !== null) {
-    let debtPenalty = 0;
-    
-    if (isBDR) {
-      // Penalizações ajustadas para mercado internacional (mais tolerante com dívida)
-      if (dividaLiquidaPl > 4.0) {
-        // Endividamento muito alto: penalização severa de 12 pontos
-        debtPenalty = 12;
-        weaknesses.push("Penalização por Endividamento crítico");
-      } else if (dividaLiquidaPl > 3.0) {
-        // Endividamento alto: penalização de 7 pontos
-        debtPenalty = 7;
-        if (!weaknesses.includes("Alto endividamento")) {
-          weaknesses.push("Penalização por Alto endividamento");
-        }
-      } else if (dividaLiquidaPl > 2.5) {
-        // Endividamento moderadamente alto: penalização de 5 pontos
-        debtPenalty = 5;
-        weaknesses.push("Penalização por Endividamento moderadamente alto");
-      } else if (dividaLiquidaPl > 2.0) {
-        // Endividamento moderado: penalização leve de 3 pontos
-        debtPenalty = 3;
-        weaknesses.push("Penalização por Endividamento moderado");
-      } else if (dividaLiquidaPl > 1.5) {
-        // Endividamento leve: penalização leve de 1 ponto
-        debtPenalty = 1;
-        weaknesses.push("Penalização por Endividamento leve");
-      }
-    } else {
-      // Penalizações originais para empresas brasileiras
-      if (dividaLiquidaPl > 3.0) {
-        // Endividamento muito alto: penalização severa de 15 pontos
-        debtPenalty = 12;
-        weaknesses.push("Penalização por Endividamento crítico");
-      } else if (dividaLiquidaPl > 2.0) {
-        // Endividamento alto: penalização de 8 pontos
-        debtPenalty = 7;
-        if (!weaknesses.includes("Alto endividamento")) {
-          weaknesses.push("Penalização por Alto endividamento");
-        }
-      } else if (dividaLiquidaPl > 1.5) {
-        // Endividamento moderadamente alto: penalização de 6 pontos
-        debtPenalty = 5;
-        weaknesses.push("Penalização por Endividamento moderadamente alto");
-      } else if (dividaLiquidaPl > 1.0) {
-        // Endividamento moderado: penalização leve de 3 pontos
-        debtPenalty = 3;
-        weaknesses.push("Penalização por Endividamento moderado");
-      } else if (dividaLiquidaPl > 0.9) {
-        // Endividamento leve: penalização leve de 2 ponto
-        debtPenalty = 2;
-        weaknesses.push("Penalização por Endividamento leve");
-      }
-    }
-
-    if (debtPenalty > 0) {
-      finalScore = Math.max(0, finalScore - debtPenalty);
+    const bands: Array<[number, number, string]> = isBDR
+      ? [
+          [4.0, 12, "Penalização por endividamento crítico"],
+          [3.0, 7, "Penalização por alto endividamento"],
+          [2.5, 5, "Penalização por endividamento moderadamente alto"],
+          [2.0, 3, "Penalização por endividamento moderado"],
+          [1.5, 1, "Penalização por endividamento leve"],
+        ]
+      : [
+          [3.0, 12, "Penalização por endividamento crítico"],
+          [2.0, 7, "Penalização por alto endividamento"],
+          [1.5, 5, "Penalização por endividamento moderadamente alto"],
+          [1.0, 3, "Penalização por endividamento moderado"],
+          [0.9, 2, "Penalização por endividamento leve"],
+        ];
+    const band = bands.find(([limit]) => dividaLiquidaPl > limit);
+    if (band) {
+      finalScore = Math.max(0, finalScore - band[1]);
+      weaknesses.push(band[2]);
     }
   }
 
-  // Aplicar penalização por baixa margem líquida
-  // Para BDRs, considerar que margens variam muito por setor (tech tem margens altas, retail tem margens baixas)
+  // Penalização por margem líquida baixa (BDRs mais tolerantes: margens variam muito por setor).
   if (margemLiquida !== null) {
-    let marginPenalty = 0;
-    
-    if (isBDR) {
-      // Penalizações ajustadas para mercado internacional (mais tolerante com margens baixas em alguns setores)
-      if (margemLiquida < -0.05) {
-        // Margem líquida muito negativa: penalização severa de 18 pontos
-        marginPenalty = 18;
-        weaknesses.push("Penalização por Margem líquida crítica (prejuízo)");
-      } else if (margemLiquida < 0) {
-        // Margem líquida negativa: penalização de 12 pontos
-        marginPenalty = 12;
-        weaknesses.push("Penalização por Margem líquida negativa");
-      } else if (margemLiquida < 0.01) {
-        // Margem líquida muito baixa: penalização de 6 pontos (vs 8 Brasil)
-        marginPenalty = 6;
-        if (!weaknesses.includes("Margem de lucro baixa")) {
-          weaknesses.push("Penalização por Margem de lucro baixa");
-        }
-      } else if (margemLiquida < 0.03) {
-        // Margem líquida baixa: penalização de 3 pontos (vs 4 Brasil)
-        marginPenalty = 3;
-        weaknesses.push("Penalização por Margem de lucro abaixo da média");
-      } else if (margemLiquida < 0.06) {
-        // Margem líquida moderada: penalização leve de 1 ponto (vs 2 Brasil)
-        marginPenalty = 1;
-        weaknesses.push("Penalização por Margem de lucro moderada");
-      }
-    } else {
-      // Penalizações originais para empresas brasileiras
-      if (margemLiquida < -0.05) {
-        // Margem líquida muito negativa: penalização severa de 18 pontos
-        marginPenalty = 18;
-        weaknesses.push("Penalização por Margem líquida crítica (prejuízo)");
-      } else if (margemLiquida < 0) {
-        // Margem líquida negativa: penalização de 12 pontos
-        marginPenalty = 12;
-        weaknesses.push("Penalização por Margem líquida negativa");
-      } else if (margemLiquida < 0.02) {
-        // Margem líquida muito baixa: penalização de 8 pontos
-        marginPenalty = 8;
-        if (!weaknesses.includes("Margem de lucro baixa")) {
-          weaknesses.push("Penalização por Margem de lucro baixa");
-        }
-      } else if (margemLiquida < 0.05) {
-        // Margem líquida baixa: penalização de 4 pontos
-        marginPenalty = 4;
-        weaknesses.push("Penalização por Margem de lucro abaixo da média");
-      } else if (margemLiquida < 0.08) {
-        // Margem líquida moderada: penalização leve de 2 pontos
-        marginPenalty = 2;
-        weaknesses.push("Penalização por Margem de lucro moderada");
-      }
-    }
-
-    if (marginPenalty > 0) {
-      finalScore = Math.max(0, finalScore - marginPenalty);
+    const bands: Array<[number, number, string]> = isBDR
+      ? [
+          [-0.05, 18, "Penalização por margem líquida crítica (prejuízo)"],
+          [0, 12, "Penalização por margem líquida negativa"],
+          [0.01, 6, "Penalização por margem de lucro baixa"],
+          [0.03, 3, "Penalização por margem de lucro abaixo da média"],
+          [0.06, 1, "Penalização por margem de lucro moderada"],
+        ]
+      : [
+          [-0.05, 18, "Penalização por margem líquida crítica (prejuízo)"],
+          [0, 12, "Penalização por margem líquida negativa"],
+          [0.02, 8, "Penalização por margem de lucro baixa"],
+          [0.05, 4, "Penalização por margem de lucro abaixo da média"],
+          [0.08, 2, "Penalização por margem de lucro moderada"],
+        ];
+    const band = bands.find(([limit]) => margemLiquida < limit);
+    if (band) {
+      finalScore = Math.max(0, finalScore - band[1]);
+      weaknesses.push(band[2]);
     }
   }
 
-  // Aplicar penalização adicional no score geral para risco crítico
+  // Risco das demonstrações: crítico tira 15 pontos e limita a 50; alto tira 8 e limita a 70.
   if (statementsAnalysis?.riskLevel === "CRITICAL") {
-    // Penalização adicional de 15 pontos no score final para risco crítico
-    const riskPenalty = 15;
-    const finalScoreBeforeRisk = finalScore;
-    finalScore = Math.max(0, finalScore - riskPenalty);
-    // Garantir que empresas com risco crítico nunca tenham score superior a 50
-    const finalScoreBeforeCap = finalScore;
-      finalScore = Math.min(finalScore, 50);
-      weaknesses.push(
-      "Penalização por risco crítico em análise das demonstrações financeiras"
-    );
+    finalScore = Math.min(Math.max(0, finalScore - 15), 50);
+    weaknesses.push("Penalização por risco crítico em análise das demonstrações financeiras");
   } else if (statementsAnalysis?.riskLevel === "HIGH") {
-    // Penalização adicional de 8 pontos no score final para alto risco
-    const riskPenalty = 8;
-    const finalScoreBeforeRisk = finalScore;
-    finalScore = Math.max(0, finalScore - riskPenalty);
-    // Garantir que empresas com alto risco nunca tenham score superior a 70
-    const finalScoreBeforeCap = finalScore;
-      finalScore = Math.min(finalScore, 70);
-      weaknesses.push(
-      "Penalização por risco alto em análise das demonstrações financeiras"
-    );
+    finalScore = Math.min(Math.max(0, finalScore - 8), 70);
+    weaknesses.push("Penalização por risco alto em análise das demonstrações financeiras");
   }
 
-  // Adicionar análises de indicadores básicos - dar benefício da dúvida quando dados faltam
-
-  // Só adicionar pontos positivos ou negativos se o dado existir
+  // Indicadores básicos só viram ponto forte ou fraco quando o dado existe.
   if (roe !== null) {
     if (roe >= 0.15) strengths.push("Alto ROE");
     else if (roe < 0.05) weaknesses.push("ROE muito baixo");
   }
-
   if (liquidezCorrente !== null) {
     if (liquidezCorrente >= 1.5) strengths.push("Boa liquidez");
     else if (liquidezCorrente < 1.0) weaknesses.push("Liquidez baixa");
   }
-
-  if (dividaLiquidaPl !== null) {
-    if (dividaLiquidaPl <= 0.5) {
-      strengths.push("Endividamento controlado");
-    }
-    // Casos de endividamento alto já foram tratados na penalização acima
-  } else {
-    // Se não tem dado de dívida, assumir que é controlado (benefício da dúvida)
-    strengths.push("Endividamento controlado (dado não disponível)");
-  }
-
+  if (dividaLiquidaPl !== null && dividaLiquidaPl <= 0.5) strengths.push("Endividamento controlado");
   if (margemLiquida !== null) {
-    if (margemLiquida >= 0.15) {
-      strengths.push("Excelente margem de lucro");
-    } else if (margemLiquida >= 0.1) {
-      strengths.push("Boa margem de lucro");
-    }
-    // Casos de margem baixa já foram tratados na penalização acima
+    if (margemLiquida >= 0.15) strengths.push("Excelente margem de lucro");
+    else if (margemLiquida >= 0.1) strengths.push("Boa margem de lucro");
   }
 
-  // Determinar grade e classificação
-  let grade: OverallScore["grade"];
-  let classification: OverallScore["classification"];
-  let recommendation: OverallScore["recommendation"];
-
-  if (finalScore >= 95) {
-    grade = "A+";
-    classification = "Excelente";
-    recommendation = "Empresa Excelente";
-  } else if (finalScore >= 90) {
-    grade = "A";
-    classification = "Excelente";
-    recommendation = "Empresa Excelente";
-  } else if (finalScore >= 85) {
-    grade = "A-";
-    classification = "Muito Bom";
-    recommendation = "Empresa Excelente";
-  } else if (finalScore >= 80) {
-    grade = "B+";
-    classification = "Muito Bom";
-    recommendation = "Empresa Boa";
-  } else if (finalScore >= 75) {
-    grade = "B";
-    classification = "Bom";
-    recommendation = "Empresa Boa";
-  } else if (finalScore >= 70) {
-    grade = "B-";
-    classification = "Bom";
-    recommendation = "Empresa Boa";
-  } else if (finalScore >= 65) {
-    grade = "C+";
-    classification = "Regular";
-    recommendation = "Empresa Regular";
-  } else if (finalScore >= 60) {
-    grade = "C";
-    classification = "Regular";
-    recommendation = "Empresa Regular";
-  } else if (finalScore >= 50) {
-    grade = "C-";
-    classification = "Regular";
-    recommendation = "Empresa Regular";
-  } else if (finalScore >= 30) {
-    grade = "D";
-    classification = "Fraco";
-    recommendation = "Empresa Fraca";
-  } else {
-    grade = "F";
-    classification = "Péssimo";
-    recommendation = "Empresa Péssima";
-  }
-
-  // Aplicar penalização por flag de perda de fundamentos ANTES de calcular grade
+  // Flag de perda de fundamentos detectada pela IA: −20 pontos antes de definir a nota.
   let penaltyInfo: PenaltyInfo | null = null;
   if (activeFlag) {
     const penaltyValue = -20;
-    const finalScoreBeforeFlag = finalScore;
-    finalScore = Math.max(0, finalScore + penaltyValue); // Garantir que não fique abaixo de 0
-    penaltyInfo = {
-      applied: true,
-      value: penaltyValue,
-      reason: activeFlag.reason,
-      flagId: activeFlag.id,
-    };
+    finalScore = Math.max(0, finalScore + penaltyValue);
+    penaltyInfo = { applied: true, value: penaltyValue, reason: activeFlag.reason, flagId: activeFlag.id };
     weaknesses.push(`Penalização de ${Math.abs(penaltyValue)} pontos por perda de fundamentos detectada pela IA`);
   }
 
-  // Determinar grade e classificação (já considera penalização se aplicada)
-  if (finalScore >= 95) {
-    grade = "A+";
-    classification = "Excelente";
-    recommendation = "Empresa Excelente";
-  } else if (finalScore >= 90) {
-    grade = "A";
-    classification = "Excelente";
-    recommendation = "Empresa Excelente";
-  } else if (finalScore >= 85) {
-    grade = "A-";
-    classification = "Muito Bom";
-    recommendation = "Empresa Excelente";
-  } else if (finalScore >= 80) {
-    grade = "B+";
-    classification = "Muito Bom";
-    recommendation = "Empresa Boa";
-  } else if (finalScore >= 75) {
-    grade = "B";
-    classification = "Bom";
-    recommendation = "Empresa Boa";
-  } else if (finalScore >= 70) {
-    grade = "B-";
-    classification = "Bom";
-    recommendation = "Empresa Boa";
-  } else if (finalScore >= 65) {
-    grade = "C+";
-    classification = "Regular";
-    recommendation = "Empresa Regular";
-  } else if (finalScore >= 60) {
-    grade = "C";
-    classification = "Regular";
-    recommendation = "Empresa Regular";
-  } else if (finalScore >= 50) {
-    grade = "C-";
-    classification = "Regular";
-    recommendation = "Empresa Regular";
-  } else if (finalScore >= 30) {
-    grade = "D";
-    classification = "Fraco";
-    recommendation = "Empresa Fraca";
-  } else {
-    grade = "F";
-    classification = "Péssimo";
-    recommendation = "Empresa Péssima";
-  }
+  const { grade, classification } = gradeFromScore(finalScore);
+  const qualityLabel = qualityLabelFromScore(finalScore);
 
   const result: OverallScore & { penaltyInfo?: PenaltyInfo | null } = {
     score: finalScore,
     grade,
     classification,
-    strengths: strengths.slice(0, 5), // Máximo 5 pontos fortes
-    weaknesses: weaknesses.slice(0, 5), // Máximo 5 pontos fracos
-    recommendation,
-    statementsAnalysis: statementsAnalysis || undefined, // Incluir análise das demonstrações financeiras
+    strengths: strengths.slice(0, 5),
+    weaknesses: weaknesses.slice(0, 5),
+    recommendation: qualityLabel,
+    qualityLabel,
+    dataCoverage,
+    statementsAnalysis: statementsAnalysis || undefined,
     penaltyInfo: penaltyInfo || undefined,
   };
 
-  // Se incluir breakdown, adicionar contribuições e rawScore
   if (includeBreakdown) {
-    // Ordenar contribuições por pontos (maior primeiro)
     contributions.sort((a, b) => b.points - a.points);
-    
-    // rawScore deve ser a soma das contribuições individuais (totalScore)
-    // Isso garante que a soma exibida na tela corresponda ao rawScore
-    // O finalScore inicial agora também é calculado como totalScore (não mais totalScore / totalWeight)
-    const rawScore = rawScoreBeforePenalties;
-    
-    // Debug: verificar se a soma das contribuições bate com o rawScore
-    const contributionsSum = contributions.reduce((sum, c) => sum + c.points, 0);
-    if (Math.abs(contributionsSum - rawScore) > 0.01) {
-      console.warn(`[SCORE DEBUG] Discrepância detectada: rawScore=${rawScore}, contributionsSum=${contributionsSum}, totalWeight=${totalWeight}`);
-    }
-    
     return {
       ...result,
       contributions,
-      rawScore: Math.round(rawScore * 100) / 100 // Arredondar para 2 casas decimais
+      rawScore: Math.round(rawScoreBeforePenalties * 100) / 100,
     } as OverallScoreWithBreakdown;
   }
 

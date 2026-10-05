@@ -3,8 +3,8 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { Stat } from "@/components/ui/stat";
 import { formatBRL, formatDeltaPct, formatMultiple, formatPct } from "@/lib/format";
 import {
-  FII_LISTING_TARGET_DY,
   fiiListingFairValueModelLabel,
+  fiiTargetDYAssumptions,
   type FiiListingValuation,
 } from "@/lib/fii-listing-valuation";
 import { marginOfSafety, valuationStatusLabel } from "@/lib/valuation-metrics";
@@ -43,7 +43,10 @@ function fundTags({ liquidez, qtdImoveis, vacanciaMedia, isPapel }: Pick<Props, 
   return tags;
 }
 
-/** Preço-teto (DY-alvo) e P/VP do FII. O preço-teto vem da mesma função do cabeçalho, então sinal e magnitude batem. */
+/**
+ * Preço-teto (DY-alvo) e P/VP do FII. O preço-teto vem da mesma função do cabeçalho, então sinal e magnitude batem.
+ * DY-alvo = NTN-B real longa + IPCA esperado + spread do tipo do fundo.
+ */
 export function FiiStrategicAnalysis({ price, valuation, dividendYield, pvp, liquidez, qtdImoveis, vacanciaMedia, isPapel }: Props) {
   const fairValue = valuation?.fairValue ?? null;
   const isVpReference = valuation?.upsideSource === "valor_patrimonial";
@@ -51,14 +54,21 @@ export function FiiStrategicAnalysis({ price, valuation, dividendYield, pvp, liq
   const statusLabel = valuationStatusLabel(margin);
   // Com preço-teto como referência, o status fala em preço-teto (igual ao cabeçalho).
   const status = statusLabel && !isVpReference ? statusLabel.replace("preço justo", "preço-teto") : statusLabel;
-  const targetLabel = formatPct(FII_LISTING_TARGET_DY, { digits: 0 });
+  const target = valuation?.targetDY ?? null;
+  const targetLabel = target ? formatPct(target.value) : null;
+  const incomeSourceLabel =
+    valuation?.annualIncomeSource === "historico_12m"
+      ? "soma dos rendimentos dos últimos 12 meses"
+      : "dividend yield de 12 meses × cotação";
 
   const referenceLabel = isVpReference
     ? fiiListingFairValueModelLabel("valor_patrimonial") ?? "Valor patrimonial"
-    : `Preço-teto (DY-alvo ${targetLabel})`;
+    : targetLabel
+      ? `Preço-teto (DY-alvo ${targetLabel})`
+      : "Preço-teto";
   const referenceNote = isVpReference
     ? "Sem rendimento recente, usamos o valor patrimonial por cota como referência."
-    : `Rendimento anual por cota dividido pelo DY-alvo de ${targetLabel} a.a. É o mesmo cálculo do potencial exibido no screening e no ranking de FIIs.`;
+    : `Rendimento anual por cota (${incomeSourceLabel}) dividido pelo DY-alvo. É o mesmo cálculo do potencial exibido no screening e no ranking de FIIs.`;
 
   return (
     <section aria-labelledby="fii-referencias" className="space-y-4">
@@ -77,6 +87,12 @@ export function FiiStrategicAnalysis({ price, valuation, dividendYield, pvp, liq
           <p className="mt-2 text-xs leading-5 text-muted-foreground">
             {fairValue !== null ? referenceNote : "Dados de rendimento insuficientes para estimar o preço-teto."}
           </p>
+          {target && (
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              DY-alvo de <span className="tabular-nums text-foreground">{targetLabel}</span> a.a.:{" "}
+              <span className="tabular-nums">{fiiTargetDYAssumptions(target)}</span>.
+            </p>
+          )}
         </div>
         <div className="min-w-0">
           <Stat label="P/VP" value={formatMultiple(pvp, { digits: 2 })} caption={pvpLabel(pvp)} />

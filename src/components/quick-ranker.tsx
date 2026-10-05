@@ -144,25 +144,29 @@ export function QuickRanker({
       // A prévia automática da abertura da página vai sem cookies quando dá (não entra no histórico do usuário).
       // Modelos premium, e os gratuitos cujo resultado muda com o plano (ETFs) para quem é Premium, levam a sessão.
       const credentials: RequestCredentials = preview ? previewCredentials(target, hasPremium) : "same-origin"
+      // Sem cookies a requisição pode ser barrada antes da API (ex.: proteção de deployment da Vercel nas previews,
+      // que responde 401 em HTML). Nesse caso repete uma vez com a sessão, como faria o "Tentar novamente".
+      const post = async (url: string, body: unknown) => {
+        const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+        if (credentials === "omit") {
+          try {
+            const response = await fetch(url, { ...init, credentials })
+            if (response.ok) return response
+          } catch {
+            // segue para a nova tentativa com a sessão
+          }
+        }
+        return fetch(url, { ...init, credentials: "same-origin" })
+      }
       try {
         let next: RankingOutcome
         if (target.assetType === "etf") {
-          const response = await fetch("/api/etf-ranking", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials,
-            body: JSON.stringify({ preset: target.key }),
-          })
+          const response = await post("/api/etf-ranking", { preset: target.key })
           if (!response.ok) throw new Error(await readError(response))
           const data: { results: EtfRankingItem[]; isLimited: boolean } = await response.json()
           next = { kind: "etf", modelKey: target.key, rows: etfRowsFromApi(data.results ?? []), isLimited: !!data.isLimited }
         } else {
-          const response = await fetch("/api/rank-builder", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials,
-            body: JSON.stringify(buildRankBuilderBody(target, targetUniverse, targetParams)),
-          })
+          const response = await post("/api/rank-builder", buildRankBuilderBody(target, targetUniverse, targetParams))
           if (!response.ok) throw new Error(await readError(response))
           const data: RankingResponse = await response.json()
           next = { kind: "stocks", modelKey: target.key, universe: targetUniverse, response: data }

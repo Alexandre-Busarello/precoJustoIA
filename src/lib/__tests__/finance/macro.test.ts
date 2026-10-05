@@ -42,6 +42,20 @@ test('conversões de unidade das séries SGS', () => {
   assert.equal(Number(compoundMonthlyRates(Array(12).fill(0.33)).toFixed(4)), 0.0403)
   assert.equal(parseSgsDate('16/09/2026')?.toISOString(), '2026-09-16T00:00:00.000Z')
   assert.equal(parseSgsDate('2026-09-16'), null)
+  assert.equal(parseSgsDate('31/02/2026'), null)
+  assert.equal(parseSgsDate('29/02/2026'), null)
+  assert.equal(parseSgsDate('29/02/2024')?.toISOString(), '2024-02-29T00:00:00.000Z')
+  assert.equal(parseSgsDate('00/01/2026'), null)
+})
+
+test('ipca12m é o IPCA realizado em 12 meses; ipcaExpected segue como alias', () => {
+  const ipca = Array.from({ length: 12 }, (_, i) => ({ date: new Date(Date.UTC(2025, 8 + i, 1)), value: 0.33 }))
+  const result = buildMacroAssumptions({ ipca }, now)
+  assert.equal(Number(result.ipca12m.toFixed(4)), 0.0403)
+  assert.equal(result.ipcaExpected, result.ipca12m)
+  assert.equal(result.sources.ipca12m.source, 'db')
+  assert.deepEqual(result.sources.ipcaExpected, result.sources.ipca12m)
+  assert.equal(keFromMacro({ ...MACRO_FALLBACK, ipcaExpected: undefined }), keFromMacro(MACRO_FALLBACK))
 })
 
 test('buildMacroAssumptions usa o banco quando o dado é recente e plausível', () => {

@@ -157,12 +157,12 @@ function rankDescending(values: readonly number[]): number[] {
 
 /**
  * Fórmula Mágica (Greenblatt): posição por ROIC (desc) + posição por EY = EBIT/EV (desc), ordenado pela soma crescente.
- * Ignora itens sem ROIC ou com EV/EBIT ≤ 0. Desempate: maior EY, depois maior ROIC, depois `id`.
+ * Ignora itens com ROIC ausente ou ≤ 0 e com EV/EBIT ausente ou ≤ 0 (earnings yield não positivo). Desempate: maior EY, depois maior ROIC, depois `id`.
  * A exclusão de financeiras, utilities e ativos ilíquidos é responsabilidade de quem chama.
  */
 export function magicFormulaRank<T extends MagicFormulaInput>(items: readonly T[]): MagicFormulaResult<T>[] {
   const eligible = items.filter(
-    (item): item is T & { roic: number; evEbit: number } => isFiniteNumber(item.roic) && isPositiveNumber(item.evEbit)
+    (item): item is T & { roic: number; evEbit: number } => isPositiveNumber(item.roic) && isPositiveNumber(item.evEbit)
   )
   const roics = eligible.map((item) => item.roic)
   const eys = eligible.map((item) => 1 / item.evEbit)

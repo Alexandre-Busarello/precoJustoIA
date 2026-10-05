@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   annualizeFromLast12,
+  annualizeLast12Details,
   averageFullYears,
   dividendYieldTTM,
   fullYearTotals,
@@ -10,6 +11,7 @@ import {
   netAmount,
   projectSeasonal,
   removeExtraordinary,
+  extraordinaryEvents,
   sumTTM,
   toDividendEvents,
   type DividendEvent,
@@ -66,6 +68,18 @@ test('removeExtraordinary descarta pagamentos acima de 2× a mediana', () => {
   assert.deepEqual(removeExtraordinary([]), [])
 })
 
+test('removeExtraordinary mantém pagamentos grandes que se repetem na mesma época de outros anos', () => {
+  const events: DividendEvent[] = []
+  for (let year = 2022; year <= 2025; year++) {
+    for (let month = 1; month <= 12; month++) events.push(ev(`${year}-${String(month).padStart(2, '0')}-01`, 0.02, 'JCP'))
+    events.push(ev(`${year}-03-20`, 0.6), ev(`${year}-08-20`, 0.6))
+  }
+  events.push(ev('2025-12-10', 3))
+  const removed = events.filter((e) => !removeExtraordinary(events).includes(e))
+  assert.deepEqual(removed.map((e) => e.amount), [3])
+  assert.deepEqual(extraordinaryEvents(events).map((e) => e.amount), [3])
+})
+
 test('averageFullYears: 6 anos de histórico + ano corrente parcial usa exatamente os 5 anos completos', () => {
   const events: DividendEvent[] = []
   for (let year = 2020; year <= 2025; year++) {
@@ -115,6 +129,38 @@ test('annualizeFromLast12 infere a frequência (trimestral → 4) e exige 2 paga
   const quarterly = [ev('2025-03-10', 0.5), ev('2025-06-10', 0.5), ev('2025-09-10', 0.5)]
   assert.equal(annualizeFromLast12(quarterly), 2)
   assert.equal(annualizeFromLast12([ev('2025-03-10', 0.5)]), null)
+})
+
+test('annualizeFromLast12 agrupa dividendo e JCP com a mesma data-com', () => {
+  const events: DividendEvent[] = []
+  for (const month of [3, 6, 9, 12]) {
+    events.push(ev(`2025-${String(month).padStart(2, '0')}-10`, 0.3, 'DIVIDENDO'))
+    events.push(ev(`2025-${String(month).padStart(2, '0')}-10`, 0.2, 'JCP'))
+  }
+  const details = annualizeLast12Details(events)
+  assert.equal(details.frequency, 4)
+  assert.equal(details.annual, 2)
+  assert.equal(annualizeFromLast12(events), 2)
+})
+
+test('annualizeFromLast12 com asOf marca histórico desatualizado (> 18 meses) e não anualiza', () => {
+  const events = monthly(2023, 1, 12, 0.1)
+  const stale = annualizeLast12Details(events, { asOf: d('2026-09-29') })
+  assert.equal(stale.stale, true)
+  assert.equal(stale.annual, null)
+  assert.equal(stale.lastExDate?.toISOString().slice(0, 10), '2023-12-15')
+  assert.equal(annualizeFromLast12(events, { asOf: d('2026-09-29') }), null)
+  // Dentro de 18 meses: anualiza normalmente.
+  assert.equal(annualizeFromLast12(events, { asOf: d('2024-06-01') }), 1.2)
+})
+
+test('fullYearTotals não descarta um primeiro ano completo com um pagamento a menos', () => {
+  // 2023 começa em março (como os demais anos) mas pulou o pagamento de junho: é completo.
+  const events = [ev('2023-03-10', 1), ev('2023-09-10', 1), ev('2023-12-10', 1)]
+  for (const year of [2024, 2025]) {
+    for (const month of [3, 6, 9, 12]) events.push({ exDate: new Date(Date.UTC(year, month - 1, 10)), amount: 1 })
+  }
+  assert.deepEqual(fullYearTotals(events, { asOf: d('2026-09-29') }).map((t) => [t.year, t.payments]), [[2023, 3], [2024, 4], [2025, 4]])
 })
 
 test('jcpNet: 15% de IRRF até 2025 e 17,5% a partir de 2026', () => {

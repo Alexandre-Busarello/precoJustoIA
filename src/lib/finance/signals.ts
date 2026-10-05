@@ -4,6 +4,7 @@
  * Descrevem a situação do preço e dos números; não são indicação de compra ou venda.
  */
 
+import { formatMultiple, formatNumber, formatPct } from '@/lib/format'
 import { isFiniteNumber } from './utils'
 
 export interface PricePoint {
@@ -89,8 +90,9 @@ export interface FundamentalsIntactOptions {
   maxNetDebtEbitdaIncrease?: number
   /**
    * Base de `roe` e `margemLiquida` em cada trimestre.
-   * 'quarterly' (padrão): valores do próprio trimestre; ROE 12m = soma dos 4, margem 12m = média dos 4.
-   * 'ttm': cada trimestre já traz o valor acumulado de 12 meses; compara o último com o de 4 trimestres antes.
+   * 'ttm' (padrão, como o ROE do schema, que é anual/12 meses): cada trimestre já traz o valor acumulado de 12 meses;
+   * compara o último com o de 4 trimestres antes.
+   * 'quarterly': valores do próprio trimestre; ROE 12m = soma dos 4, margem 12m = média dos 4.
    */
   ratioBasis?: 'quarterly' | 'ttm'
 }
@@ -111,15 +113,15 @@ export const INSUFFICIENT_DATA_CHECK = 'dados insuficientes'
 const EPSILON = 1e-9
 
 function pct(value: number): string {
-  return `${(value * 100).toFixed(1).replace('.', ',')}%`
+  return formatPct(value)
 }
 
 function pp(value: number): string {
-  return `${(value * 100).toFixed(1).replace('.', ',')} p.p.`
+  return `${formatNumber(value * 100, { digits: 1 })} p.p.`
 }
 
 function times(value: number): string {
-  return `${value.toFixed(2).replace('.', ',')}x`
+  return formatMultiple(value, { digits: 2 })
 }
 
 function allFinite(values: readonly (number | null | undefined)[]): values is number[] {
@@ -132,8 +134,22 @@ function insufficient(detail: string): FundamentalsCheck {
 
 const sum4 = (values: readonly number[]) => values.reduce((a, b) => a + b, 0)
 
+/** Intervalo aceito entre fechamentos de trimestres consecutivos, em dias (≈ 91 dias, com folga para datas de divulgação). */
+const MIN_QUARTER_GAP_DAYS = 75
+const MAX_QUARTER_GAP_DAYS = 110
+
+/** `true` quando cada trimestre vem ~3 meses depois do anterior (sem trimestre faltando ou repetido). */
+function areConsecutiveQuarters(sorted: readonly QuarterFundamentals[]): boolean {
+  for (let i = 1; i < sorted.length; i++) {
+    const gapDays = (sorted[i].date.getTime() - sorted[i - 1].date.getTime()) / 86_400_000
+    if (gapDays < MIN_QUARTER_GAP_DAYS || gapDays > MAX_QUARTER_GAP_DAYS) return false
+  }
+  return true
+}
+
 /**
- * Fundamentos preservados: compara os últimos 4 trimestres com os 4 anteriores (12m vs 12m anteriores).
+ * Fundamentos preservados: compara os últimos 4 trimestres com os 4 anteriores (12m vs 12m anteriores). Exige 8 trimestres
+ * consecutivos.
  * Critérios: lucro líquido não cai mais de 15%; ROE e margem líquida não caem mais de 3 p.p.; dívida líquida/EBITDA
  * não sobe mais de 1,0x. Dado ausente reprova com o check 'dados insuficientes' (sem benefício da dúvida).
  */
@@ -146,7 +162,7 @@ export function fundamentalsIntact(
     maxRoeDropPp = MAX_ROE_TTM_DROP_PP,
     maxNetMarginDropPp = MAX_NET_MARGIN_TTM_DROP_PP,
     maxNetDebtEbitdaIncrease = MAX_NET_DEBT_EBITDA_INCREASE,
-    ratioBasis = 'quarterly',
+    ratioBasis = 'ttm',
   } = options
 
   const sorted = quarters
@@ -156,6 +172,9 @@ export function fundamentalsIntact(
 
   if (sorted.length < 8) {
     return { intact: false, checks: [insufficient(`São necessários 8 trimestres; há ${sorted.length}.`)] }
+  }
+  if (!areConsecutiveQuarters(sorted)) {
+    return { intact: false, checks: [insufficient('Os 8 trimestres precisam ser consecutivos; há trimestres faltando na série.')] }
   }
 
   const prev = sorted.slice(0, 4)

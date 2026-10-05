@@ -114,3 +114,13 @@ test('magicFormulaRank ignora EV/EBIT zero e ROIC ausente; empates dividem a pos
   assert.deepEqual(ranked.map((r) => r.id), [1, 2])
   assert.deepEqual(ranked.map((r) => r.roicRank), [1, 1])
 })
+
+test('magicFormulaRank exclui ROIC ≤ 0 e earnings yield não positivo (EV/EBIT negativo)', () => {
+  const ranked = magicFormulaRank([
+    { id: 'A', roic: 0.15, evEbit: 6 },
+    { id: 'B', roic: 0, evEbit: 4 },
+    { id: 'C', roic: -0.05, evEbit: 3 },
+    { id: 'D', roic: 0.25, evEbit: -8 },
+  ])
+  assert.deepEqual(ranked.map((r) => r.id), ['A'])
+})

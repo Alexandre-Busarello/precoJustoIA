@@ -70,3 +70,17 @@ test('sectorClass segue a precedência financeira → utility → commodity → 
   assert.equal(sectorClass('Materiais Básicos', 'Mineração'), 'cyclicalCommodity')
   assert.equal(sectorClass('Saúde', 'Serviços Médico-Hospitalares'), 'other')
 })
+
+test('não confunde indústrias que só usam commodities nem fintechs com bancos', () => {
+  assert.equal(isCyclicalCommodity('Bens Industriais', 'Máquinas Agrícolas'), false)
+  assert.equal(sectorClass('Bens Industriais', 'Máquinas Agrícolas'), 'other')
+  assert.equal(isCyclicalCommodity('Bens Industriais', 'Artefatos de Ferro e Aço'), false)
+  assert.equal(isCyclicalCommodity('Materiais Básicos', 'Artefatos de Cobre'), false)
+  assert.equal(isCyclicalCommodity('Bens Industriais', 'Agricultural Machinery'), false)
+  assert.equal(isFinancial('Tecnologia da Informação', 'Tecnologia financeira'), false)
+  assert.equal(isFinancial('Serviços Financeiros', 'Tecnologia Financeira'), false)
+  assert.equal(isFinancial('Financial Services', 'Software - Infrastructure'), false)
+  assert.equal(sectorClass(null, 'Fintech'), 'other')
+  // Holdings financeiras sem indústria específica continuam financeiras.
+  assert.equal(isFinancial('Financeiro', 'Holdings Diversificadas'), true)
+})

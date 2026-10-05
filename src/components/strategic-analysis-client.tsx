@@ -20,6 +20,7 @@ import {
   localizeStrategyText,
   pickDefaultModel,
   type StrategiesMap,
+  type StrategyResult,
 } from '@/components/asset/valuation-models';
 import { BacktestConfigSelector } from '@/components/backtest-config-selector';
 
@@ -213,7 +214,12 @@ export function StockSummaryHeader({
   const defaultKey = pickDefaultModel(strategies, { ...access, isFinancial });
   const activeKey = selectedKey && options.some((m) => m.key === selectedKey) ? selectedKey : defaultKey;
   const activeModel = activeKey ? getValuationModel(activeKey) : undefined;
-  const fairValue = activeKey ? strategies?.[activeKey]?.fairValue ?? null : null;
+  const activeStrategy = activeKey ? (strategies?.[activeKey] as (StrategyResult & { discount?: number | null }) | null | undefined) : null;
+  const fairValue = activeStrategy?.fairValue ?? null;
+  // Margem de segurança = desconto do modelo (1 − preço ÷ preço justo); sem ele, calcula com o preço exibido.
+  const strategyDiscount = activeStrategy?.discount;
+  const headerMargin =
+    typeof strategyDiscount === 'number' && Number.isFinite(strategyDiscount) ? strategyDiscount : marginOfSafety(price, fairValue);
 
   const fairLocked = !canViewFullContent && !isLoggedIn;
   const scoreLocked = !canViewFullContent;
@@ -284,7 +290,7 @@ export function StockSummaryHeader({
         fairValue={fairValue}
         fairValueLabel={fairValueLabel}
         fairValueSlot={fairValueSlot}
-        marginOfSafety={marginOfSafety(price, fairValue)}
+        marginOfSafety={headerMargin}
         score={overallScore ? { value: overallScore.score, label: overallScore.classification } : null}
         updatedAt={updatedAt}
         actions={actions}

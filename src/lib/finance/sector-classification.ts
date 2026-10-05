@@ -41,13 +41,29 @@ const FINANCIAL = [
 ]
 
 /**
+ * Indústrias de tecnologia (inclusive fintechs de pagamento e software) que não têm balanço de banco: mesmo quando o
+ * setor vem como "Serviços Financeiros", os critérios de financeira (ROE, P/VP, sem liquidez corrente) não se aplicam.
+ */
+const NOT_FINANCIAL_INDUSTRY = [
+  /tecnologia financeira/,
+  /fintech/,
+  /financial technology/,
+  /financial data/,
+  /software/,
+  /programas e servicos/,
+  /processamento de dados/,
+]
+
+/**
  * Banco, seguradora, previdência, holding financeira ou serviços financeiros. Holdings entram pelo setor
- * (B3: "Financeiro" / "Holdings Diversificadas"). Imobiliário (inclusive FIIs e "Exploração de Imóveis") fica de fora.
+ * (B3: "Financeiro" / "Holdings Diversificadas"). Imobiliário (inclusive FIIs e "Exploração de Imóveis") e
+ * fintechs/software ("Tecnologia financeira") ficam de fora.
  */
 export function isFinancial(sector: Maybe<string>, industry: Maybe<string>): boolean {
   const s = normalizeText(sector)
   const i = normalizeText(industry)
   if (matchesAny(s, REAL_ESTATE) || matchesAny(i, REAL_ESTATE)) return false
+  if (matchesAny(i, NOT_FINANCIAL_INDUSTRY)) return false
   return matchesAny(i, FINANCIAL) || matchesAny(s, FINANCIAL)
 }
 
@@ -124,10 +140,16 @@ const CYCLICAL_COMMODITY = [
   /\bgrains\b/,
 ]
 
+/**
+ * Indústrias que transformam ou usam commodities, mas cujo lucro não segue o ciclo de preço da commodity:
+ * máquinas e implementos agrícolas, artefatos de ferro/aço/cobre (fundição, autopeças), equipamentos.
+ */
+const NOT_CYCLICAL_COMMODITY = [/maquinas/, /machinery/, /implementos/, /artefatos/, /equipament/, /equipment/]
+
 /** Ciclo de preços de commodity domina o lucro (normalizar LPA antes de valuation). Só olha a indústria, e o setor quando não há indústria. */
 export function isCyclicalCommodity(sector: Maybe<string>, industry: Maybe<string>): boolean {
   const i = normalizeText(industry)
-  if (i) return matchesAny(i, CYCLICAL_COMMODITY)
+  if (i) return !matchesAny(i, NOT_CYCLICAL_COMMODITY) && matchesAny(i, CYCLICAL_COMMODITY)
   return matchesAny(normalizeText(sector), CYCLICAL_COMMODITY)
 }
 

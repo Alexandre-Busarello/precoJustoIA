@@ -1,4 +1,5 @@
-import { AbstractStrategy, toNumber, formatPercent } from './base-strategy';
+import { AbstractStrategy, companySectorClass, toNumber, formatPercent } from './base-strategy';
+import { formatBRLCompact, formatNumber, formatPct } from '../format';
 import { LowPEParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 
 export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
@@ -18,6 +19,8 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     const { maxPE, minROE = 0.15 } = params;
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     const isBDR = this.isBDRTicker(ticker);
+    // Bancos e seguradoras não têm liquidez corrente nem dívida líquida/PL comparáveis: esses critérios não se aplicam.
+    const isFinancialCompany = companySectorClass(companyData) === 'financial';
     
     const pl = this.getPL(financials, false, historicalFinancials);
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
@@ -37,18 +40,22 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     const minMarketCap = isBDR ? 2000000000 : 500000000; // Market Cap maior para BDRs (R$ 2B vs R$ 500M)
 
     const criteria = [
-      { label: `P/L entre 3-${effectiveMaxPE}${isBDR ? ' (BDR)' : ''}`, value: !!(pl && pl > 3 && pl <= effectiveMaxPE), description: `P/L: ${pl?.toFixed(1) || 'N/A'}` },
-      { label: `ROE ≥ ${(effectiveMinROE * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !roe || roe >= effectiveMinROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Crescimento Receitas ≥ -10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas) || 'N/A - Benefício da dúvida'}` },
-      { label: `Margem Líquida ≥ ${(minMargemLiquida * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !margemLiquida || margemLiquida >= minMargemLiquida, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Liquidez Corrente ≥ 1.0', value: !liquidezCorrente || liquidezCorrente >= 1.0, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
-      { label: 'ROA ≥ 5%', value: !roa || roa >= 0.05, description: `ROA: ${formatPercent(roa) || 'N/A - Benefício da dúvida'}` },
-      { label: `Dív. Líq./PL ≤ ${(maxDividaLiquidaPl * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
-      { label: `Market Cap ≥ ${isBDR ? 'R$ 2B' : 'R$ 500M'}${isBDR ? ' (BDR)' : ''}`, value: !marketCap || marketCap >= minMarketCap, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000).toFixed(0)}M` : 'N/A - Benefício da dúvida'}` }
+      { label: `P/L entre 3 e ${effectiveMaxPE}`, value: !!(pl && pl > 3 && pl <= effectiveMaxPE), description: `P/L: ${formatNumber(pl, { digits: 1 })}` },
+      { label: `ROE ≥ ${formatPct(effectiveMinROE, { digits: 0 })}`, value: !roe || roe >= effectiveMinROE, description: `ROE: ${formatPercent(roe)}` },
+      { label: 'Crescimento das receitas ≥ −10%', value: !crescimentoReceitas || crescimentoReceitas >= -0.10, description: `Crescimento: ${formatPercent(crescimentoReceitas)}` },
+      { label: `Margem líquida ≥ ${formatPct(minMargemLiquida, { digits: 0 })}`, value: !margemLiquida || margemLiquida >= minMargemLiquida, description: `Margem: ${formatPercent(margemLiquida)}` },
+      ...(isFinancialCompany
+        ? []
+        : [{ label: 'Liquidez corrente ≥ 1,0', value: !liquidezCorrente || liquidezCorrente >= 1.0, description: `LC: ${formatNumber(liquidezCorrente, { digits: 2 })}` }]),
+      { label: 'ROA ≥ 5%', value: !roa || roa >= 0.05, description: `ROA: ${formatPercent(roa)}` },
+      ...(isFinancialCompany
+        ? []
+        : [{ label: `Dív. líq./PL ≤ ${formatPct(maxDividaLiquidaPl, { digits: 0 })}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${formatNumber(dividaLiquidaPl, { digits: 2 })}` }]),
+      { label: `Market cap ≥ ${isBDR ? 'R$ 2 bi' : 'R$ 500 mi'}`, value: !marketCap || marketCap >= minMarketCap, description: `Market cap: ${marketCap ? formatBRLCompact(marketCap) : 'N/A'}` }
     ];
     
     const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 6 && !!pl && pl > 3 && pl <= effectiveMaxPE; // Reduzido para dar benefício da dúvida
+    const isEligible = passedCriteria >= criteria.length - 2 && !!pl && pl > 3 && pl <= effectiveMaxPE;
     const score = (passedCriteria / criteria.length) * 100;
 
     // Calcular value score como no backend
@@ -69,8 +76,8 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
       fairValue: null,
       upside: null,
       reasoning: isEligible 
-        ? `✅ Aprovada no Value Investing com P/L ${pl?.toFixed(1)}. Value Score: ${valueScore.toFixed(1)}/100. Não é value trap.`
-        : `❌ Empresa pode ser value trap (${passedCriteria}/8 critérios aprovados).`,
+        ? `Atende ao modelo P/L baixo com qualidade: P/L de ${formatNumber(pl, { digits: 1 })} (teto fixo de ${effectiveMaxPE}) com rentabilidade e crescimento dentro dos filtros. Score de valor: ${formatNumber(valueScore, { digits: 1 })}/100.`
+        : `Não atende ao modelo P/L baixo com qualidade (${passedCriteria} de ${criteria.length} critérios); pode ser uma armadilha de valor.`,
       criteria,
       key_metrics: {
         pl: pl,
@@ -141,7 +148,7 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
         fairValue: null,
         upside: null,
         marginOfSafety: null,
-        rational: `Aprovada no Value Investing Model com P/L ${pl.toFixed(1)}. Empresa de qualidade: ROE ${(roe * 100).toFixed(2)}%, ROA ${roa.toFixed(1)}%, Margem ${(margemLiquida * 100).toFixed(2)}%. Crescimento Receitas: ${(crescimentoReceitas * 100).toFixed(2)}%. Value Score: ${Number(valueScore.toFixed(1))}/100. Não é value trap.`,
+        rational: `P/L de ${formatNumber(pl, { digits: 1 })} (teto fixo de ${effectiveMaxPE}) com ROE de ${formatPercent(roe)}, ROA de ${formatPercent(roa)} e margem líquida de ${formatPercent(margemLiquida)}. Crescimento das receitas: ${formatPercent(crescimentoReceitas)}. Score de valor: ${formatNumber(valueScore, { digits: 1 })}/100.`,
         key_metrics: {
           pl: pl,
           valueScore: Number(valueScore.toFixed(1)),
@@ -172,26 +179,23 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
 
   generateRational(params: LowPEParams): string {
     const { maxPE, minROE = 0 } = params;
-    return `# 💎 MODELO VALUE INVESTING
+    return `# P/L baixo com qualidade
 
-**Filosofia**: Baseado no value investing clássico - empresas baratas (baixo P/L) MAS de qualidade comprovada.
+**Ideia**: value investing clássico. Empresas com P/L baixo que mantêm rentabilidade e crescimento, filtrando armadilhas de valor (ações baratas por um motivo).
 
-**Estratégia**: P/L ≤ ${maxPE} + ROE ≥ ${(minROE * 100).toFixed(0)}% + filtros rigorosos de qualidade.
+**Critério de preço**: P/L entre 3 e ${maxPE}, um teto fixo (não é uma comparação com a média do setor). Para BDRs, o teto sobe para 25.
 
-**Problema Resolvido**: Evita "value traps" - ações baratas que continuam caindo por problemas fundamentais.
+**Rentabilidade**: ROE ≥ ${formatPercent(minROE)}.
 
-## Filtros Anti-Value Trap
+## Filtros contra armadilhas de valor
 
-- P/L > 3 (evita preços suspeitosamente baixos)
-- ROA ≥ 5% (eficiência na gestão dos ativos)
-- Crescimento Receitas ≥ -10% (não em forte declínio operacional)
-- Margem Líquida ≥ 3% (operação rentável e sustentável)
-- Liquidez Corrente ≥ 1.0 (situação financeira adequada)
-- Dívida Líquida/PL ≤ 200% (endividamento não excessivo)
-- Market Cap ≥ R$ 500M (liquidez e estabilidade mínimas)
+- P/L acima de 3 (evita lucros não recorrentes ou preços distorcidos)
+- ROA ≥ 5%
+- Crescimento das receitas ≥ −10%
+- Margem líquida ≥ 3%
+- Liquidez corrente ≥ 1,0 e dívida líquida/PL ≤ 200% (não se aplicam a bancos e seguradoras)
+- Market cap ≥ R$ 500 milhões
 
-**Ordenação**: Por Value Score (combina preço atrativo + indicadores de qualidade)${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}.
-
-**Objetivo**: Empresas baratas que são REALMENTE bons negócios, não problemas disfarçados${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
+**Ordenação**: score de valor (P/L baixo e indicadores de qualidade)${params.useTechnicalAnalysis ? ', com priorização técnica (sobrevenda) dentro de faixas de resultados semelhantes' : ''}.`;
   }
 }

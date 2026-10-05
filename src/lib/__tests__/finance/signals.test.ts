@@ -87,13 +87,39 @@ test('fundamentalsIntact: lucro anterior negativo só passa se não piorar', () 
   assert.equal(fundamentalsIntact(stableQuarters([...before, ...lastFour({ lucroLiquido: -20 }).slice(4)])).checks[0].passed, false)
 })
 
-test('fundamentalsIntact: ROE 12m caindo mais de 3 p.p. reprova', () => {
-  // ROE 12m de 20% (4 × 5%) para 16% (4 × 4%): −4 p.p.
-  const result = fundamentalsIntact(stableQuarters(lastFour({ roe: 0.04 })))
+test('fundamentalsIntact: ROE 12m caindo mais de 3 p.p. reprova (base padrão ttm)', () => {
+  // ROE 12m de 20% para 16%: −4 p.p.
+  const ttm = (roe: number) => stableQuarters([...Array(7).fill({ roe: 0.2 }), { roe }])
+  const result = fundamentalsIntact(ttm(0.16))
   assert.equal(result.intact, false)
   assert.equal(result.checks.find((c) => c.name === 'ROE 12m')?.passed, false)
+  assert.match(result.checks.find((c) => c.name === 'ROE 12m')?.detail ?? '', /De 20,0% para 16,0% \(−4,0 p\.p\./)
   // 20% → 18% (−2 p.p.) passa.
-  assert.equal(fundamentalsIntact(stableQuarters(lastFour({ roe: 0.045 }))).intact, true)
+  assert.equal(fundamentalsIntact(ttm(0.18)).intact, true)
+})
+
+test("fundamentalsIntact: base 'quarterly' soma o ROE dos 4 trimestres", () => {
+  // ROE 12m de 20% (4 × 5%) para 16% (4 × 4%): −4 p.p.
+  const result = fundamentalsIntact(stableQuarters(lastFour({ roe: 0.04 })), { ratioBasis: 'quarterly' })
+  assert.equal(result.intact, false)
+  assert.equal(result.checks.find((c) => c.name === 'ROE 12m')?.passed, false)
+  assert.equal(fundamentalsIntact(stableQuarters(lastFour({ roe: 0.045 })), { ratioBasis: 'quarterly' }).intact, true)
+})
+
+test('fundamentalsIntact: exige 8 trimestres consecutivos', () => {
+  const quarters = stableQuarters()
+  // Pula um trimestre no meio da série (o 5º trimestre vem 6 meses depois do 4º).
+  const withGap = quarters.map((q, i) => (i >= 4 ? { ...q, date: new Date(q.date.getTime() + 91 * 86_400_000) } : q))
+  const result = fundamentalsIntact(withGap)
+  assert.equal(result.intact, false)
+  assert.equal(result.checks[0].name, INSUFFICIENT_DATA_CHECK)
+  assert.match(result.checks[0].detail, /consecutivos/)
+})
+
+test('fundamentalsIntact formata os textos em pt-BR', () => {
+  const result = fundamentalsIntact(stableQuarters(lastFour({ lucroLiquido: 80 })))
+  assert.equal(result.checks[0].detail, 'Variação de −20,0% no lucro 12m (limite −15,0%).')
+  assert.equal(result.checks[3].detail, 'De 1,00x para 1,00x (limite +1,00x).')
 })
 
 test('fundamentalsIntact: margem líquida 12m caindo mais de 3 p.p. reprova', () => {
@@ -128,8 +154,9 @@ test('fundamentalsIntact: menos de 8 trimestres → dados insuficientes', () => 
 })
 
 test('fundamentalsIntact: campo ausente reprova sem benefício da dúvida', () => {
+  // Na base padrão (ttm) o ROE do último trimestre é o que conta.
   const overrides = lastFour({})
-  overrides[5] = { roe: null }
+  overrides[7] = { roe: null }
   const result = fundamentalsIntact(stableQuarters(overrides))
   assert.equal(result.intact, false)
   const insufficient = result.checks.filter((c) => c.name === INSUFFICIENT_DATA_CHECK)

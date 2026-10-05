@@ -1,405 +1,325 @@
-import { AbstractStrategy, toNumber, formatPercent } from './base-strategy';
+import {
+  AbstractStrategy,
+  companySectorClass,
+  costOfEquityBRL,
+  discountFraction,
+  formatCurrency,
+  formatPercent,
+  isImplausibleUpside,
+  macroAssumptions,
+  notApplicableAnalysis,
+  toNumber,
+  upsidePercent,
+} from './base-strategy';
+import { extraordinaryEvents, removeExtraordinary, sumTTM, toDividendEvents, type DividendEvent } from '../finance/dividends';
+import { formatNumber, formatPct } from '../format';
+import { gordonValue, MIN_DISCOUNT_GROWTH_SPREAD } from '../finance/valuation';
+import type { SectorClass } from '../finance/sector-classification';
 import { GordonParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 
-// Parâmetros setoriais baseados em dados de mercado e estudos de WACC
-const SECTORAL_PARAMETERS = {
-  // Setores de baixo risco - WACC menor, crescimento conservador
-  'Energia Elétrica': { waccAdjustment: -0.02, growthAdjustment: 0.02 }, // Utilities: WACC ~8-10%
-  'Saneamento': { waccAdjustment: -0.02, growthAdjustment: 0.02 },
-  'Água e Saneamento': { waccAdjustment: -0.02, growthAdjustment: 0.02 },
-  'Petróleo e Gás': { waccAdjustment: -0.01, growthAdjustment: 0.015 }, // Energia: WACC ~9-11%
-  
-  // Setores financeiros - WACC moderado, crescimento baseado em ROE
-  'Bancos': { waccAdjustment: 0.00, growthAdjustment: 0.03 }, // WACC ~10-12%
-  'Seguros': { waccAdjustment: 0.00, growthAdjustment: 0.025 },
-  'Serviços Financeiros': { waccAdjustment: 0.00, growthAdjustment: 0.025 },
-  
-  // Setores de consumo - WACC moderado
-  'Alimentos e Bebidas': { waccAdjustment: 0.00, growthAdjustment: 0.035 },
-  'Comércio': { waccAdjustment: 0.01, growthAdjustment: 0.03 },
-  'Consumo': { waccAdjustment: 0.01, growthAdjustment: 0.03 },
-  
-  // Setores industriais - WACC moderado a alto
-  'Siderurgia e Metalurgia': { waccAdjustment: 0.015, growthAdjustment: 0.02 },
-  'Papel e Celulose': { waccAdjustment: 0.01, growthAdjustment: 0.025 },
-  'Mineração': { waccAdjustment: 0.02, growthAdjustment: 0.02 },
-  
-  // Setores de alto risco - WACC maior
-  'Tecnologia': { waccAdjustment: 0.03, growthAdjustment: 0.06 }, // Tech: WACC ~13-15%
-  'Telecomunicações': { waccAdjustment: 0.015, growthAdjustment: 0.02 },
-  'Saúde': { waccAdjustment: 0.02, growthAdjustment: 0.04 },
-  
-  // Padrão para setores não mapeados
-  'default': { waccAdjustment: 0.00, growthAdjustment: 0.03 }
-} as const;
+/** Teto do crescimento perpétuo nominal dos dividendos (6%). */
+export const GORDON_MAX_GROWTH = 0.06;
+/** Crescimento usado quando o parâmetro não é informado. */
+export const GORDON_DEFAULT_GROWTH = 0.05;
+/**
+ * Margem de segurança mínima (desconto 1 − P/VJ) para entrar no modelo: 10%, equivalente a ~11% de potencial.
+ * Antes era "potencial ≥ 15%" fixo; com k = Ke (~16–19% com a Selic atual) e g ≤ 6%, o preço justo só passa do preço
+ * para DY acima de ~11%, e o corte de 15% de potencial deixava o ranking praticamente vazio. Decisão registrada para o
+ * dono do produto revisar; o desconto segue a mesma semântica de margem dos demais modelos.
+ */
+export const GORDON_MIN_DISCOUNT = 0.1;
+
+/**
+ * Beta por classe setorial (ajuste setorial do Ke): utilities reguladas têm risco menor; commodities cíclicas, maior.
+ * Usa a classificação determinística de `sector-classification`, que entende os nomes da B3 e os traduzidos do Yahoo.
+ */
+const SECTOR_BETA: Record<SectorClass, number> = {
+  utility: 0.8,
+  financial: 1.0,
+  cyclicalCommodity: 1.2,
+  other: 1.0,
+};
+
+const SECTOR_LABEL: Record<SectorClass, string> = {
+  utility: 'utilidade pública',
+  financial: 'financeiro',
+  cyclicalCommodity: 'commodity cíclica',
+  other: 'demais setores',
+};
+
+/**
+ * D0 a partir do histórico: soma dos proventos com data-com nos últimos 12 meses, sem os pagamentos extraordinários
+ * (`removeExtraordinary`: acima de 2× a mediana e sem repetição sazonal em outros anos). Passe o histórico de vários
+ * anos para que os dividendos trimestrais/semestrais regulares sejam reconhecidos como recorrentes.
+ */
+export function dividendsTTM(events: readonly DividendEvent[], asOf: Date = new Date()): number {
+  return sumTTM(removeExtraordinary(events), asOf);
+}
+
+/** Soma dos extraordinários descartados dentro da janela de 12 meses (para explicar o D0). */
+export function extraordinaryTTM(events: readonly DividendEvent[], asOf: Date = new Date()): number {
+  return sumTTM(extraordinaryEvents(events), asOf);
+}
+
+export interface GordonInputs {
+  /** Proventos dos últimos 12 meses por ação (D0). */
+  d0: number | null;
+  d0Source: 'history' | 'dividendYield12m' | 'dy' | null;
+  /** Extraordinários com data-com nos últimos 12 meses que ficaram fora do D0 (só com histórico). */
+  excludedExtraordinary: number;
+  /** Custo de capital próprio (k). */
+  k: number;
+  /** Crescimento perpétuo (g). */
+  g: number;
+  /** Crescimento sustentável ROE × (1 − payout), quando calculável. */
+  sustainableGrowth: number | null;
+  sectorClass: SectorClass;
+  beta: number;
+  dy: number | null;
+  roe: number | null;
+  payout: number | null;
+}
 
 export class GordonStrategy extends AbstractStrategy<GordonParams> {
   readonly name = 'gordon';
 
   /**
-   * Calcula parâmetros ajustados por setor baseado em dados de mercado
+   * Insumos do modelo, os mesmos na análise e no ranking:
+   * - D0 = soma dos proventos com data-com nos últimos 12 meses, sem extraordinários (ver `dividendsTTM`); sem
+   *   histórico, DY 12m × preço. Nunca o último pagamento avulso.
+   * - k = Ke pelas premissas macro com beta setorial (+ ajuste manual), nunca abaixo da Selic nem da taxa informada.
+   * - g = min(parâmetro, ROE × (1 − payout), 6%), não negativo.
    */
-  private getSectoralAdjustedParams(companyData: CompanyData, params: GordonParams): { adjustedDiscountRate: number; adjustedGrowthRate: number } {
-    const sector = companyData.sector || 'default';
-    const sectorParams = SECTORAL_PARAMETERS[sector as keyof typeof SECTORAL_PARAMETERS] || SECTORAL_PARAMETERS.default;
-    
-    // Se o ajuste setorial está desabilitado, usar parâmetros originais
-    if (params.useSectoralAdjustment === false) {
-      return {
-        adjustedDiscountRate: params.discountRate,
-        adjustedGrowthRate: params.dividendGrowthRate
-      };
-    }
-    
-    // Aplicar ajustes setoriais
-    let adjustedDiscountRate = params.discountRate + sectorParams.waccAdjustment;
-    let adjustedGrowthRate = Math.min(params.dividendGrowthRate + sectorParams.growthAdjustment, adjustedDiscountRate - 0.01);
-    
-    // Aplicar ajuste manual se fornecido
-    if (params.sectoralWaccAdjustment !== undefined) {
-      adjustedDiscountRate += params.sectoralWaccAdjustment;
-    }
-    
-    // Garantir que a taxa de desconto seja sempre maior que a de crescimento
-    if (adjustedDiscountRate <= adjustedGrowthRate) {
-      adjustedGrowthRate = adjustedDiscountRate - 0.01;
-    }
-    
-    // Limites de segurança
-    adjustedDiscountRate = Math.max(0.06, Math.min(0.25, adjustedDiscountRate)); // 6% a 25%
-    adjustedGrowthRate = Math.max(0.00, Math.min(0.12, adjustedGrowthRate)); // 0% a 12%
-    
-    return { adjustedDiscountRate, adjustedGrowthRate };
-  }
+  computeInputs(companyData: CompanyData, params: GordonParams): GordonInputs {
+    const { financials, currentPrice, historicalFinancials } = companyData;
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+    const macro = macroAssumptions();
+    const sectorClass = companySectorClass(companyData);
+    const beta = params.useSectoralAdjustment === false ? 1 : SECTOR_BETA[sectorClass];
+    const k = Math.max(costOfEquityBRL(beta, macro) + (params.sectoralWaccAdjustment ?? 0), macro.selic, params.discountRate ?? 0);
 
-  /**
-   * Análise de pares para validação dos parâmetros
-   */
-  private validateParametersWithComps(companyData: CompanyData, fairValue: number | null): { isReasonable: boolean; reasoning: string } {
-    if (!fairValue) return { isReasonable: false, reasoning: 'Preço justo não calculável' };
-    
-    const currentPrice = companyData.currentPrice;
-    const upside = ((fairValue - currentPrice) / currentPrice) * 100;
-    const pl = toNumber(companyData.financials.pl);
-    const pvp = toNumber(companyData.financials.pvp);
-    
-    // Validações baseadas em múltiplos de mercado
-    const warnings: string[] = [];
-    
-    // Upside muito alto pode indicar parâmetros otimistas demais
-    if (upside > 100) {
-      warnings.push('Upside muito elevado (>100%) - parâmetros podem estar otimistas');
+    const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
+    const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
+    const payout = this.getIndicatorValue(financials, 'payout', use7YearAverages, historicalFinancials);
+    const sustainableGrowth = roe !== null && payout !== null ? roe * (1 - Math.min(Math.max(payout, 0), 1)) : null;
+    const growthCap = Math.min(params.dividendGrowthRate ?? GORDON_DEFAULT_GROWTH, GORDON_MAX_GROWTH);
+    const g = Math.max(0, sustainableGrowth === null ? growthCap : Math.min(growthCap, sustainableGrowth));
+
+    let d0: number | null = null;
+    let d0Source: GordonInputs['d0Source'] = null;
+    let excludedExtraordinary = 0;
+    const events = companyData.dividendHistory ? toDividendEvents(companyData.dividendHistory) : [];
+    if (events.length > 0) {
+      d0 = dividendsTTM(events);
+      excludedExtraordinary = extraordinaryTTM(events);
+      d0Source = 'history';
+    } else {
+      const dividendYield12m = toNumber(financials.dividendYield12m);
+      const currentDy = toNumber(financials.dy);
+      if (dividendYield12m && dividendYield12m > 0 && currentPrice > 0) {
+        d0 = dividendYield12m * currentPrice;
+        d0Source = 'dividendYield12m';
+      } else if (currentDy && currentDy > 0 && currentPrice > 0) {
+        d0 = currentDy * currentPrice;
+        d0Source = 'dy';
+      }
     }
-    
-    // P/L muito baixo com upside alto pode indicar problemas
-    if (pl && pl < 5 && upside > 50) {
-      warnings.push('P/L muito baixo com alto upside - verificar qualidade dos lucros');
-    }
-    
-    // P/VP muito baixo pode indicar problemas fundamentais
-    if (pvp && pvp < 0.5 && upside > 30) {
-      warnings.push('P/VP muito baixo - possíveis problemas fundamentais');
-    }
-    
-    const isReasonable = warnings.length === 0 && upside >= -20 && upside <= 80;
-    const reasoning = warnings.length > 0 ? warnings.join('; ') : 'Parâmetros consistentes com análise de pares';
-    
-    return { isReasonable, reasoning };
+
+    return { d0, d0Source, excludedExtraordinary, k, g, sustainableGrowth, sectorClass, beta, dy, roe, payout };
   }
 
   validateCompanyData(companyData: CompanyData, params: GordonParams): boolean {
-    const { financials, currentPrice } = companyData;
-    
-    // Dar benefício da dúvida - só requer dados essenciais
-    const hasEssentialData = !!(
-      financials.dy && toNumber(financials.dy)! > 0 &&
-      currentPrice > 0
-    );
-    
-    // Deve ter pelo menos uma fonte de dados de dividendos
-    const hasDividendData = !!(
-      (financials.ultimoDividendo && toNumber(financials.ultimoDividendo)! > 0) ||
-      (financials.dividendYield12m && toNumber(financials.dividendYield12m)! > 0) ||
-      (financials.dy && toNumber(financials.dy)! > 0) // Pode usar DY para estimar
-    );
-    
-    // Verificar se as taxas ajustadas são válidas
-    const { adjustedDiscountRate, adjustedGrowthRate } = this.getSectoralAdjustedParams(companyData, params);
-    const ratesAreValid = adjustedDiscountRate > adjustedGrowthRate;
-    
-    return hasEssentialData && hasDividendData && ratesAreValid;
+    if (companyData.currentPrice <= 0) return false;
+    const { d0 } = this.computeInputs(companyData, params);
+    return d0 !== null && d0 > 0;
   }
 
   runAnalysis(companyData: CompanyData, params: GordonParams): StrategyAnalysis {
     const { financials, currentPrice, historicalFinancials, ticker } = companyData;
+    const bdrReason = this.bdrNotApplicableReason(companyData);
+    if (bdrReason) return notApplicableAnalysis(bdrReason);
+
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     const isBDR = this.isBDRTicker(ticker);
-    
-    // Para BDRs, ajustar taxa de desconto padrão (mercado americano tem WACC diferente)
-    const baseDiscountRate = isBDR ? Math.max(params.discountRate, 0.12) : params.discountRate; // Mínimo 12% para BDRs
-    const adjustedParams = { ...params, discountRate: baseDiscountRate };
-    
-    // Obter parâmetros ajustados por setor
-    const { adjustedDiscountRate, adjustedGrowthRate } = this.getSectoralAdjustedParams(companyData, adjustedParams);
-    
-    const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
+    const inputs = this.computeInputs(companyData, params);
+    const { d0, k, g, dy, roe, payout, sectorClass } = inputs;
+    const spreadOk = k - g >= MIN_DISCOUNT_GROWTH_SPREAD - 1e-9;
+
+    let fairValue = d0 !== null && spreadOk ? gordonValue({ d0, g, k }) : null;
+    let implausible = false;
+    if (fairValue !== null) fairValue *= this.perReceiptFactor(companyData);
+    if (fairValue !== null && isImplausibleUpside(currentPrice, fairValue)) {
+      fairValue = null;
+      implausible = true;
+    }
+    const upside = upsidePercent(currentPrice, fairValue);
+    const discount = discountFraction(currentPrice, fairValue);
+    const meetsMinDiscount = discount !== null && discount >= GORDON_MIN_DISCOUNT - 1e-9;
+
     const dividendYield12m = toNumber(financials.dividendYield12m);
-    const ultimoDividendo = toNumber(financials.ultimoDividendo);
-    const payout = toNumber(financials.payout);
-    const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const crescimentoLucros = toNumber(financials.crescimentoLucros);
     const cagrLucros5a = toNumber(financials.cagrLucros5a);
     const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
     const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
-    
-    // Calcular dividendo estimado usando a melhor fonte disponível
-    let dividendEstimated = null;
-    if (ultimoDividendo && ultimoDividendo > 0) {
-      dividendEstimated = ultimoDividendo;
-    } else if (dividendYield12m && dividendYield12m > 0 && currentPrice > 0) {
-      dividendEstimated = dividendYield12m * currentPrice;
-    } else if (dy && dy > 0 && currentPrice > 0) {
-      dividendEstimated = dy * currentPrice;
-    }
+    const dividaLiquidaEbitda = toNumber(financials.dividaLiquidaEbitda);
 
-    
-    const fairValue = this.calculateGordonFairValue(
-      dividendEstimated, 
-      adjustedDiscountRate, 
-      adjustedGrowthRate
-    );
-    const upside = fairValue && currentPrice > 0 ? ((fairValue - currentPrice) / currentPrice) * 100 : null;
-    
-    // Ajustar critérios para BDRs (empresas americanas têm padrões diferentes)
-    const minDY = isBDR ? 0.03 : 0.04; // DY mínimo menor para BDRs (3% vs 4%)
-    const minDY12m = isBDR ? 0.02 : 0.03; // DY 12m mínimo menor para BDRs (2% vs 3%)
-    const maxPayout = isBDR ? 0.90 : 0.80; // Payout máximo mais alto para BDRs (90% vs 80%)
-    const minROE = isBDR ? 0.12 : 0.12; // Mesmo padrão
-    const minLiquidez = isBDR ? 1.0 : 1.2; // Liquidez pode ser menor para BDRs
-    const maxDividaLiquidaPl = isBDR ? 1.5 : 1.0; // Mais tolerante com dívida para BDRs (150% vs 100%)
+    const minDY = isBDR ? 0.03 : 0.04;
+    const minDY12m = isBDR ? 0.02 : 0.03;
+    const maxPayout = isBDR ? 0.9 : 0.8;
+    const minROE = 0.12;
+    const minLiquidez = isBDR ? 1.0 : 1.2;
+    const maxDividaLiquidaPl = isBDR ? 1.5 : 1.0;
 
     const criteria = [
-      { label: 'Upside ≥ 15%', value: !!(upside && upside >= 15), description: `Upside: ${upside ? formatPercent(upside / 100) : 'N/A'}` },
-      { label: `Dividend Yield ≥ ${(minDY * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !!(dy && dy >= minDY), description: `DY: ${formatPercent(dy)}` },
-      { label: `DY 12m ≥ ${(minDY12m * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividendYield12m || dividendYield12m >= minDY12m, description: `DY 12m: ${dividendYield12m ? formatPercent(dividendYield12m) : 'N/A - Benefício da dúvida'}` },
-      { label: `Payout ≤ ${(maxPayout * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !payout || payout <= maxPayout, description: `Payout: ${payout ? formatPercent(payout) : 'N/A - Benefício da dúvida'}` },
-      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Crescimento Lucros ≥ -20%', value: !crescimentoLucros || crescimentoLucros >= -0.20 || !!(cagrLucros5a && cagrLucros5a > 0), description: `Crescimento: ${crescimentoLucros ? formatPercent(crescimentoLucros) : 'N/A - Benefício da dúvida'}${cagrLucros5a && cagrLucros5a > 0 ? ` (CAGR 5a: ${formatPercent(cagrLucros5a)})` : ''}` },
-      { label: `Liquidez Corrente ≥ ${minLiquidez.toFixed(1)}${isBDR ? ' (BDR)' : ''}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
-      { label: `Dív. Líq./PL ≤ ${(maxDividaLiquidaPl * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` }
+      {
+        label: `Margem de segurança ≥ ${formatPct(GORDON_MIN_DISCOUNT, { digits: 0 })}`,
+        value: meetsMinDiscount,
+        description: `Margem: ${discount === null ? 'N/A' : formatPercent(discount)}; potencial: ${upside === null ? 'N/A' : formatPercent(upside / 100)}`,
+      },
+      { label: `Dividend yield ≥ ${formatPct(minDY, { digits: 0 })}`, value: !!(dy && dy >= minDY), description: `DY: ${formatPercent(dy)}` },
+      { label: `DY 12m ≥ ${formatPct(minDY12m, { digits: 0 })}`, value: !dividendYield12m || dividendYield12m >= minDY12m, description: `DY 12m: ${formatPercent(dividendYield12m)}` },
+      { label: `Payout ≤ ${formatPct(maxPayout, { digits: 0 })}`, value: !payout || payout <= maxPayout, description: `Payout: ${formatPercent(payout)}` },
+      { label: `ROE ≥ ${formatPct(minROE, { digits: 0 })}`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe)}` },
+      {
+        label: 'Crescimento dos lucros ≥ −20%',
+        value: !crescimentoLucros || crescimentoLucros >= -0.2 || !!(cagrLucros5a && cagrLucros5a > 0),
+        description: `Crescimento: ${formatPercent(crescimentoLucros)}${cagrLucros5a && cagrLucros5a > 0 ? ` (CAGR 5a: ${formatPercent(cagrLucros5a)})` : ''}`,
+      },
+      ...(sectorClass === 'financial'
+        ? []
+        : [
+            { label: `Liquidez corrente ≥ ${formatNumber(minLiquidez, { digits: 1 })}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${formatNumber(liquidezCorrente, { digits: 2 })}` },
+            sectorClass === 'utility'
+              ? { label: 'Dív. líq./EBITDA ≤ 3,5', value: dividaLiquidaEbitda === null || dividaLiquidaEbitda <= 3.5, description: `Dív. líq./EBITDA: ${formatNumber(dividaLiquidaEbitda, { digits: 2 })}` }
+              : { label: `Dív. líq./PL ≤ ${formatPct(maxDividaLiquidaPl, { digits: 0 })}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${formatNumber(dividaLiquidaPl, { digits: 2 })}` },
+          ]),
     ];
 
-    const passedCriteria = criteria.filter(c => c.value).length;
-    const hasMinimumCriteria = passedCriteria >= 6; // Reduzido para dar benefício da dúvida
-    const hasValidFairValue = !!fairValue;
-    const hasValidUpside = !!upside;
-    const hasMinimumUpside = !!(upside && upside >= 15);
-
-    const isEligible = hasMinimumCriteria && hasValidFairValue && hasValidUpside && hasMinimumUpside;
+    const passedCriteria = criteria.filter((c) => c.value).length;
+    const hasMinimumCriteria = passedCriteria >= criteria.length - 2;
+    const isEligible = hasMinimumCriteria && fairValue !== null && meetsMinDiscount;
     const score = (passedCriteria / criteria.length) * 100;
 
-    // Validação com análise de pares
-    const compsValidation = this.validateParametersWithComps(companyData, fairValue);
+    const d0Label =
+      inputs.d0Source === 'history'
+        ? inputs.excludedExtraordinary > 0
+          ? `soma dos proventos dos últimos 12 meses, sem ${formatCurrency(inputs.excludedExtraordinary)} em extraordinários`
+          : 'soma dos proventos dos últimos 12 meses; nenhum extraordinário identificado'
+        : inputs.d0Source === 'dividendYield12m'
+          ? 'DY 12 meses × preço'
+          : inputs.d0Source === 'dy'
+            ? 'DY × preço'
+            : 'sem dados de proventos';
+    const parameters = `D0 ${formatCurrency(d0)} (${d0Label}), g ${formatPercent(g)}, k ${formatPercent(k)} (Ke com beta ${formatNumber(inputs.beta, { digits: 1 })}, ${SECTOR_LABEL[sectorClass]}).`;
 
-    // Reasoning detalhado
-    let reasoning = '';
-    
-    // Informações sobre ajustes setoriais
-    const sectorInfo = companyData.sector ? ` (Setor: ${companyData.sector})` : '';
-    const sectoralAdjustment = params.useSectoralAdjustment !== false;
-    const ratesDiffer = adjustedDiscountRate !== params.discountRate || adjustedGrowthRate !== params.dividendGrowthRate;
-    
-    if (sectoralAdjustment && ratesDiffer) {
-      reasoning += `Parâmetros ajustados por setor${sectorInfo}: Taxa desconto ${formatPercent(adjustedDiscountRate)} (base: ${formatPercent(params.discountRate)}), crescimento ${formatPercent(adjustedGrowthRate)} (base: ${formatPercent(params.dividendGrowthRate)}). `;
-    } else {
-      reasoning += `Parâmetros base utilizados: Taxa desconto ${formatPercent(adjustedDiscountRate)}, crescimento ${formatPercent(adjustedGrowthRate)}${sectorInfo}. `;
+    const reasons: string[] = [];
+    if (d0 === null || d0 <= 0) reasons.push('sem proventos nos últimos 12 meses');
+    if (!spreadOk) reasons.push(`spread k − g de ${formatPercent(k - g)}, abaixo do mínimo de 4 p.p.`);
+    if (implausible) reasons.push('estimativa fora da faixa plausível (potencial acima de 500%)');
+    if (fairValue !== null && !meetsMinDiscount) {
+      reasons.push(
+        discount !== null && discount < 0
+          ? 'preço acima do preço justo estimado'
+          : `margem de segurança de ${formatPercent(discount ?? 0)}, abaixo de ${formatPct(GORDON_MIN_DISCOUNT, { digits: 0 })}`,
+      );
     }
-    
-    if (!hasMinimumCriteria) {
-      const failedCriteria = criteria.filter(c => !c.value).map(c => c.label);
-      reasoning += `Não atende critérios mínimos (${passedCriteria}/8): ${failedCriteria.join(', ')}. `;
-    }
-    if (!hasValidFairValue) {
-      reasoning += 'Não foi possível calcular preço justo pelos dividendos. ';
-    }
-    if (!hasValidUpside) {
-      reasoning += 'Upside não calculável. ';
-    }
-    if (hasValidUpside && !hasMinimumUpside) {
-      reasoning += 'Upside insuficiente para investimento (< 15%). ';
-    }
-    if (isEligible) {
-      reasoning = `Empresa elegível pela Fórmula de Gordon com ${passedCriteria}/8 critérios atendidos e upside de ${formatPercent(upside! / 100)}. ` + reasoning;
-    }
-    
-    // Adicionar validação de pares se houver alertas
-    if (!compsValidation.isReasonable) {
-      reasoning += `Alerta de análise de pares: ${compsValidation.reasoning}. `;
-    }
+    if (!hasMinimumCriteria) reasons.push(`${passedCriteria} de ${criteria.length} critérios atendidos`);
+
+    const verdict =
+      fairValue === null
+        ? 'Não foi possível estimar o preço justo pelos dividendos'
+        : `Preço justo de ${formatCurrency(fairValue)} = D1 ${formatCurrency((d0 ?? 0) * (1 + g))} ÷ (k − g)`;
+    const reasoning = `${verdict}. ${parameters}${
+      isEligible ? ` Margem de segurança de ${formatPercent(discount)}.` : reasons.length > 0 ? ` Fora do modelo: ${reasons.join('; ')}.` : ''
+    }`;
 
     return {
       fairValue,
       upside,
+      discount,
       isEligible,
       score,
       criteria,
-      reasoning: reasoning.trim() || 'Análise concluída.'
+      reasoning,
+      key_metrics: {
+        d0,
+        d1: d0 !== null ? d0 * (1 + g) : null,
+        costOfEquity: k,
+        growthRate: g,
+        sustainableGrowth: inputs.sustainableGrowth,
+        adjustedDiscountRate: k,
+        adjustedGrowthRate: g,
+        dy,
+        roe,
+        payout,
+      },
     };
-  }
-
-  private calculateGordonFairValue(
-    dividendNext12m: number | null, 
-    discountRate: number, 
-    growthRate: number
-  ): number | null {
-    if (!dividendNext12m || dividendNext12m <= 0) return null;
-    if (discountRate <= growthRate) return null; // Taxa de desconto deve ser maior que crescimento
-    
-    // Fórmula de Gordon: P = D / (K - G)
-    // P = Preço justo
-    // D = Dividendo próximos 12 meses
-    // K = Taxa de desconto (retorno esperado)
-    // G = Taxa de crescimento dos dividendos
-    
-    const fairValue = dividendNext12m / (discountRate - growthRate);
-    return fairValue > 0 ? fairValue : null;
   }
 
   runRanking(companies: CompanyData[], params: GordonParams): RankBuilderResult[] {
     const results: RankBuilderResult[] = [];
-    
-    // Filtrar empresas por overall_score > 50 (remover empresas ruins)
+
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
-    
-    // Filtrar tickers que terminam em 5, 6, 7, 8 ou 9
     filteredCompanies = this.filterTickerEndingDigits(filteredCompanies);
-    
-    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
     filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
-    
-    // Filtrar empresas por tamanho se especificado
     filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');
-    
+
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company, params)) continue;
-      
-      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
-      if (this.shouldExcludeCompany(company)) continue;
-      
       const analysis = this.runAnalysis(company, params);
-      if (!analysis.isEligible) continue;
-      
-      // Obter parâmetros ajustados para o rational
-      const { adjustedDiscountRate, adjustedGrowthRate } = this.getSectoralAdjustedParams(company, params);
-      
-      const dy = toNumber(company.financials.dy);
-      const roe = toNumber(company.financials.roe);
-      const payout = toNumber(company.financials.payout);
-      const crescimentoLucros = toNumber(company.financials.crescimentoLucros);
+      if (!analysis.isEligible || analysis.fairValue === null) continue;
+      if (this.shouldExcludeCompany(company)) continue;
+
+      // Score composto com as mesmas métricas (médias) da análise individual.
+      const metrics = analysis.key_metrics ?? {};
+      const dy = metrics.dy ?? null;
+      const roe = metrics.roe ?? null;
+      const payout = metrics.payout ?? null;
       const cagrLucros5a = toNumber(company.financials.cagrLucros5a);
-      
-      // Score composto: 35% upside + 25% dividend yield + 20% ROE + 10% payout + 10% crescimento (se CAGR > 0)
-      const shouldConsiderGrowth = cagrLucros5a && cagrLucros5a > 0;
-      const upsideScore = analysis.upside ? Math.min(analysis.upside / 50, 1) : 0; // Max 50% upside = score 1
-      const dyScore = dy ? Math.min(dy / 0.12, 1) : 0; // Max 12% DY = score 1
-      const roeScore = roe ? Math.min(roe / 0.25, 1) : 0; // Max 25% ROE = score 1
-      const payoutScore = payout ? (1 - Math.min(payout / 0.8, 1)) : 0; // Menor payout = melhor score
-      const growthScore = shouldConsiderGrowth && crescimentoLucros ? 
-        Math.min(Math.max(0, crescimentoLucros + 0.20), 0.30) / 0.30 : 0; // Crescimento normalizado se CAGR > 0
-      
-      const compositeScore = shouldConsiderGrowth ? (
-        upsideScore * 0.35 + 
-        dyScore * 0.25 + 
-        roeScore * 0.20 + 
-        payoutScore * 0.10 +
-        growthScore * 0.10
-      ) * 100 : (
-        upsideScore * 0.4 + 
-        dyScore * 0.3 + 
-        roeScore * 0.2 + 
-        payoutScore * 0.1
-      ) * 100;
-      
-      // Rational detalhado com informações setoriais
-      const sectorInfo = company.sector ? ` (${company.sector})` : '';
-      const ratesDiffer = adjustedDiscountRate !== params.discountRate || adjustedGrowthRate !== params.dividendGrowthRate;
-      const ratesInfo = ratesDiffer ? 
-        ` Taxas ajustadas por setor: ${formatPercent(adjustedDiscountRate)} desconto, ${formatPercent(adjustedGrowthRate)} crescimento.` :
-        ` Taxas: ${formatPercent(adjustedDiscountRate)} desconto, ${formatPercent(adjustedGrowthRate)} crescimento.`;
-      
-      results.push({
-        ticker: company.ticker,
-        name: company.name,
-        sector: company.sector,
-        currentPrice: company.currentPrice,
-        logoUrl: company.logoUrl,
-        fairValue: analysis.fairValue!,
-        upside: analysis.upside!,
-        marginOfSafety: analysis.upside! > 0 ? analysis.upside! : null,
-        rational: `Fórmula de Gordon${sectorInfo}: Preço justo R$ ${analysis.fairValue!.toFixed(2)} baseado em dividendos.${ratesInfo} DY: ${formatPercent(dy)}, ROE: ${formatPercent(roe)}, Payout: ${formatPercent(payout)}${shouldConsiderGrowth ? `, CAGR 5a: ${formatPercent(cagrLucros5a)}` : ''}.`,
-        key_metrics: {
-          dy: dy || 0,
-          roe: roe || 0,
-          payout: payout || 0,
-          compositeScore: compositeScore,
-          adjustedDiscountRate: adjustedDiscountRate,
-          adjustedGrowthRate: adjustedGrowthRate
-        }
-      });
+      const crescimentoLucros = toNumber(company.financials.crescimentoLucros);
+      const considerGrowth = !!(cagrLucros5a && cagrLucros5a > 0);
+      const upsideScore = analysis.upside ? Math.min(Math.max(analysis.upside, 0) / 50, 1) : 0;
+      const dyScore = dy ? Math.min(dy / 0.12, 1) : 0;
+      const roeScore = roe ? Math.min(roe / 0.25, 1) : 0;
+      const payoutScore = payout ? 1 - Math.min(payout / 0.8, 1) : 0;
+      const growthScore = considerGrowth && crescimentoLucros ? Math.min(Math.max(0, crescimentoLucros + 0.2), 0.3) / 0.3 : 0;
+      const compositeScore = considerGrowth
+        ? (upsideScore * 0.35 + dyScore * 0.25 + roeScore * 0.2 + payoutScore * 0.1 + growthScore * 0.1) * 100
+        : (upsideScore * 0.4 + dyScore * 0.3 + roeScore * 0.2 + payoutScore * 0.1) * 100;
+
+      const result = this.convertToRankingResult(company, analysis);
+      results.push({ ...result, key_metrics: { ...metrics, compositeScore: Number(compositeScore.toFixed(1)) } });
     }
-    
+
     const sortedResults = results.sort((a, b) => (b.key_metrics?.compositeScore || 0) - (a.key_metrics?.compositeScore || 0));
-
-    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
     const uniqueResults = this.removeDuplicateCompanies(sortedResults);
-
-    // Aplicar priorização técnica se habilitada
     return this.applyTechnicalPrioritization(uniqueResults, companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: GordonParams): string {
-    const sectoralAdjustment = params.useSectoralAdjustment !== false;
-    
-    return `# FÓRMULA DE GORDON (Método dos Dividendos) - CALIBRADA
+    const macro = macroAssumptions();
+    const sectoral = params.useSectoralAdjustment !== false;
+    const growthCap = Math.min(params.dividendGrowthRate ?? GORDON_DEFAULT_GROWTH, GORDON_MAX_GROWTH);
 
-**Filosofia**: Avalia empresas com base na sustentabilidade e crescimento dos dividendos, utilizando parâmetros calibrados por setor conforme práticas de mercado.
+    return `# Modelo de Gordon (desconto de dividendos)
 
-## Parâmetros Base de Análise
+**Ideia**: o preço justo é o valor presente dos dividendos futuros, crescendo a uma taxa constante: D1 ÷ (k − g). É uma estimativa sensível às premissas.
 
-- **Taxa de desconto base**: ${formatPercent(params.discountRate)}
-- **Taxa de crescimento base**: ${formatPercent(params.dividendGrowthRate)}
-- **Ajuste setorial**: ${sectoralAdjustment ? 'Ativado' : 'Desativado'}
-${params.sectoralWaccAdjustment ? `- **Ajuste manual WACC**: ${params.sectoralWaccAdjustment > 0 ? '+' : ''}${formatPercent(params.sectoralWaccAdjustment)}` : ''}
+## Premissas
 
-## Calibração Setorial
+- **D0**: soma dos proventos (dividendos e JCP brutos) com data-com nos últimos 12 meses, sem os extraordinários: pagamentos acima de 2× a mediana que não se repetem na mesma época de outros anos. Sem histórico, DY 12 meses × preço. D1 = D0 × (1 + g).
+- **k (custo de capital próprio)**: NTN-B longa + IPCA 12 meses + beta × prêmio de risco (hoje ${formatPercent(costOfEquityBRL(1, macro))} com beta 1), nunca abaixo da Selic (${formatPercent(macro.selic)}). Uma taxa informada só vale quando é maior.
+- **g (crescimento perpétuo)**: o menor entre ${formatPercent(growthCap)}, ROE × (1 − payout) e 6%.
+- **Spread mínimo**: k − g de pelo menos 4 p.p.; abaixo disso o modelo não se aplica.
+- **Ajuste setorial**: ${sectoral ? 'ativado (beta 0,8 para utilidade pública, 1,2 para commodities cíclicas, 1,0 para os demais)' : 'desativado (beta 1,0 para todos)'}.
 
-${sectoralAdjustment ? `
-**Setores de Baixo Risco** (Utilities, Energia): WACC reduzido (-1% a -2%)
-**Setores Financeiros** (Bancos, Seguros): WACC padrão, crescimento baseado em ROE
-**Setores Industriais**: WACC moderado (+1% a +1.5%)
-**Setores de Alto Risco** (Tecnologia): WACC elevado (+3%), crescimento acelerado
+## Critérios
 
-Os parâmetros são automaticamente ajustados baseado no setor da empresa, seguindo estudos de WACC por indústria e análise de pares.
-` : `
-Utilizando parâmetros fixos sem ajuste setorial.
-`}
+- Dividend yield ≥ 4% e payout ≤ 80%
+- ROE ≥ 12%
+- Margem de segurança (1 − preço ÷ preço justo) ≥ 10%, cerca de 11% de potencial
+- Bancos e seguradoras não são avaliados por liquidez corrente nem por dívida/PL; utilidade pública usa dívida líquida/EBITDA ≤ 3,5.
 
-## Critérios de Seleção
-
-- Dividend yield atrativo (≥4%)
-- Payout sustentável (≤80%)
-- ROE sólido (≥12%)
-- Potencial de valorização (≥15%)
-- Validação por análise de pares
-
-## Análise de Pares (Comps)
-
-- Validação de múltiplos P/L e P/VP vs. setor
-- Alertas para upsides excessivos (>100%)
-- Verificação de consistência com mercado
-
-**Ideal Para**: Investidores focados em renda passiva com crescimento, que valorizam análise fundamentalista calibrada por setor${params.useTechnicalAnalysis ? ' e timing de entrada baseado em análise técnica' : ''}.
-
-**Objetivo**: Encontrar empresas que combinam dividendos atrativos com crescimento sustentável, usando parâmetros realistas baseados em dados de mercado${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
+**Ordenação**: score composto (potencial, dividend yield, ROE, payout e crescimento)${params.useTechnicalAnalysis ? ', com priorização técnica (sobrevenda) dentro de faixas de resultados semelhantes' : ''}.`;
   }
 }

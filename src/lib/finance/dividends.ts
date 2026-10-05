@@ -78,15 +78,62 @@ export function dividendYieldTTM(events: readonly DividendEvent[], price: number
   return total > 0 ? total / price : null
 }
 
-/** Multiplicador acima da mediana a partir do qual um pagamento é tratado como extraordinário. */
+/** Multiplicador acima da mediana a partir do qual um pagamento é candidato a extraordinário. */
 export const EXTRAORDINARY_MULTIPLIER = 2
+/** Janela (dias) em torno da mesma data de outro ano usada para reconhecer um pagamento sazonal recorrente. */
+export const EXTRAORDINARY_RECURRENCE_WINDOW_DAYS = 45
+/** Razão máxima entre dois pagamentos sazonais para considerá-los do mesmo tipo (ex.: 0,35 e 0,19 → 1,8×). */
+export const EXTRAORDINARY_RECURRENCE_RATIO = 2.5
 
-/** Remove pagamentos extraordinários: valor > 2× a mediana dos pagamentos informados. */
-export function removeExtraordinary(events: readonly DividendEvent[]): DividendEvent[] {
+export interface RemoveExtraordinaryOptions {
+  /** Padrão: `EXTRAORDINARY_MULTIPLIER` (2). */
+  multiplier?: number
+  /** Padrão: `EXTRAORDINARY_RECURRENCE_WINDOW_DAYS` (45). */
+  recurrenceWindowDays?: number
+  /** Padrão: `EXTRAORDINARY_RECURRENCE_RATIO` (2,5). */
+  recurrenceRatio?: number
+}
+
+const DAY_MS = 86_400_000
+const YEAR_DAYS = 365.25
+
+/** `other` cai perto da mesma data de `event` em outro ano (±janela), com valor de ordem de grandeza parecida. */
+function isSeasonalMatch(event: DividendEvent, other: DividendEvent, windowDays: number, ratio: number): boolean {
+  if (other === event) return false
+  const diffDays = Math.abs(other.exDate.getTime() - event.exDate.getTime()) / DAY_MS
+  const years = Math.round(diffDays / YEAR_DAYS)
+  if (years < 1 || Math.abs(diffDays - years * YEAR_DAYS) > windowDays) return false
+  return other.amount * ratio >= event.amount && other.amount <= event.amount * ratio
+}
+
+/**
+ * Remove pagamentos extraordinários. Um pagamento é candidato quando passa de 2× a mediana de todos os pagamentos
+ * informados; o candidato só é descartado quando não se repete: nenhum outro ano tem um pagamento perto da mesma data
+ * (±45 dias) com valor parecido (até 2,5× de diferença).
+ *
+ * A checagem de recorrência evita cortar os dividendos trimestrais/semestrais regulares de quem também paga JCP e
+ * dividendos mensais pequenos (bancos: a mediana fica baixa e o trimestral regular passa de 2× ela). Por isso, passe o
+ * histórico de vários anos, não só a janela de 12 meses: sem anos anteriores não há como reconhecer a recorrência.
+ */
+export function removeExtraordinary(events: readonly DividendEvent[], options: RemoveExtraordinaryOptions = {}): DividendEvent[] {
+  const {
+    multiplier = EXTRAORDINARY_MULTIPLIER,
+    recurrenceWindowDays = EXTRAORDINARY_RECURRENCE_WINDOW_DAYS,
+    recurrenceRatio = EXTRAORDINARY_RECURRENCE_RATIO,
+  } = options
   const valid = validEvents(events)
   const med = median(valid.map((e) => e.amount))
   if (med === null) return []
-  return valid.filter((e) => e.amount <= med * EXTRAORDINARY_MULTIPLIER)
+  const threshold = med * multiplier
+  return valid.filter(
+    (e) => e.amount <= threshold || valid.some((other) => isSeasonalMatch(e, other, recurrenceWindowDays, recurrenceRatio)),
+  )
+}
+
+/** Pagamentos que `removeExtraordinary` descartaria (mesmos critérios). */
+export function extraordinaryEvents(events: readonly DividendEvent[], options: RemoveExtraordinaryOptions = {}): DividendEvent[] {
+  const kept = new Set(removeExtraordinary(events, options))
+  return validEvents(events).filter((e) => !kept.has(e))
 }
 
 export interface FullYearsOptions {
@@ -96,7 +143,8 @@ export interface FullYearsOptions {
   asOf?: Date
   /**
    * Início conhecido da cobertura do histórico. Quando informado, o ano dele só conta se a cobertura começa em 1º de janeiro.
-   * Sem ele, o primeiro ano com proventos é considerado parcial quando tem menos pagamentos que a mediana dos anos seguintes.
+   * Sem ele, o primeiro ano com proventos é parcial quando o primeiro pagamento dele cai depois do mês em que os anos
+   * seguintes costumam começar a pagar (mediana do mês do primeiro pagamento de cada ano seguinte).
    */
   coverageStart?: Date | null
 }
@@ -118,12 +166,16 @@ export function fullYearTotals(events: readonly DividendEvent[], options: FullYe
   if (valid.length === 0 || years <= 0) return []
 
   const totals = new Map<number, YearTotal>()
+  /** Mês (0–11) do primeiro pagamento de cada ano. */
+  const firstMonthByYear = new Map<number, number>()
   for (const e of valid) {
     const year = e.exDate.getUTCFullYear()
     const entry = totals.get(year) ?? { year, total: 0, payments: 0 }
     entry.total += e.amount
     entry.payments += 1
     totals.set(year, entry)
+    const month = e.exDate.getUTCMonth()
+    firstMonthByYear.set(year, Math.min(month, firstMonthByYear.get(year) ?? month))
   }
 
   const firstEventYear = Math.min(...valid.map((e) => e.exDate.getUTCFullYear()))
@@ -133,10 +185,14 @@ export function fullYearTotals(events: readonly DividendEvent[], options: FullYe
   if (coverageStart) {
     firstYearPartial = coverageStart.getTime() > Date.UTC(firstYear, 0, 1)
   } else {
-    const laterCounts: number[] = []
-    for (let y = firstYear + 1; y < currentYear; y++) laterCounts.push(totals.get(y)?.payments ?? 0)
-    const typical = median(laterCounts)
-    firstYearPartial = typical !== null && (totals.get(firstYear)?.payments ?? 0) < typical
+    const laterFirstMonths: number[] = []
+    for (let y = firstYear + 1; y < currentYear; y++) {
+      const month = firstMonthByYear.get(y)
+      if (month !== undefined) laterFirstMonths.push(month)
+    }
+    const typicalFirstMonth = median(laterFirstMonths)
+    const firstMonth = firstMonthByYear.get(firstYear)
+    firstYearPartial = typicalFirstMonth !== null && firstMonth !== undefined && firstMonth > typicalFirstMonth
   }
 
   const result: YearTotal[] = []
@@ -158,23 +214,73 @@ export function averageFullYears(events: readonly DividendEvent[], options: Full
   return roundTo(totals.reduce((acc, t) => acc + t.total, 0) / totals.length)
 }
 
+/** A partir de quantos meses sem pagamento o histórico é considerado desatualizado para anualizar. */
+export const STALE_DIVIDEND_MONTHS = 18
+
+export interface AnnualizeOptions {
+  /** Data de referência. Quando informada, histórico sem pagamento há mais de `staleMonths` meses não é anualizado. */
+  asOf?: Date
+  /** Padrão: `STALE_DIVIDEND_MONTHS` (18). */
+  staleMonths?: number
+}
+
+export interface AnnualizedDividends {
+  /** Proventos anualizados, ou `null` (menos de 2 datas-com, frequência indeterminável ou histórico desatualizado). */
+  annual: number | null
+  /** Pagamentos por ano inferidos (1 a 12), ou `null`. */
+  frequency: number | null
+  /** Último pagamento mais antigo que `staleMonths` em relação a `asOf`. */
+  stale: boolean
+  /** Data-com mais recente considerada. */
+  lastExDate: Date | null
+}
+
 /**
- * Proventos anualizados a partir dos (até) 12 pagamentos mais recentes: valor médio por pagamento × frequência anual,
- * inferida pela mediana do intervalo entre datas-com (mensal → 12, trimestral → 4 …). Pensado para FIIs mensais:
- * 12 rendimentos de R$ 0,10 → R$ 1,20. `null` com menos de 2 pagamentos (frequência indeterminável).
+ * Agrupa eventos com a mesma data-com (ex.: dividendo e JCP declarados juntos) em um único pagamento,
+ * para que a frequência não seja distorcida por intervalos de zero dias.
  */
-export function annualizeFromLast12(events: readonly DividendEvent[]): number | null {
-  const last = validEvents(events).sort(byExDate).slice(-12)
-  if (last.length < 2) return null
+function groupByExDate(events: readonly DividendEvent[]): DividendEvent[] {
+  const byDay = new Map<number, DividendEvent>()
+  for (const e of validEvents(events)) {
+    const day = Date.UTC(e.exDate.getUTCFullYear(), e.exDate.getUTCMonth(), e.exDate.getUTCDate())
+    const current = byDay.get(day)
+    byDay.set(day, current ? { ...current, amount: current.amount + e.amount } : { ...e })
+  }
+  return [...byDay.values()].sort(byExDate)
+}
+
+/**
+ * Detalhes da anualização pelos (até) 12 pagamentos mais recentes (ver `annualizeFromLast12`), incluindo a frequência
+ * inferida e a marcação de histórico desatualizado.
+ */
+export function annualizeLast12Details(events: readonly DividendEvent[], options: AnnualizeOptions = {}): AnnualizedDividends {
+  const { asOf, staleMonths = STALE_DIVIDEND_MONTHS } = options
+  const grouped = groupByExDate(events).filter((e) => !asOf || e.exDate.getTime() <= asOf.getTime())
+  const lastExDate = grouped.length > 0 ? grouped[grouped.length - 1].exDate : null
+  const stale = !!asOf && !!lastExDate && lastExDate.getTime() < subtractMonthsUTC(asOf, staleMonths).getTime()
+  const empty: AnnualizedDividends = { annual: null, frequency: null, stale, lastExDate }
+
+  const last = grouped.slice(-12)
+  if (stale || last.length < 2) return empty
   const gapsInDays: number[] = []
   for (let i = 1; i < last.length; i++) {
     gapsInDays.push((last[i].exDate.getTime() - last[i - 1].exDate.getTime()) / 86_400_000)
   }
   const medianGap = median(gapsInDays)
-  if (medianGap === null || medianGap <= 0) return null
+  if (medianGap === null || medianGap <= 0) return empty
   const frequency = Math.min(12, Math.max(1, Math.round(365.25 / medianGap)))
   const averagePayment = last.reduce((acc, e) => acc + e.amount, 0) / last.length
-  return roundTo(averagePayment * frequency)
+  return { annual: roundTo(averagePayment * frequency), frequency, stale, lastExDate }
+}
+
+/**
+ * Proventos anualizados a partir dos (até) 12 pagamentos mais recentes: valor médio por data-com × frequência anual,
+ * inferida pela mediana do intervalo entre datas-com (mensal → 12, trimestral → 4 …). Eventos na mesma data-com
+ * (dividendo + JCP) contam como um pagamento. Pensado para FIIs mensais: 12 rendimentos de R$ 0,10 → R$ 1,20.
+ * `null` com menos de 2 datas-com ou, quando `asOf` é informado, se o último pagamento tem mais de 18 meses.
+ */
+export function annualizeFromLast12(events: readonly DividendEvent[], options: AnnualizeOptions = {}): number | null {
+  return annualizeLast12Details(events, options).annual
 }
 
 /** Alíquota de IRRF sobre JCP: 15% até 31/12/2025. */

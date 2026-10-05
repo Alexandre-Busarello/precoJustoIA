@@ -1,5 +1,5 @@
 /**
- * Premissas macro (Selic, CDI, IPCA, NTN-B real longa, ERP, UST 10y) para Ke/WACC e DY-alvo de FIIs.
+ * Premissas macro (Selic, CDI, IPCA 12 meses, NTN-B real longa, ERP, UST 10y) para Ke/WACC e DY-alvo de FIIs.
  *
  * Fonte: `EconomicIndicatorHistory`, alimentada pelo cron `/api/cron/macro-indicators` com as séries do BCB SGS,
  * gravadas como o BCB publica (em %). Cada campo sem dado recente ou fora de uma faixa plausível cai para
@@ -14,6 +14,9 @@ import { roundTo } from './utils'
 export const MACRO_FALLBACK = {
   selic: 0.1375,
   cdi: 0.1365,
+  /** IPCA realizado nos últimos 12 meses (não é expectativa Focus). */
+  ipca12m: 0.04,
+  /** @deprecated Use `ipca12m`: o valor é o IPCA realizado em 12 meses, não uma expectativa. */
   ipcaExpected: 0.04,
   ntnbRealLong: 0.0768,
   erp: 0.055,
@@ -21,9 +24,9 @@ export const MACRO_FALLBACK = {
   asOf: '2026-09-16',
 } as const
 
-export type MacroField = 'selic' | 'cdi' | 'ipcaExpected' | 'ntnbRealLong' | 'erp' | 'ust10y'
+export type MacroField = 'selic' | 'cdi' | 'ipca12m' | 'ntnbRealLong' | 'erp' | 'ust10y'
 
-export const MACRO_FIELDS: readonly MacroField[] = ['selic', 'cdi', 'ipcaExpected', 'ntnbRealLong', 'erp', 'ust10y']
+export const MACRO_FIELDS: readonly MacroField[] = ['selic', 'cdi', 'ipca12m', 'ntnbRealLong', 'erp', 'ust10y']
 
 /** Símbolos gravados em `EconomicIndicatorHistory.symbol` (e usados também como `indicatorName`). */
 export const MACRO_SYMBOLS = {
@@ -51,18 +54,25 @@ export interface MacroFieldInfo {
 }
 
 export type MacroAssumptions = Record<MacroField, number> & {
+  /** @deprecated Alias de `ipca12m` (IPCA realizado em 12 meses, não uma expectativa). */
+  ipcaExpected: number
   /** Data mais recente entre os campos. */
   asOf: string
-  sources: Record<MacroField, MacroFieldInfo>
+  sources: Record<MacroField, MacroFieldInfo> & {
+    /** @deprecated Alias de `sources.ipca12m`. */
+    ipcaExpected: MacroFieldInfo
+  }
 }
 
 function fallbackAssumptions(): MacroAssumptions {
-  const sources = {} as Record<MacroField, MacroFieldInfo>
-  for (const field of MACRO_FIELDS) sources[field] = { asOf: MACRO_FALLBACK.asOf, source: 'fallback' }
+  const fieldSources = {} as Record<MacroField, MacroFieldInfo>
+  for (const field of MACRO_FIELDS) fieldSources[field] = { asOf: MACRO_FALLBACK.asOf, source: 'fallback' }
+  const sources = { ...fieldSources, ipcaExpected: fieldSources.ipca12m }
   return {
     selic: MACRO_FALLBACK.selic,
     cdi: MACRO_FALLBACK.cdi,
-    ipcaExpected: MACRO_FALLBACK.ipcaExpected,
+    ipca12m: MACRO_FALLBACK.ipca12m,
+    ipcaExpected: MACRO_FALLBACK.ipca12m,
     ntnbRealLong: MACRO_FALLBACK.ntnbRealLong,
     erp: MACRO_FALLBACK.erp,
     ust10y: MACRO_FALLBACK.ust10y,
@@ -75,7 +85,7 @@ function fallbackAssumptions(): MacroAssumptions {
 const PLAUSIBLE: Partial<Record<MacroField, [number, number]>> = {
   selic: [0.01, 0.5],
   cdi: [0.01, 0.5],
-  ipcaExpected: [-0.05, 0.3],
+  ipca12m: [-0.05, 0.3],
   ntnbRealLong: [0, 0.2],
 }
 
@@ -83,7 +93,7 @@ const PLAUSIBLE: Partial<Record<MacroField, [number, number]>> = {
 const MAX_AGE_DAYS: Partial<Record<MacroField, number>> = {
   selic: 30,
   cdi: 30,
-  ipcaExpected: 80,
+  ipca12m: 80,
   ntnbRealLong: 30,
 }
 
@@ -103,9 +113,12 @@ export function compoundMonthlyRates(monthlyPercents: readonly number[]): number
   return monthlyPercents.reduce((acc, v) => acc * (1 + v / 100), 1) - 1
 }
 
-/** Taxa livre de risco nominal a partir da NTN-B real longa e do IPCA esperado: `(1 + real) × (1 + IPCA) − 1`. */
-export function nominalRiskFree(ntnbReal: number, ipcaExpected: number): number {
-  return (1 + ntnbReal) * (1 + ipcaExpected) - 1
+/**
+ * Taxa livre de risco nominal a partir da NTN-B real longa e da inflação: `(1 + real) × (1 + IPCA) − 1`.
+ * Hoje a inflação usada é o IPCA realizado em 12 meses (`ipca12m`), na falta de uma série de expectativas.
+ */
+export function nominalRiskFree(ntnbReal: number, ipca: number): number {
+  return (1 + ntnbReal) * (1 + ipca) - 1
 }
 
 export interface KeInput {
@@ -123,10 +136,14 @@ export function computeKe({ rfNominal, beta = 1, erp, selic = MACRO_FALLBACK.sel
   return roundTo(Math.max(selic, rfNominal + beta * erp), 10)
 }
 
+/** Premissas mínimas para o Ke; aceita `ipca12m` ou o alias legado `ipcaExpected`. */
+export type KeMacroInput = Pick<MacroAssumptions, 'ntnbRealLong' | 'erp' | 'selic'> & { ipca12m?: number; ipcaExpected?: number }
+
 /** Ke a partir de um conjunto de premissas macro. */
-export function keFromMacro(macro: Pick<MacroAssumptions, 'ntnbRealLong' | 'ipcaExpected' | 'erp' | 'selic'>, beta = 1): number {
+export function keFromMacro(macro: KeMacroInput, beta = 1): number {
+  const ipca = macro.ipca12m ?? macro.ipcaExpected ?? MACRO_FALLBACK.ipca12m
   return computeKe({
-    rfNominal: nominalRiskFree(macro.ntnbRealLong, macro.ipcaExpected),
+    rfNominal: nominalRiskFree(macro.ntnbRealLong, ipca),
     beta,
     erp: macro.erp,
     selic: macro.selic,
@@ -146,12 +163,16 @@ function formatSgsDate(date: Date): string {
   return `${d}/${m}/${date.getUTCFullYear()}`
 }
 
-/** Converte 'dd/MM/yyyy' em Date UTC; `null` se inválida. */
+/** Converte 'dd/MM/yyyy' em Date UTC; `null` se inválida (inclusive datas impossíveis, como 31/02). */
 export function parseSgsDate(text: string): Date | null {
   const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text.trim())
   if (!match) return null
-  const date = new Date(Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])))
-  return Number.isNaN(date.getTime()) ? null : date
+  const [day, month, year] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (Number.isNaN(date.getTime())) return null
+  // Date.UTC "rola" datas impossíveis (31/02 → 03/03): rejeita se o resultado não bate com o texto.
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
+  return date
 }
 
 /**
@@ -196,6 +217,10 @@ export function buildMacroAssumptions(
     if (maxAge !== undefined && now.getTime() - date.getTime() > maxAge * DAY_MS) return
     result[field] = roundTo(value)
     result.sources[field] = { asOf: toIsoDate(date), source: 'db', symbol }
+    if (field === 'ipca12m') {
+      result.ipcaExpected = result.ipca12m
+      result.sources.ipcaExpected = result.sources.ipca12m
+    }
   }
 
   // Ignora datas futuras (a série da meta Selic é publicada até a próxima reunião do Copom).
@@ -214,7 +239,7 @@ export function buildMacroAssumptions(
   const ntnb = latest(rows.ntnbRealLong)
   if (ntnb) accept('ntnbRealLong', ntnb.value / 100, ntnb.date, MACRO_SYMBOLS.ntnbRealLong)
 
-  // IPCA esperado ≈ IPCA acumulado dos últimos 12 meses (até haver série Focus), exigindo 12 meses consecutivos.
+  // IPCA realizado acumulado nos últimos 12 meses (não é expectativa Focus), exigindo 12 meses consecutivos.
   const ipca = upToNow(rows.ipca).sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 12)
   if (ipca.length === 12) {
     const newest = ipca[0].date
@@ -222,7 +247,7 @@ export function buildMacroAssumptions(
     const monthsSpan =
       (newest.getUTCFullYear() - oldest.getUTCFullYear()) * 12 + (newest.getUTCMonth() - oldest.getUTCMonth())
     if (monthsSpan === 11) {
-      accept('ipcaExpected', compoundMonthlyRates(ipca.map((r) => r.value)), newest, MACRO_SYMBOLS.ipca)
+      accept('ipca12m', compoundMonthlyRates(ipca.map((r) => r.value)), newest, MACRO_SYMBOLS.ipca)
     }
   }
 

@@ -16,8 +16,8 @@ export interface MacroSeriesConfig {
 }
 
 /**
- * Séries sincronizadas. Selic e CDI: últimos 90 dias. IPCA: 400 dias, porque o IPCA esperado é o acumulado de
- * 12 meses (a série é mensal e 90 dias trariam só 3 pontos).
+ * Séries sincronizadas. Selic e CDI: últimos 90 dias. IPCA: 400 dias, porque a premissa usada é o IPCA realizado
+ * acumulado em 12 meses (a série é mensal e 90 dias trariam só 3 pontos).
  */
 export const MACRO_SERIES: readonly MacroSeriesConfig[] = [
   { code: SGS_CODES.selic, symbol: MACRO_SYMBOLS.selic, lookbackDays: 90 },

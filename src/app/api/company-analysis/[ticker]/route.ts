@@ -23,6 +23,10 @@ interface CompanyAnalysisResponse {
     gordon: StrategyAnalysis;
     fundamentalist: StrategyAnalysis;
     barsi: StrategyAnalysis;
+    /** Modelos novos: null quando o plano não dá acesso ou (bankPvp) a empresa não é financeira. */
+    bazin: StrategyAnalysis | null;
+    lynch: StrategyAnalysis | null;
+    bankPvp: StrategyAnalysis | null;
   };
 }
 
@@ -43,8 +47,8 @@ export async function GET(
     const isPremium = await isCurrentUserPremium({ request });
 
     // Criar chave de cache considerando ticker e status do usuário
-    // v2: Graham agora calculado para anônimos com acesso (isPremium)
-    const cacheKey = `company-analysis:v2:${ticker}:${isLoggedIn ? 'logged' : 'anon'}:${isPremium ? 'premium' : 'free'}`;
+    // v3: modelos Bazin, Peter Lynch e P/VP justo (bancos)
+    const cacheKey = `company-analysis:v3:${ticker}:${isLoggedIn ? 'logged' : 'anon'}:${isPremium ? 'premium' : 'free'}`;
 
     // Verificar cache
     const cachedData = await cache.get<CompanyAnalysisResponse>(cacheKey);
@@ -143,7 +147,11 @@ export async function GET(
           upside: null,
           reasoning: isPremium ? 'Dados insuficientes para análise Método Barsi' : 'Premium necessário para análise Método Barsi',
           criteria: [],
-        }
+        },
+        // Gating por plano já aplicado em executeCompanyAnalysis (registro de valuation-models); null = sem linha na tabela.
+        bazin: resultStrategies?.bazin ?? null,
+        lynch: resultStrategies?.lynch ?? null,
+        bankPvp: resultStrategies?.bankPvp ?? null,
       }
     };
 

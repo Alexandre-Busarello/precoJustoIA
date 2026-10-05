@@ -37,6 +37,9 @@ export interface CompanyScoreResult {
     gordon: StrategyAnalysis | null;
     fundamentalist: StrategyAnalysis | null;
     barsi: StrategyAnalysis | null;
+    bazin: StrategyAnalysis | null;
+    lynch: StrategyAnalysis | null;
+    bankPvp: StrategyAnalysis | null;
   };
 }
 

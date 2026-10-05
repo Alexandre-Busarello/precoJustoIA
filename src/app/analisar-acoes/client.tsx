@@ -3,9 +3,7 @@
 import { useState } from 'react';
 import CompanySearch from '@/components/company-search';
 import { CompanyPreview } from '@/components/company-preview';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Rocket, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 import { CTALinkWithPixel } from '@/components/cta-link-with-pixel';
 
 interface Company {
@@ -36,101 +34,70 @@ export default function AnalisarAcoesClient() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Primeira Seção: Input de Busca */}
-      <section className="container mx-auto px-4 py-12 sm:py-16 lg:py-20">
-        <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6 leading-tight">
-            <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
-              Análise de Ações B3
-            </span>
-            <br />
-            <span className="text-foreground">
-              com Inteligência Artificial
-            </span>
-          </h1>
-          <p className="text-lg sm:text-xl text-muted-foreground mb-8 sm:mb-12 max-w-2xl mx-auto leading-relaxed">
-            Calcule <strong>valuation</strong>, <strong>fluxo de caixa descontado</strong> e encontre o <strong>preço justo</strong> de qualquer ação da Bovespa. 
-            Análise completa com <strong>8 modelos automatizados</strong> e <strong>IA</strong>.
+    <div className="bg-background">
+      <section className="container mx-auto px-4 py-10 sm:py-14">
+        <div className="mx-auto max-w-2xl text-center">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Análise de ações da B3</h1>
+          <p className="mx-auto mt-3 max-w-[60ch] text-base leading-7 text-muted-foreground">
+            Busque uma ação para ver o preço justo estimado por modelo de valuation, a margem de segurança e os principais
+            indicadores.
           </p>
-          
-          {/* Input de Busca */}
-          <div className="flex justify-center mb-8">
+
+          <div className="mt-6 flex justify-center">
             <CompanySearch
-              placeholder="Digite o ticker da ação (ex: PETR4, VALE3)..."
-              className="w-full max-w-2xl"
+              placeholder="Digite o ticker, como PETR4 ou VALE3"
+              className="w-full max-w-xl"
               onCompanySelect={handleCompanySelect}
             />
           </div>
 
-          {/* CTA Discreto (apenas se não houver preview) */}
           {!selectedTicker && (
-            <div className="mt-8">
-              <p className="text-sm text-muted-foreground mb-4">
-                Ou comece sua análise gratuita agora
-              </p>
-              <Button size="lg" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" asChild>
-                <CTALinkWithPixel href="/register" className="flex items-center gap-2">
-                  <Rocket className="w-4 h-4" />
-                  Começar análise gratuita
-                  <ArrowRight className="w-4 h-4" />
-                </CTALinkWithPixel>
-              </Button>
-            </div>
+            <p className="mt-6 text-sm text-muted-foreground">
+              Quer salvar análises e montar sua carteira?{' '}
+              <CTALinkWithPixel href="/register" className="font-medium text-brand underline-offset-4 hover:underline">
+                Criar conta grátis
+              </CTALinkWithPixel>
+            </p>
           )}
         </div>
       </section>
 
-      {/* Segunda Seção: Preview Dinâmico */}
       {selectedTicker && (
         <section id="company-preview" className="container mx-auto px-4 pb-12">
           <CompanyPreview ticker={selectedTicker} />
         </section>
       )}
 
-      {/* Seção de Benefícios (apenas se não houver preview) */}
       {!selectedTicker && (
-        <section className="container mx-auto px-4 py-12 sm:py-16 bg-gradient-to-b from-white to-gray-50 dark:from-background dark:to-background/80">
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8 sm:mb-12">
-              Por que usar nossa plataforma?
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mx-auto mb-4">
-                    <Rocket className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <h3 className="font-semibold mb-2">Análise em Segundos</h3>
-                  <p className="text-sm text-muted-foreground">
-                    8 modelos de valuation automatizados analisam +500 empresas da B3 em tempo real
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center mx-auto mb-4">
-                    <ArrowRight className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <h3 className="font-semibold mb-2">Valuation Completo</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Calcule preço justo usando Graham, DCF, Fórmula Mágica e mais 5 estratégias consagradas
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center mx-auto mb-4">
-                    <Rocket className="w-6 h-6 text-green-600" />
-                  </div>
-                  <h3 className="font-semibold mb-2">Análise com IA</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Inteligência Artificial analisa todos os modelos e gera insights preditivos personalizados
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+        <section className="container mx-auto px-4 pb-12 sm:pb-16">
+          <dl className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-3">
+            {[
+              {
+                title: 'Vários modelos lado a lado',
+                text: 'Graham, fluxo de caixa descontado, Gordon, Bazin e outros, cada um com critérios e limitações à vista.',
+              },
+              {
+                title: 'Margem de segurança',
+                text: 'Quanto o preço atual está abaixo ou acima de cada estimativa, com a data do dado.',
+              },
+              {
+                title: 'Síntese com IA',
+                text: 'Um resumo dos resultados dos modelos. Os números vêm sempre das fórmulas, não da IA.',
+              },
+            ].map((item) => (
+              <div key={item.title} className="rounded-lg border border-border bg-card p-4">
+                <dt className="text-sm font-medium text-foreground">{item.title}</dt>
+                <dd className="mt-1 text-sm leading-6 text-muted-foreground">{item.text}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mx-auto mt-6 max-w-4xl text-xs text-muted-foreground">
+            Estimativas de modelos quantitativos com dados públicos; não são recomendação de investimento.{' '}
+            <Link href="/metodologia" className="underline underline-offset-4 hover:text-foreground">
+              Ver metodologia
+            </Link>
+            .
+          </p>
         </section>
       )}
 
@@ -141,8 +108,8 @@ export default function AnalisarAcoesClient() {
           __html: JSON.stringify({
             '@context': 'https://schema.org',
             '@type': 'WebPage',
-            name: 'Análise de Ações B3 | Calcular Valuation',
-            description: 'Análise de ações B3 com IA. Calcule valuation, fluxo de caixa descontado e encontre o preço justo.',
+            name: 'Análise de ações da B3',
+            description: 'Preço justo estimado por modelo de valuation e margem de segurança.',
             url: 'https://precojusto.ai/analisar-acoes',
             mainEntity: {
               '@type': 'SoftwareApplication',

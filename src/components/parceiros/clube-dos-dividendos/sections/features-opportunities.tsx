@@ -4,9 +4,9 @@ import { PreviewShell } from '../preview-shell'
 type StatusType = 'green' | 'yellow' | 'red'
 
 const STATUS_COLORS: Record<StatusType, { dot: string; label: string }> = {
-  green: { dot: 'bg-green-500', label: 'text-green-700' },
-  yellow: { dot: 'bg-yellow-500', label: 'text-yellow-700' },
-  red: { dot: 'bg-red-500', label: 'text-red-600' },
+  green: { dot: 'bg-positive', label: 'text-positive' },
+  yellow: { dot: 'bg-warning', label: 'text-warning' },
+  red: { dot: 'bg-negative', label: 'text-negative' },
 }
 
 function StatusDot({ status, label }: { status: StatusType; label: string }) {
@@ -27,7 +27,7 @@ const OPPORTUNITIES = [
     scoreStatus: 'green' as StatusType,
     valuation: '+37%',
     valuationStatus: 'green' as StatusType,
-    tecnico: 'Entrada',
+    tecnico: 'Sobrevenda',
     tecnicoStatus: 'green' as StatusType,
     sentimento: 82,
     sentimentoStatus: 'green' as StatusType,
@@ -53,7 +53,7 @@ const OPPORTUNITIES = [
     scoreStatus: 'yellow' as StatusType,
     valuation: '+8%',
     valuationStatus: 'yellow' as StatusType,
-    tecnico: 'Aguardar',
+    tecnico: 'Neutro',
     tecnicoStatus: 'yellow' as StatusType,
     sentimento: 85,
     sentimentoStatus: 'green' as StatusType,
@@ -66,7 +66,7 @@ const OPPORTUNITIES = [
     scoreStatus: 'red' as StatusType,
     valuation: '−12%',
     valuationStatus: 'red' as StatusType,
-    tecnico: 'Evitar',
+    tecnico: 'Sobrecompra',
     tecnicoStatus: 'red' as StatusType,
     sentimento: 31,
     sentimentoStatus: 'red' as StatusType,
@@ -76,27 +76,27 @@ const OPPORTUNITIES = [
 
 export function FeaturesOpportunitiesSection() {
   return (
-    <section className="bg-slate-950 py-20 md:py-28">
+    <section className="bg-surface py-20 md:py-28">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-10 text-center">
-          <Badge className="mb-3 border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-            Radar de Oportunidades
+          <Badge className="mb-3 border-brand/40 bg-brand-subtle text-brand">
+            Radar de oportunidades
           </Badge>
-          <h2 className="text-3xl font-extrabold text-white md:text-4xl">
-            Identifique em segundos o que comprar, aguardar ou evitar
+          <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
+            Veja em segundos como cada ativo está em quatro dimensões
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-slate-400">
-            Cada ativo é avaliado em 4 dimensões: Score Geral, Valuation, Técnico e Sentimento. Três cores, uma decisão clara.
+          <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
+            Cada ativo é avaliado em 4 dimensões: Score Geral, Valuation, Técnico e Sentimento. Três cores para ler o quadro de cada ativo.
           </p>
         </div>
 
         <PreviewShell path="/radar-de-oportunidades">
         {/* Desktop table */}
-        <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
+        <div className="hidden md:block overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-800 text-left text-xs font-semibold uppercase text-slate-500">
+              <tr className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
                 <th className="px-5 py-3">Ativo</th>
                 <th className="px-4 py-3">Score</th>
                 <th className="px-4 py-3">Estratégias</th>
@@ -107,27 +107,27 @@ export function FeaturesOpportunitiesSection() {
             </thead>
             <tbody>
               {OPPORTUNITIES.map((row, i) => (
-                <tr key={row.ticker} className={i < OPPORTUNITIES.length - 1 ? 'border-b border-slate-800' : ''}>
+                <tr key={row.ticker} className={i < OPPORTUNITIES.length - 1 ? 'border-b border-border' : ''}>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-slate-300">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
                         {row.ticker.slice(0, 2)}
                       </div>
                       <div>
-                        <div className="font-semibold text-white">{row.ticker}</div>
-                        <div className="text-xs text-slate-500">{row.name}</div>
+                        <div className="font-semibold text-foreground">{row.ticker}</div>
+                        <div className="text-xs text-muted-foreground">{row.name}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2">
                       <div
-                        className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white ${
+                        className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold text-primary-foreground ${
                           row.scoreStatus === 'green'
-                            ? 'bg-green-500'
+                            ? 'bg-positive'
                             : row.scoreStatus === 'yellow'
-                            ? 'bg-yellow-500'
-                            : 'bg-red-500'
+                            ? 'bg-warning'
+                            : 'bg-negative'
                         }`}
                       >
                         {row.score}
@@ -138,11 +138,11 @@ export function FeaturesOpportunitiesSection() {
                     <div className="flex flex-wrap gap-1">
                       {row.strategies.length > 0
                         ? row.strategies.map((s) => (
-                            <span key={s} className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
+                            <span key={s} className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                               {s}
                             </span>
                           ))
-                        : <span className="text-xs text-slate-600">Nenhuma</span>}
+                        : <span className="text-xs text-muted-foreground">Nenhuma</span>}
                     </div>
                   </td>
                   <td className="px-4 py-4">
@@ -161,11 +161,11 @@ export function FeaturesOpportunitiesSection() {
               ))}
             </tbody>
           </table>
-          <div className="flex flex-wrap items-center gap-4 border-t border-slate-800 bg-slate-900/80 px-5 py-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-green-500" />Comprar</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />Aguardar</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />Evitar</span>
-            <span className="ml-auto text-slate-600">Dados ilustrativos · PREMIUM</span>
+          <div className="flex flex-wrap items-center gap-4 border-t border-border bg-card px-5 py-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-positive" />Favorável</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-warning" />Atenção</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-negative" />Desfavorável</span>
+            <span className="ml-auto text-muted-foreground">Dados ilustrativos · Premium</span>
           </div>
         </div>
 
@@ -174,39 +174,39 @@ export function FeaturesOpportunitiesSection() {
           {OPPORTUNITIES.map((row) => {
             const score = STATUS_COLORS[row.scoreStatus]
             return (
-              <div key={row.ticker} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+              <div key={row.ticker} className="rounded-lg border border-border bg-card p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-slate-300">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
                       {row.ticker.slice(0, 2)}
                     </div>
                     <div>
-                      <div className="font-semibold text-white">{row.ticker}</div>
-                      <div className="text-xs text-slate-500">{row.name}</div>
+                      <div className="font-semibold text-foreground">{row.ticker}</div>
+                      <div className="text-xs text-muted-foreground">{row.name}</div>
                     </div>
                   </div>
-                  <div className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white ${score.dot}`}>
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold text-primary-foreground ${score.dot}`}>
                     {row.score}
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div>
-                    <p className="text-slate-500">Valuation</p>
+                    <p className="text-muted-foreground">Valuation</p>
                     <StatusDot status={row.valuationStatus} label={row.valuation} />
                   </div>
                   <div>
-                    <p className="text-slate-500">Técnico</p>
+                    <p className="text-muted-foreground">Técnico</p>
                     <StatusDot status={row.tecnicoStatus} label={row.tecnico} />
                   </div>
                   <div>
-                    <p className="text-slate-500">Sentimento</p>
+                    <p className="text-muted-foreground">Sentimento</p>
                     <StatusDot status={row.sentimentoStatus} label={String(row.sentimento)} />
                   </div>
                 </div>
               </div>
             )
           })}
-          <p className="text-right text-xs text-slate-600">Dados ilustrativos</p>
+          <p className="text-right text-xs text-muted-foreground">Dados ilustrativos</p>
         </div>
         </PreviewShell>
       </div>

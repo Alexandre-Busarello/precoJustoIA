@@ -1,5 +1,11 @@
-import Link from "next/link"
-import Image from "next/image"
+import type { Metadata } from "next"
+import { BrandLogo } from "@/components/ui/brand-logo"
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "/oferta",
+  },
+}
 
 export default function OfertaLayout({
   children,
@@ -8,41 +14,13 @@ export default function OfertaLayout({
 }) {
   return (
     <>
-      {/* Header Minimalista - Apenas Logo Centralizado */}
-      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex justify-center">
-            <Link href="/" className="hover:opacity-80 transition-opacity">
-              <Image 
-                src="/logo-preco-justo.png" 
-                alt="Preço Justo AI" 
-                width={553}
-                height={135}
-                style={{ width: 'auto' }}
-                className="h-12 sm:h-16 w-auto max-w-[200px] sm:max-w-[250px]"
-              />
-            </Link>
-          </div>
+      {/* Cabeçalho mínimo da landing de anúncios: só o logo, centralizado. */}
+      <header className="sticky top-0 z-50 border-b border-border bg-background">
+        <div className="container mx-auto flex h-14 items-center justify-center px-4 sm:h-16">
+          <BrandLogo className="h-7 sm:h-8" priority />
         </div>
       </header>
       {children}
     </>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

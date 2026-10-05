@@ -2,15 +2,15 @@ import { Metadata } from 'next';
 import AnalisarAcoesClient from './client';
 
 export const metadata: Metadata = {
-  title: 'Análise de Ações B3 | Calcular Valuation | Site para Analisar Ações com IA',
-  description: 'Análise de ações B3 com IA. Calcule valuation, fluxo de caixa descontado e encontre o preço justo. Site completo para analisar ações da Bovespa com 8 modelos de valuation automatizados.',
-  keywords: 'análise ação, análise de ações, site para analisar ações, calcular ações, valuation de ações, analise de ações com IA, valuation fluxo de caixa descontado, análise fundamentalista ações, ações B3, bovespa investimentos, como investir em ações, melhores ações B3, preço justo ações',
+  title: 'Análise de ações da B3: preço justo por modelo de valuation',
+  description: 'Analise ações da B3: preço justo estimado por Graham, fluxo de caixa descontado, Gordon e outros modelos, com margem de segurança e síntese gerada por IA.',
+  keywords: 'análise ação, análise de ações, site para analisar ações, calcular ações, valuation de ações, analise de ações com IA, valuation fluxo de caixa descontado, análise fundamentalista ações, ações B3, bovespa investimentos, como investir em ações, preço justo ações',
   alternates: {
     canonical: '/analisar-acoes',
   },
   openGraph: {
-    title: 'Análise de Ações B3 | Calcular Valuation | Site para Analisar Ações com IA',
-    description: 'Análise de ações B3 com IA. Calcule valuation, fluxo de caixa descontado e encontre o preço justo.',
+    title: 'Análise de ações da B3: preço justo por modelo de valuation',
+    description: 'Preço justo estimado por modelo de valuation, margem de segurança e síntese gerada por IA.',
     type: 'website',
     url: 'https://precojusto.ai/analisar-acoes',
     siteName: 'Preço Justo AI',
@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Análise de Ações B3 | Calcular Valuation',
-    description: 'Análise de ações B3 com IA. Calcule valuation e encontre o preço justo.',
+    title: 'Análise de ações da B3',
+    description: 'Preço justo estimado por modelo de valuation e margem de segurança.',
   },
   robots: {
     index: true,

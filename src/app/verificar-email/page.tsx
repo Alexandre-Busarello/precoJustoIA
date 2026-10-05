@@ -5,11 +5,11 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
-import { CheckCircle2, XCircle, Mail, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import Link from "next/link"
 import { invalidateEmailVerifiedCache } from "@/hooks/use-user-data"
 import { GoogleAdsConversionPixel } from "@/components/google-ads-conversion-pixel"
+import { AuthFallback, AuthShell } from "../login/auth-ui"
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams()
@@ -61,175 +61,111 @@ function VerifyEmailContent() {
       const data = await response.json()
 
       if (response.ok) {
-        setResendMessage(data.message || "Email de verificação reenviado com sucesso!")
+        setResendMessage(data.message || "E-mail de verificação reenviado.")
       } else {
-        setResendError(data.message || "Erro ao reenviar email")
+        setResendError(data.message || "Não foi possível reenviar o e-mail.")
       }
     } catch {
-      setResendError("Erro ao reenviar email. Tente novamente mais tarde.")
+      setResendError("Não foi possível reenviar o e-mail. Tente novamente mais tarde.")
     } finally {
       setIsResending(false)
     }
   }
 
+  const errorMessage =
+    error === 'token_required'
+      ? 'O link não trouxe o código de verificação.'
+      : error === 'invalid_token'
+        ? 'O link é inválido ou expirou. Peça um novo link abaixo.'
+        : error === 'server_error'
+          ? 'Erro no servidor. Tente novamente mais tarde.'
+          : 'Não foi possível verificar o e-mail.'
+
+  const continueHref = returnUrl || '/dashboard'
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      {/* Disparar pixel de conversão quando usuário chega após cadastro por email */}
-      {/* Isso garante atribuição correta antes da validação do email (evita quebra de sessão) */}
+    <>
+      {/* Pixel de conversão de quem chega após o cadastro por e-mail (antes da validação, para não perder a sessão). */}
       <GoogleAdsConversionPixel />
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          {success === 'true' ? (
-            <>
-              <div className="flex justify-center mb-4">
-                <CheckCircle2 className="h-16 w-16 text-green-500" />
-              </div>
-              <CardTitle className="text-2xl text-green-600">Email Verificado!</CardTitle>
-              <CardDescription>
-                Sua conta foi verificada com sucesso. Você será redirecionado em instantes...
-              </CardDescription>
-            </>
-          ) : error ? (
-            <>
-              <div className="flex justify-center mb-4">
-                <XCircle className="h-16 w-16 text-red-500" />
-              </div>
-              <CardTitle className="text-2xl text-red-600">Erro na Verificação</CardTitle>
-              <CardDescription className="text-red-500">
-                {error === 'token_required' && 'Token de verificação não fornecido.'}
-                {error === 'invalid_token' && 'Token inválido ou expirado. Solicite um novo link de verificação.'}
-                {error === 'server_error' && 'Erro no servidor. Tente novamente mais tarde.'}
-                {!['token_required', 'invalid_token', 'server_error'].includes(error) && 'Erro ao verificar email.'}
-              </CardDescription>
-            </>
-          ) : (
-            <>
-              <div className="flex justify-center mb-4">
-                <Mail className="h-16 w-16 text-blue-500" />
-              </div>
-              <CardTitle className="text-2xl">Verifique seu Email</CardTitle>
-              <CardDescription>
-                Enviamos um link de verificação para seu email. Clique no link para ativar sua conta e iniciar seu período de trial de 1 dia.
-              </CardDescription>
-            </>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {success !== 'true' && (
-            <>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800 font-semibold mb-2">
-                  ⚠️ Importante: Seu trial de 1 dia só será ativado após verificar o email
-                </p>
-                <p className="text-sm text-blue-700 mb-2">
-                  Você pode usar a plataforma normalmente, mas para ativar todas as funcionalidades Premium e iniciar seu período de trial, é necessário verificar seu email.
-                </p>
-                <p className="text-sm text-blue-800 font-semibold mt-3 mb-2">
-                  Não recebeu o email?
-                </p>
-                <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
-                  <li>Verifique sua pasta de spam/lixo eletrônico</li>
-                  <li>O link expira em 24 horas</li>
-                  <li>Certifique-se de usar o mesmo email do cadastro</li>
-                </ul>
-              </div>
+      {success === 'true' ? (
+        <AuthShell
+          title="E-mail verificado"
+          description={
+            status === 'authenticated'
+              ? 'Seu dia de Premium grátis já começou. Redirecionando…'
+              : 'Seu dia de Premium grátis já começou. Entre na sua conta para continuar.'
+          }
+        >
+          <Button asChild className="w-full">
+            {status === 'unauthenticated' ? (
+              <Link href={`/login?callbackUrl=${encodeURIComponent(continueHref)}`}>Entrar</Link>
+            ) : (
+              <Link href={continueHref}>{returnUrl ? 'Continuar' : 'Ir para o painel'}</Link>
+            )}
+          </Button>
+        </AuthShell>
+      ) : (
+        <AuthShell
+          title={error ? 'Não foi possível verificar' : 'Verifique seu e-mail'}
+          description={
+            error
+              ? errorMessage
+              : 'Enviamos um link de verificação. Ao confirmar, seu dia de Premium grátis começa.'
+          }
+          footer={
+            <Link href="/" className="inline-flex min-h-11 items-center underline-offset-4 hover:text-foreground hover:underline sm:min-h-0">
+              Voltar para o início
+            </Link>
+          }
+        >
+          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground marker:text-muted-foreground">
+            <li>O link vale por 24 horas.</li>
+            <li>Não chegou? Veja a pasta de spam.</li>
+            <li>Você já pode usar os recursos gratuitos enquanto isso.</li>
+          </ul>
 
-              {status === 'authenticated' && (
-                <div className="space-y-2">
-                  <Button
-                    onClick={handleResend}
-                    disabled={isResending}
-                    className="w-full"
-                    variant="outline"
-                  >
-                    {isResending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Enviando...
-                      </>
-                    ) : (
-                      <>
-                        <Mail className="mr-2 h-4 w-4" />
-                        Reenviar Email de Verificação
-                      </>
-                    )}
-                  </Button>
-
-                  {resendMessage && (
-                    <p className="text-sm text-green-600 text-center">{resendMessage}</p>
-                  )}
-
-                  {resendError && (
-                    <p className="text-sm text-red-600 text-center">{resendError}</p>
-                  )}
-                </div>
-              )}
-
-              {status === 'unauthenticated' && (
-                <div className="text-center space-y-2">
-                  <p className="text-sm text-gray-600">
-                    Faça login para reenviar o email de verificação.
-                  </p>
-                  <Link href="/login">
-                    <Button variant="outline" className="w-full">
-                      Fazer Login
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </>
-          )}
-
-          {success === 'true' && (
-            <div className="text-center">
-              <p className="text-sm text-gray-600 mb-4">
-                Seu período de trial de 1 dia foi iniciado automaticamente!
-              </p>
-              <Link href={returnUrl || '/dashboard'}>
-                <Button className="w-full">
-                  {returnUrl ? 'Continuar' : 'Ir para Dashboard'}
+          {status === 'authenticated' && (
+            <div className="space-y-3">
+              {!error && (
+                <Button asChild className="w-full">
+                  <Link href="/dashboard">Continuar para o painel</Link>
                 </Button>
-              </Link>
+              )}
+              <Button onClick={handleResend} disabled={isResending} className="w-full" variant="outline">
+                {isResending && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />}
+                {isResending ? 'Enviando…' : 'Reenviar e-mail de verificação'}
+              </Button>
+              {resendMessage && (
+                <p className="text-center text-sm text-positive" role="status">
+                  {resendMessage}
+                </p>
+              )}
+              {resendError && (
+                <p className="text-center text-sm text-negative" role="alert">
+                  {resendError}
+                </p>
+              )}
             </div>
           )}
 
-          {status === 'authenticated' && success !== 'true' && !error && (
-            <div className="text-center space-y-4">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800 font-semibold mb-2">
-                  Você já está logado!
-                </p>
-                <p className="text-sm text-yellow-700">
-                  Você pode usar a plataforma normalmente. Para ativar seu período de trial de 1 dia e todas as funcionalidades Premium, verifique seu email clicando no link que enviamos.
-                </p>
-              </div>
-              <Link href="/dashboard">
-                <Button className="w-full">
-                  Continuar para Dashboard
-                </Button>
-              </Link>
+          {status === 'unauthenticated' && (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Entre na sua conta para reenviar o e-mail de verificação.</p>
+              <Button asChild variant="outline" className="w-full">
+                <Link href="/login">Entrar</Link>
+              </Button>
             </div>
           )}
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-2">
-          <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
-            Voltar para página inicial
-          </Link>
-        </CardFooter>
-      </Card>
-    </div>
+        </AuthShell>
+      )}
+    </>
   )
 }
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    }>
+    <Suspense fallback={<AuthFallback />}>
       <VerifyEmailContent />
     </Suspense>
   )
 }
-

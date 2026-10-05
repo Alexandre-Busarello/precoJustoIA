@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, CheckCircle2, Mail, TrendingUp } from 'lucide-react';
+import Link from 'next/link';
+import { Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,8 +44,8 @@ export default function MonitorAssetsForm({ isLoggedIn }: MonitorAssetsFormProps
 
       if (tickerList.length === 0) {
         toast({
-          title: 'Erro',
-          description: 'Por favor, informe pelo menos um ticker.',
+          title: 'Informe um ticker',
+          description: 'Digite pelo menos um ticker, como PETR4.',
           variant: 'destructive',
         });
         setIsLoading(false);
@@ -56,8 +57,8 @@ export default function MonitorAssetsForm({ isLoggedIn }: MonitorAssetsFormProps
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!email || !emailRegex.test(email)) {
           toast({
-            title: 'Erro',
-            description: 'Por favor, informe um email válido.',
+            title: 'E-mail inválido',
+            description: 'Confira o e-mail informado.',
             variant: 'destructive',
           });
           setIsLoading(false);
@@ -98,8 +99,8 @@ export default function MonitorAssetsForm({ isLoggedIn }: MonitorAssetsFormProps
       }
 
       toast({
-        title: 'Sucesso!',
-        description: `${data.success} monitoramento(s) criado(s) com sucesso.`,
+        title: 'Monitoramento criado',
+        description: `${data.success} ${data.success === 1 ? 'ativo adicionado' : 'ativos adicionados'} ao monitoramento.`,
       });
 
       // Se usuário logado, redirecionar para página de subscriptions após 2 segundos
@@ -111,7 +112,7 @@ export default function MonitorAssetsForm({ isLoggedIn }: MonitorAssetsFormProps
     } catch (error) {
       console.error('Erro ao criar monitoramentos:', error);
       toast({
-        title: 'Erro',
+        title: 'Não foi possível salvar',
         description: error instanceof Error ? error.message : 'Erro ao criar monitoramentos. Tente novamente.',
         variant: 'destructive',
       });
@@ -121,117 +122,82 @@ export default function MonitorAssetsForm({ isLoggedIn }: MonitorAssetsFormProps
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Campo de Tickers */}
-      <div className="space-y-2">
-        <Label htmlFor="tickers" className="text-base font-semibold">
-          Tickers das Empresas
-        </Label>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="tickers">Tickers</Label>
         <Textarea
           id="tickers"
-          placeholder="Ex: PETR4, VALE3, ITUB4&#10;Ou um por linha"
+          placeholder={'PETR4, VALE3, ITUB4\nou um por linha'}
           value={tickers}
           onChange={(e) => setTickers(e.target.value)}
-          className="min-h-[100px] resize-none"
+          className="min-h-[96px] resize-none font-mono uppercase placeholder:normal-case placeholder:font-sans"
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
           disabled={isLoading}
           required
+          aria-describedby="tickers-hint"
         />
-        <p className="text-sm text-muted-foreground">
-          Informe os tickers separados por vírgula ou um por linha. Exemplo: PETR4, VALE3, ITUB4
+        <p id="tickers-hint" className="text-xs text-muted-foreground">
+          Separe por vírgula ou use uma linha para cada ticker.
         </p>
       </div>
 
-      {/* Campo de Email (apenas se não estiver logado) */}
       {!isLoggedIn && (
-        <div className="space-y-2">
-          <Label htmlFor="email" className="text-base font-semibold">
-            Seu Email
-          </Label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              id="email"
-              type="email"
-              placeholder="seu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="pl-10"
-              disabled={isLoading}
-              required
-            />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Você receberá alertas por email quando houver mudanças nas empresas monitoradas.
-            Pode cancelar a qualquer momento.
+        <div className="space-y-1.5">
+          <Label htmlFor="monitor-email">E-mail</Label>
+          <Input
+            id="monitor-email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="seu@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={isLoading}
+            required
+            aria-describedby="monitor-email-hint"
+          />
+          <p id="monitor-email-hint" className="text-xs text-muted-foreground">
+            Os alertas chegam neste e-mail. Dá para cancelar com um clique em qualquer mensagem. Não compartilhamos seu e-mail.
           </p>
         </div>
       )}
 
-      {/* Resultados */}
       {success && results && (
-        <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 p-4">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h4 className="font-semibold text-green-900 dark:text-green-100 mb-2">
-                Monitoramentos Criados com Sucesso!
-              </h4>
-              <div className="space-y-1 text-sm text-green-800 dark:text-green-200">
-                <p>✅ {results.success} empresa(s) monitorada(s) com sucesso</p>
-                {results.failed > 0 && (
-                  <p className="text-orange-700 dark:text-orange-300">
-                    ⚠️ {results.failed} empresa(s) não puderam ser monitoradas
-                  </p>
-                )}
-                {results.invalid.length > 0 && (
-                  <div>
-                    <p className="font-semibold mb-1">Tickers inválidos:</p>
-                    <p className="font-mono">{results.invalid.join(', ')}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+        <div className="rounded-lg border border-border bg-positive-subtle p-4 text-sm" role="status">
+          <p className="flex items-center gap-2 font-medium text-foreground">
+            <CheckCircle2 className="size-4 text-positive" strokeWidth={1.75} aria-hidden="true" />
+            <span className="tabular-nums">
+              {results.success} {results.success === 1 ? 'empresa monitorada' : 'empresas monitoradas'}
+            </span>
+          </p>
+          {results.failed > 0 && (
+            <p className="mt-1 text-warning tabular-nums">
+              {results.failed} {results.failed === 1 ? 'empresa não pôde' : 'empresas não puderam'} ser monitorada{results.failed === 1 ? '' : 's'}.
+            </p>
+          )}
+          {results.invalid.length > 0 && (
+            <p className="mt-1 text-muted-foreground">
+              Tickers não encontrados: <span className="font-mono text-foreground">{results.invalid.join(', ')}</span>
+            </p>
+          )}
         </div>
       )}
 
-      {/* Botão de Submit */}
-      <Button
-        type="submit"
-        size="lg"
-        className="w-full"
-        disabled={isLoading || tickers.trim().length === 0}
-      >
-        {isLoading ? (
-          <>
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Criando Monitoramentos...
-          </>
-        ) : (
-          <>
-            <TrendingUp className="h-4 w-4 mr-2" />
-            {isLoggedIn ? 'Criar Monitoramentos' : 'Começar a Monitorar'}
-          </>
-        )}
+      <Button type="submit" className="w-full" disabled={isLoading || tickers.trim().length === 0}>
+        {isLoading && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />}
+        {isLoading ? 'Salvando…' : isLoggedIn ? 'Monitorar estes ativos' : 'Começar a monitorar'}
       </Button>
 
-      {/* Informações adicionais */}
-      <div className="text-center text-sm text-muted-foreground space-y-1">
-        <p>🔒 Seus dados estão seguros. Não compartilhamos seu email.</p>
-        {!isLoggedIn && (
-          <p>
-            Já tem uma conta?{' '}
-            <Button
-              variant="link"
-              className="p-0 h-auto font-semibold"
-              onClick={() => router.push('/login')}
-            >
-              Faça login
-            </Button>
-          </p>
-        )}
-      </div>
+      {!isLoggedIn && (
+        <p className="text-center text-sm text-muted-foreground">
+          Já tem conta?{' '}
+          <Link href="/login?callbackUrl=/acompanhar-acoes-bolsa-de-valores" className="font-medium text-brand underline-offset-4 hover:underline">
+            Entrar
+          </Link>
+        </p>
+      )}
     </form>
   );
 }
-

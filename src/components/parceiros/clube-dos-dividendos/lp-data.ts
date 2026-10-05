@@ -1,10 +1,10 @@
 export const LP_META = {
-  title: 'Preço Justo AI para o Clube dos Dividendos | Análise de Ações B3',
+  title: 'Parceria com o Clube dos Dividendos',
   description:
-    'Ferramenta de análise fundamentalista usada pelo Clube dos Dividendos. 8 modelos de valuation, radar de dividendos com projeção de 12 meses, screening avançado e IA para investidores da B3.',
-  ogTitle: 'Análise Fundamentalista com o Clube dos Dividendos | Preço Justo AI',
+    'Ferramenta de análise fundamentalista usada pelo Clube dos Dividendos. Modelos de valuation lado a lado, radar de dividendos com projeção de 12 meses, screening avançado e IA para investidores da B3.',
+  ogTitle: 'Análise fundamentalista com o Clube dos Dividendos',
   ogDescription:
-    'Descubra o preço justo de qualquer ação da B3. A plataforma que o Clube dos Dividendos usa para encontrar as melhores pagadoras de dividendos com base em dados reais.',
+    'Descubra o preço justo de qualquer ação da B3. A plataforma que o Clube dos Dividendos usa para estudar pagadoras de dividendos com dados públicos.',
   canonical: '/parceiros/clube-dos-dividendos',
 }
 
@@ -12,25 +12,25 @@ export const BRUNO_ENDORSEMENT = {
   name: 'Bruno Mazzoni',
   role: 'Fundador do Clube dos Dividendos',
   quote:
-    'O Preço Justo AI é a ferramenta que uso para avaliar cada ativo antes de recomendar para os membros do clube. 8 modelos de valuation lado a lado, radar de dividendos com projeção real — nada mais prático.',
+    'O Preço Justo AI é a ferramenta que uso para avaliar cada ativo antes de comentar com os membros do clube. Os modelos de valuation lado a lado, radar de dividendos com projeção real — nada mais prático.',
   initials: 'BM',
 }
 
 export const HERO = {
-  badge: 'Parceria Exclusiva · Clube dos Dividendos',
+  badge: 'Parceria · Clube dos Dividendos',
   headline: 'A ferramenta que o Clube dos Dividendos usa para analisar ações',
   subheadline:
-    'Recomendada por Bruno Mazzoni. Calcule o preço justo, encontre as melhores pagadoras de dividendos e tome decisões com dados reais — não com achismo.',
+    'Usada por Bruno Mazzoni. Calcule o preço justo estimado, compare pagadoras de dividendos e decida com dados, não com achismo.',
   ctaPrimary: { label: 'Quero acesso Premium', href: '#planos' },
   ctaSecondary: { label: 'Testar grátis por 1 dia', href: '/register' },
   trust: ['Desconto exclusivo do clube', 'Cancele quando quiser', 'Dados atualizados diariamente'],
 }
 
 export const STATS = [
-  { value: '500+', label: 'Ativos analisados' },
-  { value: '8', label: 'Modelos de valuation' },
+  { value: '350+', label: 'Empresas cobertas' },
+  { value: '12', label: 'Modelos de análise' },
   { value: '12 meses', label: 'Projeção de dividendos' },
-  { value: '100%', label: 'Baseado em dados reais' },
+  { value: 'Diária', label: 'Atualização dos dados' },
 ]
 
 export const VALUATION_MODELS = [
@@ -38,10 +38,10 @@ export const VALUATION_MODELS = [
     id: 'graham',
     name: 'Graham',
     description:
-      'Modelo clássico de Benjamin Graham. Ideal para encontrar ações com margem de segurança. Compra quando o preço está abaixo do valor intrínseco calculado pelo P/L e P/VPA.',
+      'Modelo clássico de Benjamin Graham. Ideal para encontrar ações com margem de segurança. Mostra quando o preço está abaixo do valor estimado pelo LPA e pelo VPA.',
     formula: '√(22,5 × LPA × VPA)',
     example: 'TAEE11: LPA R$3,20 · VPA R$18,50 → Preço Justo: R$36,44',
-    tag: 'FREE',
+    tag: 'Grátis',
   },
   {
     id: 'bazin',
@@ -50,7 +50,7 @@ export const VALUATION_MODELS = [
       'Criado por Décio Bazin. Foca em empresas que pagam dividendos acima de 6% ao ano. Excelente para investidores de renda passiva que buscam fluxo constante.',
     formula: 'Preço Justo = Dividendo Anual ÷ 0,06',
     example: 'ITUB4: DPA R$1,80 → Preço Justo Bazin: R$30,00',
-    tag: 'PREMIUM',
+    tag: 'Premium',
   },
   {
     id: 'pl-justo',
@@ -59,7 +59,7 @@ export const VALUATION_MODELS = [
       'Compara o P/L atual com a média histórica do setor. Identifica empresas sendo negociadas com desconto ou prêmio em relação ao histórico.',
     formula: 'P/L Justo = LPA × P/L médio histórico do setor',
     example: 'BBAS3: LPA R$9,20 × P/L médio 7x → Preço Justo: R$64,40',
-    tag: 'PREMIUM',
+    tag: 'Premium',
   },
   {
     id: 'gordon',
@@ -68,7 +68,7 @@ export const VALUATION_MODELS = [
       'Dividend Discount Model de Myron Gordon. Valua a empresa com base no fluxo futuro de dividendos descontado. Perfeito para empresas maduras e consistentes.',
     formula: 'Preço = DPA ÷ (Ke − g)',
     example: 'WEGE3: DPA R$0,50 · Ke 12% · g 8% → Preço Justo: R$12,50',
-    tag: 'PREMIUM',
+    tag: 'Premium',
   },
   {
     id: 'dcf',
@@ -77,7 +77,7 @@ export const VALUATION_MODELS = [
       'Fluxo de Caixa Descontado adaptado para pequenos investidores. Projeta o fluxo de caixa livre nos próximos 5 anos e desconta pela taxa mínima de atratividade.',
     formula: 'VP = Σ FCL_t ÷ (1+i)^t + VT',
     example: 'LREN3: FCL R$2,1/ação · crescimento 10% · TMA 13% → Preço Justo: R$23,80',
-    tag: 'PREMIUM',
+    tag: 'Premium',
   },
   {
     id: 'ev-ebitda',
@@ -86,7 +86,7 @@ export const VALUATION_MODELS = [
       'Compara o valor de mercado total (incluindo dívida) com o EBITDA. Amplamente usado para comparar empresas do mesmo setor ignorando diferenças de alavancagem.',
     formula: 'Preço Justo = EV/EBITDA setor × EBITDA/ação − Dívida Líquida/ação',
     example: 'VALE3: EV/EBITDA 5x · EBITDA/ação R$18,40 → Preço Justo: R$74,20',
-    tag: 'PREMIUM',
+    tag: 'Premium',
   },
   {
     id: 'roe',
@@ -95,7 +95,7 @@ export const VALUATION_MODELS = [
       'Relaciona o retorno sobre o patrimônio (ROE) com o múltiplo P/VPA para identificar empresas que entregam alto retorno sendo negociadas a prêmio justo.',
     formula: 'P/VPA Justo = ROE ÷ Ke',
     example: 'ITSA4: ROE 18% · Ke 12% → P/VPA Justo 1,5x · Preço Justo: R$12,90',
-    tag: 'PREMIUM',
+    tag: 'Premium',
   },
   {
     id: 'nav',
@@ -104,7 +104,7 @@ export const VALUATION_MODELS = [
       'Net Asset Value — avalia o quanto vale o patrimônio líquido da empresa por ação. Especialmente útil para FIIs, holdings e empresas com ativos tangíveis relevantes.',
     formula: 'NAV = (Ativo Total − Passivo Total) ÷ Ações em Circulação',
     example: 'BRCR11: Patrimônio R$1,2B · 120M cotas → NAV: R$100/cota',
-    tag: 'PREMIUM',
+    tag: 'Premium',
   },
 ]
 
@@ -127,7 +127,7 @@ export const FAQ_ITEMS = [
   {
     question: 'Quais vantagens tem o plano Premium para quem investe em dividendos?',
     answer:
-      'No Premium você acessa: radar de dividendos ilimitado com projeção de 12 meses, score de sustentabilidade dos dividendos, calendário de pagamentos por ativo, todos os 8 modelos de valuation (incluindo Bazin e Gordon focados em dividendos), screening avançado com filtros de DY mínimo, e análise por IA para cada empresa.',
+      'No Premium você acessa: radar de dividendos ilimitado com projeção de 12 meses, score de sustentabilidade dos dividendos, calendário de pagamentos por ativo, todos os modelos de valuation (incluindo Bazin e Gordon focados em dividendos), screening avançado com filtros de DY mínimo, e análise por IA para cada empresa.',
   },
   {
     question: 'Como funciona o desconto exclusivo do Clube dos Dividendos?',
@@ -150,7 +150,7 @@ export const TESTIMONIALS = [
   {
     name: 'Rodrigo M.',
     role: 'Investidor · 5 anos de B3',
-    text: 'Uso o Preço Justo toda semana antes de qualquer aporte. Os 8 modelos de valuation lado a lado me poupam horas de planilha. Vale muito pelo preço.',
+    text: 'Uso o Preço Justo toda semana antes de qualquer aporte. Os modelos de valuation lado a lado me poupam horas de planilha. Vale muito pelo preço.',
     initials: 'RM',
   },
   {
@@ -171,7 +171,7 @@ export const RADAR_TABS = [
   {
     id: 'radar',
     label: 'Radar de Dividendos',
-    title: 'Encontre as melhores pagadoras de dividendos',
+    title: 'Encontre pagadoras de dividendos consistentes',
     description:
       'Ranking completo das ações e FIIs com maior Dividend Yield projetado para os próximos 12 meses. Filtre por tipo de ativo, setor e frequência de pagamento.',
     preview: [
@@ -180,7 +180,7 @@ export const RADAR_TABS = [
       { ticker: 'ITSA4', dy: '7,2%', tipo: 'Ação', sustentabilidade: 'Média' },
       { ticker: 'HGLG11', dy: '11,1%', tipo: 'FII', sustentabilidade: 'Alta' },
     ],
-    badge: 'PREMIUM',
+    badge: 'Premium',
     note: 'Dados ilustrativos',
   },
   {
@@ -191,7 +191,7 @@ export const RADAR_TABS = [
       'Veja quando cada empresa costuma pagar dividendos e quanto você pode esperar receber por ação ao longo do próximo ano com base no histórico de pagamentos.',
     months: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
     note: 'Dados ilustrativos',
-    badge: 'PREMIUM',
+    badge: 'Premium',
   },
 ]
 
@@ -215,7 +215,7 @@ export const SCREENING_FILTERS = [
 export const MONITORING_EXAMPLE = {
   ticker: 'TAEE11',
   alert: 'Preço abaixo do Justo',
-  detail: 'TAEE11 está sendo negociada a R$34,20 — 18% abaixo do preço justo Graham (R$41,70). Meta de compra atingida.',
+  detail: 'TAEE11 está sendo negociada a R$34,20 — 18% abaixo do preço justo Graham (R$41,70). Condição do seu alerta atingida.',
   time: 'há 2 horas',
 }
 
@@ -223,7 +223,7 @@ export const AI_EXAMPLE = {
   ticker: 'BBAS3',
   summary:
     'Banco do Brasil demonstra fundamentos sólidos com ROE de 20,3% e payout de 40%. O P/L atual de 5,4x está 31% abaixo da média histórica do setor bancário (7,8x), indicando potencial de valorização. Risco principal: concentração em crédito agro e exposição a inadimplência em cenário de alta de juros.',
-  verdict: 'Potencial de compra',
+  verdict: 'Abaixo do preço justo',
   score: 87,
 }
 
@@ -259,12 +259,12 @@ export const PRICING_FEATURES_FREE = [
 export const FREE_TRIAL_NOTE = 'Após o período de teste, acesso básico permanece. Upgrade a qualquer momento — sua vinculação ao Clube dos Dividendos é mantida.'
 
 export const PRICING_FEATURES_PREMIUM = [
-  'Todos os 8 modelos de valuation',
+  'Todos os modelos de valuation',
   'Radar de dividendos ilimitado',
   'Projeção de dividendos 12 meses',
   'Score de sustentabilidade',
   'Screening avançado com 20+ filtros',
-  'Ranking ilimitado (500+ ativos)',
+  'Ranking ilimitado (mais de 350 empresas)',
   'Análise setorial comparativa',
   'Gestão de carteira virtual',
   'Backtesting de estratégias',

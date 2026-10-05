@@ -1,4 +1,4 @@
-import { AbstractStrategy, toNumber, validateCAGR5Years } from './base-strategy';
+import { AbstractStrategy, notApplicableAnalysis, toNumber, validateCAGR5Years } from './base-strategy';
 import { toRankingResult, upsidePoints } from './bazin-strategy';
 import { LynchParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 import { isCyclicalCommodity } from '@/lib/finance/sector-classification';
@@ -53,6 +53,8 @@ export class LynchStrategy extends AbstractStrategy<LynchParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: LynchParams = {}): StrategyAnalysis {
+    const bdrReason = this.bdrNotApplicableReason(companyData);
+    if (bdrReason) return notApplicableAnalysis(bdrReason);
     const maxPeg = params.maxPeg ?? LYNCH_DEFAULTS.maxPeg;
     const maxGrowthRate = params.maxGrowthRate ?? LYNCH_DEFAULTS.maxGrowthRate;
     const { currentPrice: price, financials } = companyData;

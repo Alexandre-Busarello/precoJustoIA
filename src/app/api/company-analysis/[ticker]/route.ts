@@ -47,8 +47,8 @@ export async function GET(
     const isPremium = await isCurrentUserPremium({ request });
 
     // Criar chave de cache considerando ticker e status do usuário
-    // v3: modelos Bazin, Peter Lynch e P/VP justo (bancos)
-    const cacheKey = `company-analysis:v3:${ticker}:${isLoggedIn ? 'logged' : 'anon'}:${isPremium ? 'premium' : 'free'}`;
+    // v3: modelos Bazin, Peter Lynch e P/VP justo (bancos); v4: Barsi, Bazin e Lynch não aplicáveis a BDR
+    const cacheKey = `company-analysis:v4:${ticker}:${isLoggedIn ? 'logged' : 'anon'}:${isPremium ? 'premium' : 'free'}`;
 
     // Verificar cache
     const cachedData = await cache.get<CompanyAnalysisResponse>(cacheKey);

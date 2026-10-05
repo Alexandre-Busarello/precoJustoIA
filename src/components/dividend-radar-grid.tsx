@@ -101,7 +101,7 @@ function DetailsFootnote({ hasProjection }: { hasProjection: boolean }) {
   return (
     <p className="text-xs leading-5 text-muted-foreground">
       Tem direito ao provento quem tem a ação no fim do pregão anterior à data ex (a data-com).
-      {hasProjection && ' Projeções são estimativas geradas por IA a partir do histórico e podem não se confirmar.'}
+      {hasProjection && ' Projeções são estimativas estatísticas a partir do histórico e podem não se confirmar.'}
     </p>
   )
 }

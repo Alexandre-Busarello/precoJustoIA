@@ -55,8 +55,7 @@ function PointList({ title, points, hiddenCount }: { title: string; points: stri
 
 /**
  * "O que o mercado está falando": resumo por IA de vídeos e análises públicas. Bloco neutro,
- * visualmente separado do score. Quando existe análise, o sentimento pesa cerca de 10% no score
- * geral (ver lib/strategies/overall-score.ts). Não-assinantes veem uma prévia e um único CTA.
+ * visualmente separado do score: o sentimento não entra no score geral. Não-assinantes veem uma prévia e um único CTA.
  */
 export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIsPremium }: MarketSentimentSectionProps) {
   const [showPoints, setShowPoints] = useState(false)
@@ -86,7 +85,7 @@ export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIs
     <div className="space-y-4">
       <SectionHeader
         title="O que o mercado está falando"
-        description={`Resumo por IA de vídeos e análises públicas sobre ${ticker}. Pesa cerca de 10% no score geral.`}
+        description={`Resumo por IA de vídeos e análises públicas sobre ${ticker}. Não entra no score.`}
       />
       <div className="rounded-lg border border-border bg-card p-4 sm:p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">

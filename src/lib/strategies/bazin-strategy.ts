@@ -1,4 +1,4 @@
-import { AbstractStrategy, toNumber } from './base-strategy';
+import { AbstractStrategy, notApplicableAnalysis, toNumber } from './base-strategy';
 import { BazinParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 import {
   fullYearTotals,
@@ -113,6 +113,8 @@ export class BazinStrategy extends AbstractStrategy<BazinParams> {
   }
 
   runAnalysis(companyData: CompanyData, params: BazinParams = {}): StrategyAnalysis {
+    const bdrReason = this.bdrNotApplicableReason(companyData);
+    if (bdrReason) return notApplicableAnalysis(bdrReason);
     const targetYield = resolveTargetYield(params.targetDividendYield);
     const years = params.yearsForAverage ?? BAZIN_DEFAULTS.yearsForAverage;
     const maxDebtToEquity = params.maxDebtToEquity ?? BAZIN_DEFAULTS.maxDebtToEquity;

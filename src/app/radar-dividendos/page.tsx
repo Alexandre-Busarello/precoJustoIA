@@ -10,7 +10,7 @@ import { FAQSection } from '@/components/landing/faq-section'
 export const metadata: Metadata = {
   title: 'Radar de dividendos: calendário e projeções de proventos',
   description:
-    'Calendário de proventos de ações da B3: dividendos e JCP confirmados nos últimos meses e datas estimadas por IA para os próximos meses. Ferramenta gratuita, sem cadastro.',
+    'Calendário de proventos de ações da B3: dividendos e JCP confirmados nos últimos meses e datas estimadas estatisticamente para os próximos meses. Ferramenta gratuita, sem cadastro.',
   keywords: [
     'radar de dividendos',
     'calendário de dividendos',
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: 'Radar de dividendos: calendário e projeções de proventos',
-    description: 'Proventos confirmados e datas estimadas por IA para os próximos meses, empresa por empresa. Gratuito.',
+    description: 'Proventos confirmados e datas estimadas estatisticamente para os próximos meses, empresa por empresa. Gratuito.',
     type: 'website',
     url: '/radar-dividendos',
   },
@@ -83,7 +83,7 @@ export default async function RadarDividendosPage() {
         <PageHeader
           breadcrumb={[{ label: 'Início', href: '/' }, { label: 'Radar de dividendos' }]}
           title="Radar de dividendos"
-          description="Proventos confirmados nos últimos meses e datas estimadas por IA para os próximos, empresa por empresa."
+          description="Proventos confirmados nos últimos meses e datas estimadas estatisticamente para os próximos, empresa por empresa."
         />
 
         <div id="radar-tool">

@@ -910,7 +910,9 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
           label={<KpiLabel>Índice de Sharpe</KpiLabel>}
           value={sharpeValue}
           caption={method === 'legacy' ? 'taxa fixa de 10%' : 'com CDI'}
-          hint="(Retorno anualizado − CDI do mesmo período) ÷ volatilidade anualizada. Perto de zero: rendeu o mesmo que o CDI para o risco assumido."
+          hint={method === 'legacy'
+            ? '(Retorno anualizado − 10% ao ano) ÷ volatilidade anualizada. Simulação salva antes da troca para o CDI.'
+            : '(Retorno anualizado − CDI do mesmo período) ÷ volatilidade anualizada. Perto de zero: rendeu o mesmo que o CDI para o risco assumido.'}
         />
         <Stat
           className="bg-card p-3 sm:p-4"

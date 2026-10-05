@@ -15,7 +15,7 @@ const PILLARS: Array<{ key: keyof FiiOverallScore["breakdown"]; label: string; h
   { key: "valuation", label: "Valuation", hint: "P/VP, cap rate (tijolo) ou FFO yield (papel) e distância entre cotação e valor patrimonial." },
   { key: "qualidadePortfolio", label: "Qualidade do portfólio", hint: "Tijolo: número de imóveis, vacância e aluguel por m². Papel: segmento e consistência dos rendimentos." },
   { key: "liquidez", label: "Liquidez", hint: "Volume médio negociado por dia e valor de mercado." },
-  { key: "gestao", label: "Gestão", hint: "Segmento de atuação e histórico do fundo." },
+  { key: "gestao", label: "Segmento e resiliência", hint: "Resiliência do segmento de atuação do fundo." },
 ];
 
 /** "Muito Bom" → "Muito bom" (sentence case). */
@@ -39,7 +39,7 @@ export function FiiHeaderScore({ score, locked = false, className }: Props) {
   const pillars: ScorePillar[] = PILLARS.map((pillar) => {
     const data = score?.breakdown[pillar.key];
     return {
-      label: pillar.label,
+      label: data?.label ?? pillar.label,
       value: data ? data.score : null,
       hint: data ? `${pillar.hint} Peso ${formatPct(data.weight, { digits: 0 })} no score.` : pillar.hint,
     };

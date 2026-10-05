@@ -1,4 +1,4 @@
-import { AbstractStrategy, toNumber } from './base-strategy';
+import { AbstractStrategy, notApplicableAnalysis, toNumber } from './base-strategy';
 import { dividendEventsOf, resolveTargetYield, upsidePoints } from './bazin-strategy';
 import { BarsiParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 import { prisma } from '@/lib/prisma';
@@ -139,6 +139,8 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
   }
 
   async runAnalysis(companyData: CompanyData, params: BarsiParams): Promise<StrategyAnalysis> {
+    const bdrReason = this.bdrNotApplicableReason(companyData);
+    if (bdrReason) return notApplicableAnalysis(bdrReason);
     const { financials, currentPrice, sector, historicalFinancials, ticker } = companyData;
     const isBDR = this.isBDRTicker(ticker);
     const {

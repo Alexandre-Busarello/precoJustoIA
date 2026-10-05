@@ -412,13 +412,13 @@ export default async function FiiPage({ params }: PageProps) {
           },
           ultimoDividendo: toNumber(fiiData.lastDividendValue) ?? undefined,
           dividendHistory: [],
-        })
+        }, { isPapel: fiiData.isPapel ?? null })
       : null
   const fairValue = fiiValuation?.fairValue ?? null
   const fairValueLabel =
     fiiValuation?.upsideSource === 'valor_patrimonial'
       ? fiiListingFairValueModelLabel('valor_patrimonial') ?? undefined
-      : `DY-alvo ${formatPct(FII_LISTING_TARGET_DY, { digits: 0 })}`
+      : `DY-alvo ${formatPct(fiiValuation?.targetDY.value ?? FII_LISTING_TARGET_DY, { digits: 1 })}`
   const fairValueTitle = fiiValuation?.upsideSource === 'valor_patrimonial' ? undefined : 'Preço-teto'
 
   const segment: string | null = companyData.fiiData?.segment || companyData.sector || null

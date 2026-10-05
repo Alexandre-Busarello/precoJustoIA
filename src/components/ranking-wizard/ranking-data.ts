@@ -301,6 +301,8 @@ export function summarizeParams(model: RankingModel, params: RankingParams): str
     if (field.kind === 'switch') continue
     const value = params[field.key]
     if (field.kind === 'select' && (value === 'all' || value === 'both')) continue
+    // Rankings salvos antes de um parâmetro existir (ou com valor nulo) não mostram "—" no resumo
+    if (value === null || value === undefined) continue
     parts.push(`${field.label} ${formatParamValue(field, value)}`)
   }
   return parts.join(' · ')

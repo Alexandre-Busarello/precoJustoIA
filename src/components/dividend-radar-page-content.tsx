@@ -104,7 +104,7 @@ export function DividendRadarPageContent({ isLoggedIn: initialIsLoggedIn = false
       <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
         <Info className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
         <span>
-          As projeções são estimativas geradas por IA a partir do histórico de proventos; valores e datas podem mudar ou não se
+          As projeções são estimativas estatísticas a partir do histórico de proventos; valores e datas podem mudar ou não se
           confirmar. Confira sempre os comunicados oficiais das empresas. Não é recomendação de investimento.
         </span>
       </p>

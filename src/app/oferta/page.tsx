@@ -78,7 +78,7 @@ const BENEFITS = [
   {
     feature: "dividendos",
     title: "Radar de dividendos",
-    description: "Calendário de proventos e projeções estimadas por IA para os próximos meses.",
+    description: "Calendário de proventos e projeções estatísticas para os próximos meses.",
   },
   {
     feature: "analise-setorial",

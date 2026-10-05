@@ -86,7 +86,7 @@ export function DividendRadarTickerPageContent({ company, price, dayChange }: Di
     {
       key: 'kind',
       header: 'Situação',
-      hint: 'Confirmado: provento anunciado pela empresa. Projetado: data e valor estimados por IA a partir do histórico.',
+      hint: 'Confirmado: provento anunciado pela empresa. Projetado: data e valor estimados estatisticamente a partir do histórico.',
       cell: (row) =>
         row.kind === 'confirmed' ? (
           <Badge variant="brand">Confirmado</Badge>
@@ -211,7 +211,7 @@ export function DividendRadarTickerPageContent({ company, price, dayChange }: Di
         <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
           <Info className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
           <span>
-            Projeções são estimativas geradas por IA a partir do histórico e podem mudar ou não se confirmar. Confira os
+            Projeções são estimativas estatísticas a partir do histórico e podem mudar ou não se confirmar. Confira os
             comunicados oficiais da empresa. Não é recomendação de investimento.
           </span>
         </p>

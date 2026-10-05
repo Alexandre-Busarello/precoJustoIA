@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const projectionText =
     projectionCount > 0
       ? `${projectionCount} ${projectionCount === 1 ? 'data estimada' : 'datas estimadas'} por IA para os próximos meses`
-      : 'datas estimadas por IA para os próximos meses'
+      : 'datas estimadas estatisticamente para os próximos meses'
 
   return {
     title: `Radar de dividendos ${ticker} (${company.name})`,

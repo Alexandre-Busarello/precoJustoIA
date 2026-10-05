@@ -10,7 +10,7 @@ import type { TriggerConfig } from '@/lib/custom-trigger-service';
 import CustomMonitorForm from '@/components/custom-monitor-form';
 import { PageHeader } from '@/components/page-header';
 import { AlertsTabs } from '@/components/alerts-tabs';
-import { isPrefillType } from '../../monitor-fields';
+import { isAlertType, isPrefillType } from '../../monitor-fields';
 
 export const metadata: Metadata = {
   title: 'Editar monitoramento',
@@ -88,7 +88,9 @@ export default async function EditCustomMonitorPage({
   if (fromCreate) {
     const opening = isPaused ? `Você já tem um monitoramento pausado de ${ticker}.` : `Você já monitora ${ticker}.`;
     const next = type
-      ? `O novo critério já aparece junto aos atuais: revise${isPaused ? ', reative' : ''} e salve.`
+      ? isAlertType(type)
+        ? `O novo critério já aparece junto aos atuais: revise${isPaused ? ', reative' : ''} e salve.`
+        : `Preencha o novo critério junto aos atuais${isPaused ? ', reative' : ''} e salve.`
       : isPaused
         ? 'Ajuste os critérios e reative para voltar a receber avisos.'
         : 'Ajuste os critérios ou pause o monitoramento.';

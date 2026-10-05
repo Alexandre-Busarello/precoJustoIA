@@ -45,9 +45,6 @@ const DEFAULT_BAZIN_TARGET_YIELD = 0.06;
 const DEFAULT_FAIR_VALUE_MIN_DISCOUNT = 0.2;
 const DEFAULT_DY_TTM_MIN = 0.08;
 
-/** Percentual de alerta: sem casas quando inteiro (6%), uma casa caso contrário (6,5%). Igual no formulário e na lista. */
-
-
 const ALERT_INPUT_ID: Record<AlertType, string> = {
   bazin_ceiling: 'monitor-bazin-yield',
   fair_value_discount: 'monitor-fair-discount',

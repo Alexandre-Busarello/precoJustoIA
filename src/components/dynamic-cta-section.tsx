@@ -73,7 +73,7 @@ const FEATURE_COPIES: Record<string, FeatureCopy> = {
   },
   dividendos: {
     headline: 'Acompanhe seus dividendos',
-    subheadline: `Calendário de proventos e projeções estimadas por IA, por ${PRICE}.`,
+    subheadline: `Calendário de proventos e projeções estatísticas, por ${PRICE}.`,
     priceLabel: 'Radar de dividendos',
     buttonText: 'Garantir o radar de dividendos',
   },

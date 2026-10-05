@@ -38,10 +38,10 @@ Lotes da mesma onda não compartilham arquivos (verificado), então rodam em par
 
 ## Pendências conhecidas ao fim da onda 2 (levar para as ondas 3–4)
 
+Depois da onda 2: logo em SVG (`127bb16`, fonte Ubuntu do logo original, ícones e og-default regenerados) e `next build` de produção validado contra o banco local (`b10e34d` removeu `/comparador-etfs`, que quebrava o prerender e já redirecionava).
+
 **Decisões do dono:**
-- **Bazin com proventos extraordinários:** o preço-teto usa a média de todos os proventos de 5 anos completos ÷ 6% (spec F1). `excludeExtraordinary` vem desligado, então PETR4 dá R$ 187 por causa de 2022. Recomendação: ligar a exclusão por padrão ou avisar na tela.
-- **Barsi × Bazin iguais na página** (PETR4 e ITUB4 dão o mesmo valor; DY 6% nos dois, no ranking o Barsi usa 5%): diferenciar, juntar ou alinhar.
-- **Peter Lynch com potenciais muito altos** (CMIG4 +336%, BBAS3 +204%): excluir financeiras do Lynch ou limitar o termo de DY no P/L justo.
+- ~~Bazin com extraordinários, Barsi × Bazin e Lynch~~ — **resolvido em `7d2503a`** (decisão delegada pelo dono): Bazin exclui extraordinários por padrão e mostra o valor retirado; a página do ativo tem uma só linha "Preço-teto (Bazin)" e o Barsi fica no ranking como filtro de setores perenes com a mesma base; Lynch vira indicador relativo (PEG e faixas, sem preço-alvo) e não se aplica a bancos e seguradoras.
 - **DY-alvo dos FIIs de tijolo:** NTN-B real + IPCA + spread dá ~14,2% e deixa HGLG11 a −68% do teto com score 93. Aluguel de tijolo é indexado à inflação; decidir a fórmula em `fii-listing-valuation.ts`.
 - **Contagem de modelos** ("8 modelos"/"outros 7 modelos" na home, planos, Stripe, onboarding, e-mails, Ben e SEO) — a página de ação já mostra 10–11.
 - **Critérios por perfil do anti-armadilha** ainda toleram 2 falhas (banco pode falhar ROE e payout; TAEE11 passa com Dív. líq./EBITDA 3,6). Tornar obrigatórios? B3SA3 cai no perfil "bancos e seguradoras".

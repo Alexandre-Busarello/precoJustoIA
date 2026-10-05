@@ -17,6 +17,7 @@ import { Stat } from '@/components/ui/stat';
 import { SectionHeader } from '@/components/ui/section-header';
 import { InfoHint } from '@/components/ui/info-hint';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { AssetCell } from '@/components/asset/asset-cell';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AXIS_TICK,
@@ -669,7 +670,18 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
   })();
 
   const assetColumns: DataTableColumn<AssetPerformance>[] = [
-    { key: 'ticker', header: 'Ativo', sticky: true, cell: a => <span className="font-medium text-foreground">{a.ticker}</span> },
+    {
+      key: 'ticker',
+      header: 'Ativo',
+      sticky: true,
+      cell: a => (
+        <AssetCell
+          ticker={a.ticker}
+          name={config?.assets?.find(c => c.ticker === a.ticker)?.companyName}
+          className="max-w-36 sm:max-w-52"
+        />
+      ),
+    },
     { key: 'allocation', header: 'Peso', align: 'right', sortable: true, cell: a => formatPct(a.allocation || 0) },
     { key: 'finalValue', header: 'Valor final', align: 'right', sortable: true, cell: a => formatBRL(a.finalValue || 0) },
     {

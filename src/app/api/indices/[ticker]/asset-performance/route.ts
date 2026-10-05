@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCompanyBriefs } from '@/lib/company-brief';
 import { listAllAssetsPerformance } from '@/lib/index-engine';
 import { getCurrentUser } from '@/lib/user-service';
 
@@ -35,6 +36,8 @@ export async function GET(
     const isPremium = user?.isPremium || false;
 
     const performances = await listAllAssetsPerformance(index.id);
+    // Nome, logo e tipo só para quem vê os dados reais (a prévia ofuscada não revela os ativos)
+    const briefs = await getCompanyBriefs(isPremium ? performances.map((perf) => perf.ticker) : []);
 
     const mappedPerformances = performances.map((perf, perfIndex) => {
         const baseData = {
@@ -72,8 +75,12 @@ export async function GET(
           };
         }
 
+        const brief = briefs.get(perf.ticker.toUpperCase());
         return {
           ...baseData,
+          companyName: brief?.name ?? null,
+          logoUrl: brief?.logoUrl ?? null,
+          assetType: brief?.assetType ?? null,
           isObfuscated: false
         };
       });

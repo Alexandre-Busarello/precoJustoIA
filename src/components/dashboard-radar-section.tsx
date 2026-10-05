@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 
+import { AssetCell, assetHref } from '@/components/asset/asset-cell'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table'
@@ -26,20 +27,13 @@ interface RadarRow {
   ticker: string
   name: string
   href: string
+  logoUrl: string | null
   price: number
   /** Fração (0,012 = +1,2%). */
   dayChange: number | null
   /** Margem de segurança em fração (1 − P/PJ). */
   margin: number | null
   score: number | null
-}
-
-function assetHref(asset: RadarAssetData): string {
-  const ticker = asset.ticker.toLowerCase()
-  if (asset.assetType === 'FII') return `/fii/${ticker}`
-  if (asset.assetType === 'ETF') return `/etf/${ticker}`
-  if (asset.assetType === 'BDR') return `/bdr/${ticker}`
-  return `/acao/${ticker}`
 }
 
 function toRow(asset: RadarApiAsset): RadarRow {
@@ -51,7 +45,8 @@ function toRow(asset: RadarApiAsset): RadarRow {
   return {
     ticker: asset.ticker,
     name: asset.name,
-    href: assetHref(asset),
+    href: assetHref(asset.ticker, asset.assetType),
+    logoUrl: asset.logoUrl ?? null,
     price,
     dayChange: typeof change === 'number' && Number.isFinite(change) ? change / 100 : null,
     margin: marginOfSafety(price, fair),
@@ -85,10 +80,7 @@ export function DashboardRadarSection() {
       header: 'Ticker',
       sortable: true,
       cell: (row) => (
-        <Link href={row.href} prefetch={false} className="block max-w-36 py-1 hover:underline underline-offset-4" onClick={(e) => e.stopPropagation()}>
-          <span className="block font-medium text-foreground">{row.ticker}</span>
-          <span className="block truncate text-xs text-muted-foreground">{row.name}</span>
-        </Link>
+        <AssetCell href={row.href} ticker={row.ticker} name={row.name} logoUrl={row.logoUrl} className="max-w-40 sm:max-w-56" />
       ),
     },
     { key: 'price', header: 'Preço', align: 'right', sortable: true, cell: (row) => formatBRL(row.price) },

@@ -15,10 +15,16 @@ import { usePremiumStatus } from '@/hooks/use-premium-status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { AssetCell, assetHref } from '@/components/asset/asset-cell';
 import { SectionHeader } from '@/components/ui/section-header';
 
 interface AssetPerformance {
   ticker: string;
+  companyName?: string | null;
+  logoUrl?: string | null;
+  assetType?: string | null;
+  /** Prévia sem Premium: ticker fictício, sem link. */
+  isObfuscated?: boolean;
   entryDate: string;
   exitDate: string | null;
   entryPrice: number;
@@ -55,7 +61,15 @@ const columns: DataTableColumn<AssetPerformance>[] = [
     header: 'Ativo',
     sticky: true,
     sortable: true,
-    cell: (perf) => <span className="font-medium text-foreground">{perf.ticker}</span>,
+    cell: (perf) => (
+      <AssetCell
+        href={perf.isObfuscated ? undefined : assetHref(perf.ticker, perf.assetType)}
+        ticker={perf.ticker}
+        name={perf.companyName}
+        logoUrl={perf.logoUrl}
+        className="max-w-40 sm:max-w-52"
+      />
+    ),
   },
   {
     key: 'status',

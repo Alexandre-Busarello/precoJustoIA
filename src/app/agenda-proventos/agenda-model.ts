@@ -28,6 +28,10 @@ export interface AgendaEvent {
   id: string
   ticker: string
   companyName: string | null
+  /** Logo da empresa (a UI cai no monograma sem ele). */
+  logoUrl?: string | null
+  /** `STOCK`, `FII`, `ETF`, `BDR`… para o link da página do ativo. */
+  assetType?: string | null
   kind: AgendaKind
   type: DividendTypeLabel
   /** Data ex (`YYYY-MM-DD`): primeiro pregão sem direito ao provento. */
@@ -246,6 +250,8 @@ export function medianPaymentLagDays(events: readonly DividendEvent[]): number |
 export interface AgendaCompanyInput {
   ticker: string
   name: string | null
+  logoUrl?: string | null
+  assetType?: string | null
   dividends: readonly DividendHistoryRow[]
 }
 
@@ -313,6 +319,8 @@ export function buildAgendaEvents(input: BuildAgendaInput): AgendaEvent[] {
         withPosition({
           ticker,
           companyName: company.name,
+          logoUrl: company.logoUrl ?? null,
+          assetType: company.assetType ?? null,
           kind: 'confirmed',
           type,
           exDate: toDateKey(e.exDate),
@@ -332,6 +340,8 @@ export function buildAgendaEvents(input: BuildAgendaInput): AgendaEvent[] {
         withPosition({
           ticker,
           companyName: company.name,
+          logoUrl: company.logoUrl ?? null,
+          assetType: company.assetType ?? null,
           kind: 'projected',
           type,
           exDate: toDateKey(p.exDate),

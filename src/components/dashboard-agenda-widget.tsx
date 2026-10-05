@@ -6,6 +6,7 @@ import { RotateCw } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { CompanyLogo } from '@/components/company-logo'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatBRL } from '@/lib/format'
@@ -24,15 +25,26 @@ function EventRow({ event, today }: { event: AgendaEvent; today: string }) {
   const when = nextDate(event, today)
   return (
     <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-2">
-      <div className="min-w-0">
-        <p className="flex items-center gap-1.5 text-sm">
-          <span className="font-medium text-foreground">{event.ticker}</span>
-          <span className="text-muted-foreground">{event.type}</span>
-          {event.kind === 'projected' && <Badge variant="neutral">Estimativa</Badge>}
-        </p>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {when.label} {formatDateOnly(when.date)}
-        </p>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <CompanyLogo
+          logoUrl={event.logoUrl}
+          companyName={event.companyName || event.ticker}
+          ticker={event.ticker}
+          size={32}
+          sizeClassName="size-7 sm:size-8"
+          decorative
+          className="border border-border p-0.5"
+        />
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm">
+            <span className="font-medium text-foreground">{event.ticker}</span>
+            <span className="text-muted-foreground">{event.type}</span>
+            {event.kind === 'projected' && <Badge variant="neutral">Estimativa</Badge>}
+          </p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {when.label} {formatDateOnly(when.date)}
+          </p>
+        </div>
       </div>
       <div className="shrink-0 text-right">
         <p className="text-sm font-medium tabular-nums text-foreground">

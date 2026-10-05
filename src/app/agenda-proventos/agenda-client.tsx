@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table'
+import { AssetCell, assetHref } from '@/components/asset/asset-cell'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Stat } from '@/components/ui/stat'
 import { cn } from '@/lib/utils'
@@ -75,10 +76,13 @@ const columns: DataTableColumn<AgendaEvent>[] = [
     header: 'Ativo',
     sortable: true,
     cell: (e) => (
-      <div className="leading-tight">
-        <span className="font-medium text-foreground">{e.ticker}</span>
-        <span className="block text-xs text-muted-foreground">{sourceLabel(e)}</span>
-      </div>
+      <AssetCell
+        href={assetHref(e.ticker, e.assetType)}
+        ticker={e.ticker}
+        name={sourceLabel(e)}
+        logoUrl={e.logoUrl}
+        className="max-w-40"
+      />
     ),
   },
   {
@@ -86,7 +90,7 @@ const columns: DataTableColumn<AgendaEvent>[] = [
     header: 'Tipo',
     sortable: true,
     cell: (e) => (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1 whitespace-nowrap">
         {e.type}
         {e.kind === 'projected' && <Badge variant="neutral">Estimativa</Badge>}
       </span>

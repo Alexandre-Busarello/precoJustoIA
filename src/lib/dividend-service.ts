@@ -1133,6 +1133,8 @@ export class DividendService {
     Array<{
       ticker: string;
       name: string | null;
+      logoUrl: string | null;
+      assetType: string;
       dividends: Array<{ exDate: Date; paymentDate: Date | null; amount: number; type: string | null }>;
     }>
   > {
@@ -1143,6 +1145,8 @@ export class DividendService {
       select: {
         ticker: true,
         name: true,
+        logoUrl: true,
+        assetType: true,
         dividendHistory: {
           where: { exDate: { gte: since } },
           orderBy: { exDate: "asc" },
@@ -1153,6 +1157,8 @@ export class DividendService {
     return companies.map((company) => ({
       ticker: company.ticker,
       name: company.name,
+      logoUrl: company.logoUrl,
+      assetType: company.assetType,
       dividends: company.dividendHistory.map((div) => ({
         exDate: div.exDate,
         paymentDate: div.paymentDate,

@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/ui/stat";
 import { SectionHeader } from "@/components/ui/section-header";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { AssetCell } from "@/components/asset/asset-cell";
 import { MarketTickerBar } from "@/components/indices/market-ticker-bar";
 import { PageNotice } from "@/components/page-notice";
 import { BenIntroCard } from "@/components/ben-intro-card";
@@ -155,15 +156,7 @@ function TopCompaniesSection() {
       header: "Empresa",
       sortable: true,
       cell: (row) => (
-        <Link
-          href={`/acao/${row.ticker.toLowerCase()}`}
-          prefetch={false}
-          className="block max-w-40 py-1 underline-offset-4 hover:underline"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="block font-medium text-foreground">{row.ticker}</span>
-          <span className="block truncate text-xs text-muted-foreground">{row.companyName}</span>
-        </Link>
+        <AssetCell href={`/acao/${row.ticker.toLowerCase()}`} ticker={row.ticker} name={row.companyName} logoUrl={row.logoUrl} />
       ),
     },
     { key: "currentPrice", header: "Preço", align: "right", sortable: true, cell: (row) => formatBRL(row.currentPrice) },

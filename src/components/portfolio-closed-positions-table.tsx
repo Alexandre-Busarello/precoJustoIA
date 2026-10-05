@@ -8,9 +8,13 @@ import { toast as sonnerToast } from "sonner";
 import { formatBRL, formatDate, formatDeltaPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { moneyToneClass, returnToneClass } from "@/components/portfolio-page-shell";
+import { AssetCell, assetHref } from "@/components/asset/asset-cell";
 
 interface ClosedPosition {
   ticker: string;
+  companyName?: string | null;
+  logoUrl?: string | null;
+  assetType?: string | null;
   averagePrice: number;
   totalInvested: number;
   totalSold: number;
@@ -38,7 +42,12 @@ function ResultCell({ fraction, amount }: { fraction: number; amount: number }) 
 }
 
 const columns: DataTableColumn<ClosedPosition>[] = [
-  { key: "ticker", header: "Ativo", sortable: true, cell: (p) => <span className="font-medium">{p.ticker}</span> },
+  {
+    key: "ticker",
+    header: "Ativo",
+    sortable: true,
+    cell: (p) => <AssetCell href={assetHref(p.ticker, p.assetType)} ticker={p.ticker} name={p.companyName} logoUrl={p.logoUrl} />,
+  },
   { key: "averagePrice", header: "Preço médio", align: "right", cell: (p) => formatBRL(p.averagePrice) },
   { key: "totalInvested", header: "Investido", align: "right", sortable: true, cell: (p) => formatBRL(p.totalInvested) },
   { key: "totalSold", header: "Vendido", align: "right", sortable: true, cell: (p) => formatBRL(p.totalSold) },

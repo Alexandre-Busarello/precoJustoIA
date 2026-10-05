@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/user-service';
 import { PortfolioMetricsService } from '@/lib/portfolio-metrics-service';
+import { getCompanyBriefs } from '@/lib/company-brief';
 
 interface RouteContext {
   params: Promise<{
@@ -27,11 +28,20 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     // Get closed positions (assets that were fully sold)
     const closedPositions = await PortfolioMetricsService.getClosedPositions(resolvedParams.id);
 
+    // Nome, logo e tipo do ativo para a lista (só leitura; sem cadastro, a UI mostra o monograma)
+    const briefs = await getCompanyBriefs(closedPositions.map(pos => pos.ticker));
+
     return NextResponse.json({
-      closedPositions: closedPositions.map(pos => ({
-        ...pos,
-        closedDate: pos.closedDate.toISOString().split('T')[0] // Format date as YYYY-MM-DD
-      })),
+      closedPositions: closedPositions.map(pos => {
+        const brief = briefs.get(pos.ticker.toUpperCase());
+        return {
+          ...pos,
+          companyName: brief?.name ?? null,
+          logoUrl: brief?.logoUrl ?? null,
+          assetType: brief?.assetType ?? null,
+          closedDate: pos.closedDate.toISOString().split('T')[0] // Format date as YYYY-MM-DD
+        };
+      }),
       count: closedPositions.length
     });
 

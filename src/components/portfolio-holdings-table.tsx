@@ -13,10 +13,14 @@ import { toast as sonnerToast } from "sonner";
 import { formatBRL, formatDeltaPct, formatNumber, formatPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { RecoveryCalculatorSheet } from "@/components/recovery-calculator-sheet";
+import { AssetCell, assetHref } from "@/components/asset/asset-cell";
 import { moneyToneClass, returnToneClass } from "@/components/portfolio-page-shell";
 
 interface Holding {
   ticker: string;
+  companyName?: string | null;
+  logoUrl?: string | null;
+  assetType?: string | null;
   quantity: number;
   averagePrice: number;
   currentPrice: number;
@@ -104,7 +108,13 @@ function HoldingCard({ holding, onRecovery }: { holding: Holding; onRecovery: (h
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-medium text-foreground">{holding.ticker}</p>
+            <AssetCell
+              href={assetHref(holding.ticker, holding.assetType)}
+              ticker={holding.ticker}
+              name={holding.companyName}
+              logoUrl={holding.logoUrl}
+              className="max-w-full"
+            />
             <div className="mt-1">
               <StatusBadge holding={holding} />
             </div>
@@ -280,7 +290,7 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
       key: "ticker",
       header: "Ativo",
       sortable: true,
-      cell: (h) => <span className="font-medium text-foreground">{h.ticker}</span>,
+      cell: (h) => <AssetCell href={assetHref(h.ticker, h.assetType)} ticker={h.ticker} name={h.companyName} logoUrl={h.logoUrl} />,
     },
     {
       key: "quantity",

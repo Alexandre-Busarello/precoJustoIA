@@ -14,7 +14,7 @@ Plano de melhoria de UX/UI, mobile, correções financeiras e novas features do 
 |---|---|---|
 | 0 | `w0-foundation` (design tokens, dark mode plumbing, primitivos, formatação pt-BR, header/footer/nav mobile, política de interrupções) | **Concluída** — `6ad9d41` (fundação, aprovada pelo testador no 3º ciclo) + `b5aca7c` (integração) |
 | 1 | `w1-asset-stock`, `w1-asset-indicators-ai`, `w1-asset-fii-etf-bdr`, `w1-technical-radars`, `w1-home-pricing-checkout`, `w1-dashboard-alerts`, `w1-account-ben-onboarding`, `w1-portfolio`, `w1-ranking`, `w1-backtest`, `w1-screening`, `w1-comparador`, `w1-finance-foundation` | **Concluída** (30/09) — 13 lotes aprovados pelo testador (`395302f`…`7ff4c71`) + integração `7134d14` |
-| 2 | `w2-valuation-core`, `w2-rankings-new-models`, `w2-score-compliance-fii`, `w2-returns`, `w2-dividends-agenda`, `w2-alerts`, `w2-platform-seo-pwa`, `w2-ui-market-tools`, `w2-ui-institutional-auth` | Pendente |
+| 2 | `w2-valuation-core`, `w2-rankings-new-models`, `w2-score-compliance-fii`, `w2-returns`, `w2-dividends-agenda`, `w2-alerts`, `w2-platform-seo-pwa`, `w2-ui-market-tools`, `w2-ui-institutional-auth` | **Concluída** (05/10) — 8 lotes aprovados + `w2-rankings-new-models` como `wip` (`986090d`, bloqueante resolvido em `1e188da`); correções do coordenador `3743315`, `9680fb4`; integração `74f4774` (tsc e eslint limpos) |
 | 3 | `w3-onde-aportar` (premissa central: onde aportar, incl. modo premium "Todo o mercado") + `w3-screening-filters` (em paralelo, arquivos disjuntos) | Pendente |
 | 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` (libera o toggle de tema) | Pendente |
 
@@ -36,7 +36,37 @@ Lotes da mesma onda não compartilham arquivos (verificado), então rodam em par
 - `POST /api/generate-analysis` e `/api/review-analysis` chamam o Gemini sem autenticação (lote `w2-platform-seo-pwa`).
 - Ativar o cron do e-mail "Seu aporte do mês" no `vercel.json` depois da onda 3.
 
-## Pendências conhecidas ao fim da onda 1 (levar para as ondas 2–4)
+## Pendências conhecidas ao fim da onda 2 (levar para as ondas 3–4)
+
+**Decisões do dono:**
+- **Bazin com proventos extraordinários:** o preço-teto usa a média de todos os proventos de 5 anos completos ÷ 6% (spec F1). `excludeExtraordinary` vem desligado, então PETR4 dá R$ 187 por causa de 2022. Recomendação: ligar a exclusão por padrão ou avisar na tela.
+- **Barsi × Bazin iguais na página** (PETR4 e ITUB4 dão o mesmo valor; DY 6% nos dois, no ranking o Barsi usa 5%): diferenciar, juntar ou alinhar.
+- **Peter Lynch com potenciais muito altos** (CMIG4 +336%, BBAS3 +204%): excluir financeiras do Lynch ou limitar o termo de DY no P/L justo.
+- **DY-alvo dos FIIs de tijolo:** NTN-B real + IPCA + spread dá ~14,2% e deixa HGLG11 a −68% do teto com score 93. Aluguel de tijolo é indexado à inflação; decidir a fórmula em `fii-listing-valuation.ts`.
+- **Contagem de modelos** ("8 modelos"/"outros 7 modelos" na home, planos, Stripe, onboarding, e-mails, Ben e SEO) — a página de ação já mostra 10–11.
+- **Critérios por perfil do anti-armadilha** ainda toleram 2 falhas (banco pode falhar ROE e payout; TAEE11 passa com Dív. líq./EBITDA 3,6). Tornar obrigatórios? B3SA3 cai no perfil "bancos e seguradoras".
+- **Rótulo "Data ex"** na agenda (é a data ex de fato; InfoHint explica data-com) — confirmar.
+- **Limite de alertas grátis** subiu de 1 para 3 (só bloqueia criação; ninguém perde alertas).
+
+**Após o deploy (o middleware mudou):** o `middleware.ts` da raiz foi apagado e o `src/middleware.ts` passou a valer (`9e33c57`). Testar login, rotas protegidas e `curl -I https://precojusto.ai/upgrade` (301 → /checkout) e `/fundador` (410). As rotas públicas do Gemini (`/api/generate-analysis`, `/api/review-analysis`) e `/api/debug/user-status` foram removidas.
+
+**Técnicas (para as ondas 3–4):**
+- Página do ativo e ranking usam loaders/parâmetros diferentes (Gordon VALE3: R$ 86,80 na página × R$ 80,08 no ranking; g = 0% na página para PETR4/TAEE11).
+- `ranking-models.ts`: sliders de Graham/FCD dizem "Upside mínimo 20%" mas filtram margem de segurança; Graham mistura as duas leituras (`graham-strategy.ts:108` × `:183`); Graham mostra "Score do modelo 100" e "Score de qualidade 41,6" juntos.
+- BDR: todos os modelos ficam "não aplicável" até `bdr-data-service` gravar `financialCurrency`, `bdrRatio` e `usdBrl`; a UI do ranking BDR não avisa.
+- Backtest: a UI ainda posta em `/api/backtest/config` (singular), que cria uma "Carteira de exemplo" nova a cada execução — trocar por upsert (`upsertBacktestConfig` já existe). `averageDividendYield` legado ainda lido/escrito em `api/backtest/run` e no formulário.
+- `/api/benchmarks` (legado) ainda usa BRAPI mensal; `/api/sector-analysis` devolve a 1ª empresa do setor sem checar plano.
+- Rate limit de `/api/*` nunca rodou em produção (o middleware da raiz sombreava); reativar exige guardar `process.on` em `rate-limit-cache-service.ts` (hoje loga "process.on is not a function").
+- `formatDate` (fuso America/Sao_Paulo) mostra datas gravadas como meia-noite UTC um dia antes (afeta o app todo).
+- Proventos de FII duplicados entre fontes (yahoo × seed) inflam yield on cost — dedupe na camada de dados.
+- Usuário logado que abre `/login` não é redirecionado; `/oferta` fica clara com tema escuro forçado; prints de `/como-funciona` são claros.
+- `/acao/[ticker]/not-found` com robots duplicado; página de ação gera projeções antes do `notFound()`; `/como-funciona`, `/sobre`, `/contato` sem canonical.
+- UI de score: mostrar "Nota baseada em X de Y critérios" (`overallScore.dataCoverage`) e `qualityLabel` no CompactScore.
+- Mobile: `Button size="sm"` 40 px e abas do `rentability-selector` 38 px; botão do Ben cobre a fila de abas do índice a 390 px; tabela de valuation rola 16 px a 1440 com o status "Dentro da faixa estimada".
+- Seed local: `free@local.test` tem 7 dias de trial (decisão do dono é 1 dia) — ajustar o script.
+- `scripts/local/screenshots.ts` ignora `--help` e grava em `<cwd>/shots` dentro do repo.
+
+## Pendências conhecidas ao fim da onda 1 (a maioria tratada na onda 2; o que sobrou está acima)
 
 - **Funções financeiras (`src/lib/finance/*`)** — ajustar antes/durante a onda 2:
   - `annualizeFromLast12` retorna null quando dividendo e JCP têm a mesma data-com (agrupar por exDate antes de calcular intervalos) e ignora pagamentos antigos (receber `asOf` e marcar dados defasados).
@@ -92,7 +122,7 @@ Detalhes em [`scripts/local/README.md`](../../scripts/local/README.md).
 
 ## Como retomar com o Claude Code
 
-Peça algo como: *"retome as melhorias de docs/melhorias-2026-09 a partir da onda 1"*. O fluxo por onda é o workflow [`workflows/implement-wave.js`](workflows/implement-wave.js), chamado com:
+Peça algo como: *"retome as melhorias de docs/melhorias-2026-09 a partir da onda 3"*. O fluxo por onda é o workflow [`workflows/implement-wave.js`](workflows/implement-wave.js), chamado com:
 
 ```json
 {
@@ -109,5 +139,9 @@ Regras operacionais que funcionaram na onda 0:
 - no máximo 3 lotes em paralelo (RAM); comandos pesados (`tsc`, `eslint`, testes, screenshots) passam pelo lock `flock <scratch>/heavy.lock`; commits pelo lock `<scratch>/git.lock`;
 - uma onda por vez, revisando o resultado da integração antes de disparar a próxima;
 - lotes que não passam em 3 ciclos são commitados como `wip:` e tratados numa rodada extra.
+- testes unitários não podem importar Prisma/banco (travam na saída e seguram o lock); rodar sempre com `timeout 300`. Um vigia (`test-reaper.sh` no scratch) mata `tsx --test` com mais de 5 min;
+- agentes às vezes esperam com `until ! pgrep -f "<padrão>"`, que casa com o próprio loop e nunca sai — matar o loop quando o processo real já terminou;
+- não responder por mensagem a agentes do workflow; agir (liberar lock, religar banco) sem conversar;
+- a onda 2 levou ~7,2 h de relógio (9 lotes, 50 agentes).
 
 Estimativa observada: ~2–2,5 h por lote (dev + teste + 1 correção). Ondas 1–4 ≈ 23–30 h de relógio com 3 lotes em paralelo.

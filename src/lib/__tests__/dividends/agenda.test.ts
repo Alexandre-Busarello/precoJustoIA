@@ -18,7 +18,7 @@ import {
   type AgendaEvent,
   type PositionTrade,
 } from '../../../app/agenda-proventos/agenda-model'
-import { buildDividendProjections, isProjectionCacheStale } from '../../dividend-radar-service'
+import { buildDividendProjections, isProjectionCacheStale } from '../../dividend-projections'
 import type { DividendEvent } from '../../finance/dividends'
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)

@@ -202,7 +202,7 @@ function EtfsTab() {
   )
 }
 
-/** Hub do comparador: cabeçalho e abas Ações | ETFs. Usado em /comparador e /comparador-etfs. */
+/** Hub do comparador: cabeçalho e abas Ações | ETFs. Usado em /comparador (/comparador-etfs redireciona para ?tipo=etfs). */
 export function ComparadorHub({ tipo }: { tipo: ComparadorTipo }) {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:py-8">

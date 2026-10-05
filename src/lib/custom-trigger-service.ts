@@ -14,6 +14,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import {
   averageFullYears,
+  removeExtraordinary,
   sumTTM,
   toDividendEvents,
   type DividendEvent,
@@ -23,16 +24,14 @@ import { formatBRL, formatNumber, formatPct } from './format';
 import { formatAlertPct } from '@/app/dashboard/monitoramentos-customizados/monitor-fields';
 
 /** Modelos com preço justo salvo no snapshot (`AssetSnapshot.snapshotData.strategies[modelo].fairValue`). */
-export const FAIR_VALUE_MODELS = ['graham', 'fcd', 'gordon', 'barsi', 'bazin', 'lynch', 'bankPvp'] as const;
+export const FAIR_VALUE_MODELS = ['graham', 'fcd', 'gordon', 'bazin', 'bankPvp'] as const;
 export type FairValueModel = (typeof FAIR_VALUE_MODELS)[number];
 
 export const FAIR_VALUE_MODEL_LABEL: Record<FairValueModel, string> = {
   graham: 'Graham',
   fcd: 'Fluxo de caixa descontado',
   gordon: 'Gordon',
-  barsi: 'Barsi',
-  bazin: 'Bazin',
-  lynch: 'Peter Lynch',
+  bazin: 'Preço-teto (Bazin)',
   bankPvp: 'P/VP justo (bancos)',
 };
 
@@ -256,14 +255,15 @@ const RANGE_RULES: RangeRule[] = [
   ['minRetornoAnoAtual', 'maxRetornoAnoAtual', 'retornoAnoAtual', 'Retorno no ano', fmtPct],
 ];
 
-/** Preço-teto Bazin = média anual de proventos dos anos completos ÷ DY-alvo. `null` sem proventos ou DY-alvo inválido. */
+/** Preço-teto Bazin = média anual de proventos dos anos completos (sem extraordinários) ÷ DY-alvo. `null` sem proventos ou DY-alvo inválido. */
 export function bazinCeilingPrice(
   dividends: readonly DividendEvent[],
   targetYield: number,
   asOf: Date = new Date()
 ): number | null {
   if (!isPositive(targetYield)) return null;
-  const average = averageFullYears(dividends, { years: BAZIN_FULL_YEARS, asOf });
+  // Mesma base do preço-teto da página do ativo: proventos extraordinários não entram na média.
+  const average = averageFullYears(removeExtraordinary(dividends), { years: BAZIN_FULL_YEARS, asOf });
   return isPositive(average) ? average / targetYield : null;
 }
 

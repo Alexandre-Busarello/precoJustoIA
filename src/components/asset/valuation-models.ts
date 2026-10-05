@@ -86,21 +86,13 @@ export const VALUATION_MODELS: ValuationModel[] = [
     description: 'Avalia qualidade, preço, endividamento e dividendos com critérios adaptados ao setor da empresa.',
   },
   {
-    key: 'barsi',
-    label: 'Barsi',
-    shortLabel: 'Barsi',
-    plan: 'premium',
-    description:
-      'Preço-teto pelo método de Luiz Barsi: média dos proventos brutos dos últimos 5 anos completos dividida pelo yield-alvo de 6%.',
-  },
-  {
     key: 'bazin',
-    label: 'Bazin (preço-teto)',
-    shortLabel: 'Bazin',
+    label: 'Preço-teto (Bazin)',
+    shortLabel: 'Preço-teto',
     // Troque para 'free' para liberar o modelo no plano gratuito (a API e a página seguem este campo).
     plan: 'premium',
     description:
-      'Preço-teto de Décio Bazin: média dos proventos brutos dos últimos 5 anos completos dividida pelo dividend yield alvo de 6%, com dívida baixa e lucros consistentes.',
+      'Preço máximo para receber 6% ao ano em proventos: média dos proventos brutos dos últimos 5 anos completos (sem extraordinários) dividida por 6%, com dívida baixa e lucros consistentes. É a mesma conta usada por Décio Bazin e Luiz Barsi.',
   },
   {
     key: 'lynch',
@@ -108,7 +100,7 @@ export const VALUATION_MODELS: ValuationModel[] = [
     shortLabel: 'Lynch',
     plan: 'premium',
     description:
-      'P/L justo igual ao crescimento dos lucros mais o dividend yield; PEG = P/L ÷ crescimento. Não se aplica a commodities cíclicas nem a empresas com prejuízo.',
+      'Compara o P/L com o crescimento dos lucros (PEG = P/L ÷ crescimento): abaixo de 0,5 muito barato, até 1 barato, acima de 1 caro. Indicador relativo, sem preço-alvo. Não se aplica a bancos, commodities cíclicas nem empresas com prejuízo.',
   },
   {
     key: 'bankPvp',
@@ -163,12 +155,12 @@ function hasFairValue(strategy: StrategyResult | null | undefined): strategy is 
   return typeof strategy?.fairValue === 'number' && Number.isFinite(strategy.fairValue) && strategy.fairValue > 0
 }
 
-const DEFAULT_ORDER_FINANCIAL = ['barsi', 'bankPvp', 'graham', 'gordon', 'fcd']
-const DEFAULT_ORDER_GENERAL = ['fcd', 'graham', 'barsi', 'gordon']
+const DEFAULT_ORDER_FINANCIAL = ['bankPvp', 'bazin', 'graham', 'gordon', 'fcd']
+const DEFAULT_ORDER_GENERAL = ['fcd', 'graham', 'bazin', 'gordon']
 
 /**
  * Modelo exibido por padrão no cabeçalho: o mais adequado entre os liberados para o visitante e com preço justo.
- * Premium: Barsi (preço-teto por dividendos) para financeiras, FCD para as demais, com Graham como alternativa.
+ * Premium: P/VP justo para financeiras, FCD para as demais, com Graham como alternativa.
  * Free/anônimo: Graham.
  */
 export function pickDefaultModel(

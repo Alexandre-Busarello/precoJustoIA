@@ -345,7 +345,7 @@ export const RANKING_MODELS: RankingModel[] = [
     ],
     defaults: (universe) => ({
       ...stockBase(),
-      targetDividendYield: isBdr(universe) ? 0.03 : 0.05,
+      targetDividendYield: isBdr(universe) ? 0.03 : 0.06,
       maxPriceToPayMultiplier: 1,
       minConsecutiveDividends: 3,
       maxDebtToEquity: isBdr(universe) ? 1.5 : 1,
@@ -390,7 +390,7 @@ export const RANKING_MODELS: RankingModel[] = [
     plan: 'premium',
     assetType: 'stock',
     description:
-      'P/L justo de Peter Lynch (crescimento dos lucros + dividend yield) e PEG: P/L dividido pelo crescimento. Commodities cíclicas ficam de fora.',
+      'PEG de Peter Lynch: P/L dividido pelo crescimento dos lucros, com P/L de referência = crescimento + dividend yield. Bancos e commodities cíclicas ficam de fora.',
     fields: [
       COMPANY_SIZE,
       { kind: 'slider', key: 'maxPeg', label: 'PEG máximo', unit: 'multiple', min: 0.3, max: 2, step: 0.1 },

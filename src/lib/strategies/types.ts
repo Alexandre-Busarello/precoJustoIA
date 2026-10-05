@@ -149,7 +149,7 @@ export interface BazinParams extends StrategyParams {
   yearsForAverage?: number; // Anos-calendário completos na média (padrão 5)
   maxDebtToEquity?: number; // Dív. líq./PL máxima para não financeiras (padrão 0.5)
   useNetJcp?: boolean; // Usar JCP líquido de IRRF (padrão false: bruto, padrão de mercado)
-  excludeExtraordinary?: boolean; // Remover proventos > 2× a mediana (padrão false)
+  excludeExtraordinary?: boolean; // Remover proventos > 2× a mediana (padrão true)
 }
 
 /** Lynch: P/L justo = crescimento + DY (em p.p.) e PEG = P/L ÷ crescimento. */

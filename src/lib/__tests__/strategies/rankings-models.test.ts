@@ -140,10 +140,12 @@ function lynchCompany(price: number, cagrLucros5a = 0.2, industry = 'Bebidas'): 
 
 test('Lynch: PEG < 0,5 é "muito barato"', () => {
   const analysis = new LynchStrategy().runAnalysis(lynchCompany(10), {})
-  // P/L 5 ÷ 20 = 0,25; P/L justo = 20 + 5 = 25; valor = 2 × 25 = 50.
+  // P/L 5 ÷ 20 = 0,25; P/L de referência = 20 + 5 = 25. Indicador relativo: sem preço-alvo.
   assert.ok(Math.abs((analysis.key_metrics?.peg ?? 0) - 0.25) < 1e-9)
   assert.equal(pegBand(analysis.key_metrics?.peg ?? 0), 'muito barato')
-  assert.ok(Math.abs((analysis.fairValue ?? 0) - 50) < 1e-9)
+  assert.ok(Math.abs((analysis.key_metrics?.fairPE ?? 0) - 25) < 1e-9)
+  assert.equal(analysis.fairValue, null)
+  assert.equal(analysis.upside, null)
   assert.equal(analysis.isEligible, true)
 })
 
@@ -182,6 +184,10 @@ test('Lynch: commodities cíclicas e LPA ≤ 0 ficam fora, com o motivo', () => 
   assert.equal(oil.isEligible, false)
   assert.equal(oil.fairValue, null)
   assert.match(oil.reasoning, /commodities cíclicas/)
+
+  const bank = strategy.runAnalysis(lynchCompany(10, 0.2, 'Bancos'), {})
+  assert.equal(bank.isEligible, false)
+  assert.match(bank.reasoning, /bancos e seguradoras/)
 
   const loss = strategy.runAnalysis(company({ financials: { lpa: -1, dy: 0.05, cagrLucros5a: 0.2 } }), {})
   assert.equal(loss.isEligible, false)

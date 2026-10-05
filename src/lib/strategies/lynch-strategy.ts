@@ -1,10 +1,9 @@
 import { AbstractStrategy, notApplicableAnalysis, toNumber, validateCAGR5Years } from './base-strategy';
-import { toRankingResult, upsidePoints } from './bazin-strategy';
+import { toRankingResult } from './bazin-strategy';
 import { LynchParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
-import { isCyclicalCommodity } from '@/lib/finance/sector-classification';
+import { isCyclicalCommodity, isFinancial } from '@/lib/finance/sector-classification';
 import { lynchFairPE, peg } from '@/lib/finance/valuation';
-import { formatBRL, formatMultiple, formatPct } from '@/lib/format';
-import { marginOfSafety } from '@/lib/valuation-metrics';
+import { formatMultiple, formatPct } from '@/lib/format';
 
 export const LYNCH_DEFAULTS = {
   maxPeg: 1,
@@ -41,9 +40,10 @@ function notApplicable(reason: string, keyMetrics: Record<string, number | null>
 }
 
 /**
- * Peter Lynch: P/L justo = crescimento dos lucros + dividend yield (em pontos percentuais) e PEG = P/L ÷ crescimento.
- * Valor justo = LPA × P/L justo. Não se aplica a empresas com prejuízo nem a commodities cíclicas, cujo lucro de pico
- * distorce o P/L.
+ * Peter Lynch: PEG = P/L ÷ crescimento dos lucros, com as faixas de Lynch, e P/L de referência = crescimento + dividend
+ * yield (em pontos percentuais). É um indicador relativo: não gera preço-alvo, porque LPA × (g + DY) dá potenciais de
+ * centenas de por cento em empresas de P/L baixo. Não se aplica a bancos e seguradoras (o lucro cresce com alavancagem;
+ * o modelo deles é o P/VP justo), a commodities cíclicas (lucro de pico distorce o P/L) nem a empresas com prejuízo.
  */
 export class LynchStrategy extends AbstractStrategy<LynchParams> {
   readonly name = 'lynch';
@@ -64,6 +64,12 @@ export class LynchStrategy extends AbstractStrategy<LynchParams> {
     const cagr = toNumber(financials.cagrLucros5a);
     const baseMetrics = { lpa, dy, cagrLucros5a: cagr, roe: toNumber(financials.roe) };
 
+    if (isFinancial(companyData.sector, companyData.industry)) {
+      return notApplicable(
+        'Modelo não se aplica a bancos e seguradoras: o lucro cresce com alavancagem e o PEG distorce; veja P/VP justo.',
+        baseMetrics
+      );
+    }
     if (isCyclicalCommodity(companyData.sector, companyData.industry)) {
       return notApplicable(
         'Modelo não se aplica a commodities cíclicas: o lucro acompanha o ciclo de preços e o P/L de pico distorce o PEG.',
@@ -83,12 +89,10 @@ export class LynchStrategy extends AbstractStrategy<LynchParams> {
     const dyFraction = dy !== null && Number.isFinite(dy) && dy > 0 ? dy : 0;
     const pegValue = pl === null ? null : peg(pl, g);
     const fairPE = lynchFairPE(g, dyFraction);
-    const fairValue = fairPE === null ? null : lpa * fairPE;
-    const discount = marginOfSafety(price, fairValue);
     const band = pegValue === null ? null : pegBand(pegValue);
 
     const pegOk = pegValue !== null && pegValue <= maxPeg;
-    const belowFair = discount !== null && discount > 0;
+    const belowFairPE = pl !== null && fairPE !== null && pl < fairPE;
     const criteria: StrategyAnalysis['criteria'] = [
       {
         label: `PEG ≤ ${formatMultiple(maxPeg)}`,
@@ -96,25 +100,25 @@ export class LynchStrategy extends AbstractStrategy<LynchParams> {
         description: `PEG: ${formatMultiple(pegValue, { digits: 2 })}${band ? ` (faixa "${band}" de Lynch)` : ''} · P/L ${formatMultiple(pl)} ÷ crescimento ${formatPct(g)}`,
       },
       {
-        label: 'Preço abaixo do valor estimado',
-        value: belowFair,
-        description: `Valor estimado: ${formatBRL(fairValue)} (LPA ${formatBRL(lpa)} × P/L justo ${formatMultiple(fairPE)})`,
+        label: 'P/L abaixo do P/L de referência (crescimento + DY)',
+        value: belowFairPE,
+        description: `P/L ${formatMultiple(pl)} · referência ${formatMultiple(fairPE)} (crescimento ${formatPct(g)} + DY ${formatPct(dyFraction)})`,
       },
     ];
 
     const growthNote = cagr !== null && cagr > g ? ` (CAGR de ${formatPct(cagr)} limitado a ${formatPct(maxGrowthRate, { digits: 0 })})` : '';
     const reasoning = [
       `PEG de ${formatMultiple(pegValue, { digits: 2 })}${band ? `, faixa "${band}" de Lynch` : ''}: P/L de ${formatMultiple(pl)} sobre crescimento dos lucros de ${formatPct(g)} ao ano${growthNote}.`,
-      `P/L justo = crescimento + dividend yield = ${formatMultiple(fairPE)}, o que leva a um valor estimado de ${formatBRL(fairValue)} por ação.`,
+      `P/L de referência (crescimento + dividend yield) de ${formatMultiple(fairPE)}${belowFairPE ? ', acima do P/L atual' : ', abaixo do P/L atual'}.`,
       pegOk ? 'Atende ao PEG máximo do modelo.' : `PEG acima do máximo de ${formatMultiple(maxPeg)}.`,
     ].join(' ');
 
     return {
-      isEligible: pegOk && belowFair,
+      isEligible: pegOk && belowFairPE,
       score: (criteria.filter((c) => c.value).length / criteria.length) * 100,
-      fairValue,
-      upside: upsidePoints(price, fairValue),
-      discount,
+      fairValue: null,
+      upside: null,
+      discount: null,
       reasoning,
       criteria,
       key_metrics: {
@@ -155,13 +159,13 @@ Peter Lynch comparava o P/L com o crescimento dos lucros: uma empresa que cresce
 
 - **Crescimento (g)**: CAGR dos lucros nos últimos 5 anos, limitado a ${formatPct(maxGrowthRate, { digits: 0 })} ao ano.
 - **PEG = P/L ÷ (g × 100)**. Faixas de Lynch: abaixo de 0,5 muito barato, de 0,5 a 1 barato, acima de 1 caro.
-- **P/L justo = g + dividend yield**, em pontos percentuais.
-- **Valor estimado = LPA × P/L justo**.
+- **P/L de referência = g + dividend yield**, em pontos percentuais.
+- O modelo é um indicador relativo: não calcula preço-alvo, porque LPA × P/L de referência exagera o potencial de empresas com P/L baixo.
 
 ## Critérios
 
-- PEG ≤ ${formatMultiple(maxPeg)} e preço abaixo do valor estimado.
-- Fora do modelo: empresas com LPA negativo ou sem crescimento de lucros, e commodities cíclicas (petróleo, mineração, siderurgia, papel e celulose), cujo lucro de pico distorce o P/L.
+- PEG ≤ ${formatMultiple(maxPeg)} e P/L abaixo do P/L de referência.
+- Fora do modelo: bancos e seguradoras (use o P/VP justo), empresas com LPA negativo ou sem crescimento de lucros, e commodities cíclicas (petróleo, mineração, siderurgia, papel e celulose), cujo lucro de pico distorce o P/L.
 
 **Ordenação**: menor PEG${params.useTechnicalAnalysis ? ', com priorização técnica dentro de faixas semelhantes' : ''}.
 

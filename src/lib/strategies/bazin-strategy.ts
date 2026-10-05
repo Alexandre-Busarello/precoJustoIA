@@ -94,6 +94,10 @@ export function toRankingResult(companyData: CompanyData, analysis: StrategyAnal
   };
 }
 
+function sumAmounts(events: readonly DividendEvent[]): number {
+  return events.reduce((acc, event) => acc + event.amount, 0);
+}
+
 /** Upside em pontos percentuais (VJ/P − 1), como as demais estratégias devolvem. */
 export function upsidePoints(price: number, fairValue: number | null): number | null {
   const value = upsideFraction(price, fairValue);
@@ -120,8 +124,12 @@ export class BazinStrategy extends AbstractStrategy<BazinParams> {
     const maxDebtToEquity = params.maxDebtToEquity ?? BAZIN_DEFAULTS.maxDebtToEquity;
     const { currentPrice: price, financials } = companyData;
 
-    let events = dividendEventsOf(companyData);
-    if (params.excludeExtraordinary) events = removeExtraordinary(events);
+    const allEvents = dividendEventsOf(companyData);
+    // Extraordinários (> 2× a mediana, sem recorrência sazonal) ficam fora por padrão: um provento pontual
+    // inflaria a média e o preço-teto por cinco anos.
+    const excludeExtraordinary = params.excludeExtraordinary ?? true;
+    let events = excludeExtraordinary ? removeExtraordinary(allEvents) : allEvents;
+    const extraordinaryRemoved = sumAmounts(allEvents) - sumAmounts(events);
     if (params.useNetJcp) events = events.map((event) => ({ ...event, amount: netAmount(event) }));
 
     const totals = fullYearTotals(events, { years });
@@ -129,6 +137,9 @@ export class BazinStrategy extends AbstractStrategy<BazinParams> {
     const ceiling = ceilingPrice(averageDividend, targetYield);
     const averageYield = averageDividend !== null && price > 0 ? averageDividend / price : null;
     const amountLabel = params.useNetJcp ? 'líquidos' : 'brutos';
+    const extraordinaryNote = extraordinaryRemoved > 0.005
+      ? ` · ${formatBRL(extraordinaryRemoved)} em proventos extraordinários fora da média`
+      : '';
 
     const hasHistory = totals.length >= MIN_FULL_YEARS;
     const meetsYield = averageYield !== null && averageYield >= targetYield;
@@ -146,7 +157,7 @@ export class BazinStrategy extends AbstractStrategy<BazinParams> {
       {
         label: `DY médio ≥ ${formatPct(targetYield)}`,
         value: meetsYield,
-        description: `Média de proventos ${amountLabel}: ${formatBRL(averageDividend)} por ação ao ano · DY médio sobre o preço: ${formatPct(averageYield)}`,
+        description: `Média de proventos ${amountLabel}: ${formatBRL(averageDividend)} por ação ao ano · DY médio sobre o preço: ${formatPct(averageYield)}${extraordinaryNote}`,
       },
     ];
 
@@ -198,6 +209,9 @@ export class BazinStrategy extends AbstractStrategy<BazinParams> {
       const failed = criteria.filter((c) => !c.value).map((c) => c.label.toLowerCase());
       reasoning = [
         `Preço-teto Bazin de ${formatBRL(fairValue)}: média de proventos ${amountLabel} de ${formatBRL(averageDividend)} por ação (${totals.length} anos completos) ÷ DY alvo de ${formatPct(targetYield)}.`,
+        extraordinaryRemoved > 0.005
+          ? `Proventos extraordinários (${formatBRL(extraordinaryRemoved)} por ação no período) não entram na média, porque não devem se repetir.`
+          : '',
         position,
         isEligible ? 'Atende a todos os critérios do método.' : `Não atende: ${failed.join('; ')}.`,
       ].filter(Boolean).join(' ');
@@ -255,6 +269,7 @@ Décio Bazin propôs um preço máximo a pagar por ações pagadoras de dividend
 
 - A média usa os últimos ${years} anos-calendário completos. O ano corrente, ainda parcial, não entra.
 - Proventos ${params.useNetJcp ? 'líquidos (JCP descontado do IRRF)' : 'brutos (dividendos + JCP antes do IRRF), o padrão de mercado'}.
+- ${params.excludeExtraordinary === false ? 'Proventos extraordinários entram na média.' : 'Proventos extraordinários (acima de 2× a mediana e sem repetição no mesmo mês de outros anos) ficam fora da média.'}
 - São necessários ao menos ${MIN_FULL_YEARS} anos completos de histórico.
 
 ## Critérios

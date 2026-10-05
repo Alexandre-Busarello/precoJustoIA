@@ -34,9 +34,7 @@ const FAIR_VALUE_MODEL_OPTIONS: Record<FairValueModel, string> = {
   graham: 'Graham',
   fcd: 'Fluxo de caixa descontado',
   gordon: 'Gordon',
-  barsi: 'Barsi',
-  bazin: 'Bazin',
-  lynch: 'Peter Lynch',
+  bazin: 'Preço-teto (Bazin)',
   bankPvp: 'P/VP justo (bancos)',
 };
 const DEFAULT_FAIR_VALUE_MODEL: FairValueModel = 'graham';

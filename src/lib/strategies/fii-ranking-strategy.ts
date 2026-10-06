@@ -43,7 +43,7 @@ export class FiiRankingStrategy extends AbstractStrategy<FiiRankingParams> {
 
   generateRational(params: FiiRankingParams): string {
     const minS = params.minScore ?? 55;
-    return `Ranking PJ-FII: ordena pelo score proprietário (mín. ${minS}), com pilares Dividendos, Valuation, Qualidade do portfólio, Liquidez e Gestão.`;
+    return `Ranking PJ-FII: ordena pelo score proprietário (mín. ${minS}), com pilares Dividendos, Valuation, Qualidade do portfólio, Liquidez e Segmento e resiliência.`;
   }
 
   validateCompanyData(companyData: CompanyData, params: FiiRankingParams): boolean {
@@ -147,7 +147,7 @@ export class FiiRankingStrategy extends AbstractStrategy<FiiRankingParams> {
             0
           )}, Valuation ${res.breakdown.valuation.score.toFixed(0)}, Qualidade ${res.breakdown.qualidadePortfolio.score.toFixed(
             0
-          )}, Liquidez ${res.breakdown.liquidez.score.toFixed(0)}, Gestão ${res.breakdown.gestao.score.toFixed(0)}.`,
+          )}, Liquidez ${res.breakdown.liquidez.score.toFixed(0)}, Segmento e resiliência ${res.breakdown.gestao.score.toFixed(0)}.`,
         key_metrics: analysis.key_metrics,
       };
     });

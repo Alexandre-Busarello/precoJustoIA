@@ -101,6 +101,8 @@ export class LowPEStrategy extends AbstractStrategy<LowPEParams> {
     
     // Filtrar por tipo de ativo primeiro (b3, bdr, both)
     filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
+    // Tamanho da empresa (o seletor existe no painel do ranking, como nos demais modelos).
+    filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');
 
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company, params)) continue;

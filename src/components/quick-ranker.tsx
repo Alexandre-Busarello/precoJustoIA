@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ChevronDown, Loader2, Lock, SlidersHorizontal } from "lucide-react"
+import { BookOpen, ChevronDown, Loader2, Lock, SlidersHorizontal } from "lucide-react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { useTracking } from "@/hooks/use-tracking"
 import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
@@ -33,6 +33,7 @@ import {
 import { formatBRLCompact, formatDate } from "@/lib/format"
 import { LIQUIDITY_DEFAULTS } from "@/lib/finance/liquidity-rules"
 import { cn } from "@/lib/utils"
+import { getRankingMethodology, methodologyHref } from "@/lib/ranking-methodology"
 import type { EtfRankingItem } from "@/lib/strategies/etf-ranking-strategy"
 import {
   RANKING_MODELS,
@@ -422,6 +423,8 @@ export function QuickRanker({
 
         {model && <p className="max-w-[68ch] text-sm text-muted-foreground">{model.description}</p>}
 
+        {model && <HowItWorks modelKey={model.key} />}
+
         {showLiquidityToggle && (
           <div className="flex items-center gap-1">
             <Label
@@ -542,7 +545,7 @@ export function QuickRanker({
             loading={loading || !outcome}
             empty={{
               title: "Nenhum ativo passou nos critérios",
-              description: "Afrouxe os parâmetros, por exemplo o upside mínimo, e gere de novo.",
+              description: "Afrouxe os parâmetros, por exemplo a margem de segurança mínima, e gere de novo.",
               action: showParams ? (
                 <Button variant="outline" size="sm" onClick={() => setParamsOpen(true)}>
                   Ajustar parâmetros
@@ -555,7 +558,7 @@ export function QuickRanker({
         <p className="text-xs leading-5 text-muted-foreground">
           Estimativas de modelos quantitativos com dados públicos. Não é recomendação de investimento. Rentabilidade passada não
           garante resultados futuros.{" "}
-          <Link href="/metodologia" className="text-foreground underline underline-offset-4 hover:text-brand">
+          <Link href={methodologyHref(model?.key)} className="text-foreground underline underline-offset-4 hover:text-brand">
             Ver metodologia
           </Link>
         </p>
@@ -629,5 +632,38 @@ function LockedModel({ model, isLoggedIn }: { model: RankingModel; isLoggedIn: b
         <Link href={isLoggedIn ? "/planos" : "/register"}>{isLoggedIn ? "Ver planos" : "Criar conta grátis"}</Link>
       </Button>
     </div>
+  )
+}
+
+/** "Como funciona" do modelo selecionado: resumo, passos e link para a seção em /metodologia. */
+function HowItWorks({ modelKey }: { modelKey: string }) {
+  const doc = getRankingMethodology(modelKey)
+  if (!doc) return null
+  return (
+    <Collapsible className="max-w-[68ch] rounded-lg border border-border bg-card">
+      <CollapsibleTrigger className="min-h-11 gap-2 px-3 text-left text-foreground hover:no-underline focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none">
+        <span className="flex items-center gap-2">
+          <BookOpen className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+          Como funciona
+        </span>
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform" strokeWidth={1.75} aria-hidden="true" />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="space-y-3 border-t border-border px-3 pt-3 pb-3">
+          <p className="text-sm text-foreground">{doc.summary}</p>
+          <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground marker:text-muted-foreground">
+            {doc.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <Link
+            href={methodologyHref(modelKey)}
+            className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 hover:text-brand"
+          >
+            Metodologia completa
+          </Link>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }

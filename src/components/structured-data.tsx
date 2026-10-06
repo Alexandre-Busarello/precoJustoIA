@@ -1,4 +1,4 @@
-import { COVERED_COMPANIES_LABEL } from '@/lib/site-constants'
+import { COVERED_ASSETS_LABEL } from '@/lib/site-constants'
 import { FALLBACK_ANNUAL_PRICE_DECIMAL, FALLBACK_MONTHLY_PRICE_DECIMAL } from '@/lib/price-utils'
 
 interface StructuredDataProps {
@@ -104,7 +104,7 @@ export function StructuredData({ type, data = {} }: StructuredDataProps) {
           ...baseData,
           '@type': 'SoftwareApplication',
           name: 'Preço Justo AI',
-          description: `Preço justo e valuation de ${COVERED_COMPANIES_LABEL} da B3 com 8 modelos de valuation, rankings, comparador e backtest.`,
+          description: `Preço justo e valuation de ${COVERED_ASSETS_LABEL} da B3 com 8 modelos de valuation, rankings, comparador e backtest.`,
           url: 'https://precojusto.ai',
           applicationCategory: 'FinanceApplication',
           operatingSystem: 'Web',

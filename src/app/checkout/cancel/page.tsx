@@ -2,7 +2,7 @@ import Link from "next/link"
 import { Metadata } from "next"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/page-header"
-import { COVERED_COMPANIES_LABEL } from "@/lib/site-constants"
+import { COVERED_ASSETS_LABEL } from "@/lib/site-constants"
 
 export const metadata: Metadata = {
   title: "Pagamento cancelado",
@@ -56,7 +56,7 @@ export default function CancelPage() {
         </section>
 
         <p className="text-sm text-muted-foreground">
-          No plano gratuito você continua com a Fórmula de Graham em {COVERED_COMPANIES_LABEL} da B3.
+          No plano gratuito você continua com a Fórmula de Graham e os indicadores de {COVERED_ASSETS_LABEL} da B3.
         </p>
       </div>
     </div>

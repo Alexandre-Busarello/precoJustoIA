@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/user-service"
 import { isTrialEnabled } from "@/lib/trial-service"
 import { isProdPhase } from "@/lib/alfa-service"
 import { formatPct } from "@/lib/format"
-import { COVERED_COMPANIES_LABEL } from "@/lib/site-constants"
+import { COVERED_ASSETS_LABEL } from "@/lib/site-constants"
 import {
   calculateDiscount,
   FALLBACK_ANNUAL_PRICE_DECIMAL,
@@ -82,7 +82,7 @@ const FAQS = [
   },
   {
     question: "Quais empresas são analisadas?",
-    answer: `Todos os planos cobrem ${COVERED_COMPANIES_LABEL} da B3, com cotações atualizadas 3 vezes ao dia e demonstrações atualizadas após cada divulgação de resultados.`,
+    answer: `Todos os planos cobrem ${COVERED_ASSETS_LABEL} da B3, com cotações atualizadas 3 vezes ao dia e demonstrações atualizadas após cada divulgação de resultados.`,
   },
 ]
 

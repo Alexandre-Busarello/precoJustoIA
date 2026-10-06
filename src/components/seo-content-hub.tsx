@@ -30,7 +30,7 @@ export function SEOContentHub({ pageType }: SEOContentHubProps) {
                 <strong>Screening de ações</strong> é uma técnica fundamentalista que permite encontrar empresas na Bolsa de Valores (B3) que atendem critérios específicos de investimento. Com nosso <strong>filtro customizável de ações</strong>, você pode buscar empresas por múltiplos indicadores financeiros simultaneamente.
               </p>
               <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-4">
-                Nossa ferramenta de <strong>screening fundamentalista</strong> analisa mais de <strong>350 empresas listadas na B3</strong>, incluindo ações brasileiras e BDRs (Brazilian Depositary Receipts), permitindo que você encontre oportunidades de investimento baseadas em seus próprios critérios de <strong>valuation, rentabilidade, crescimento e qualidade</strong>.
+                Nossa ferramenta de <strong>screening fundamentalista</strong> analisa mais de <strong>600 ativos listados na B3</strong>, incluindo ações brasileiras e BDRs (Brazilian Depositary Receipts), permitindo que você encontre oportunidades de investimento baseadas em seus próprios critérios de <strong>valuation, rentabilidade, crescimento e qualidade</strong>.
               </p>
               <h3 className="text-2xl font-semibold mt-6 mb-3 text-slate-900 dark:text-white">
                 Como Funciona o Screening de Ações?

@@ -74,7 +74,7 @@ export function FeaturesRankingSection() {
         <div className="mb-10 text-center">
           <Badge className="mb-3 bg-brand-subtle text-brand">Ranking B3</Badge>
           <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
-            Modelos ranqueando mais de 350 empresas da B3
+            Modelos ranqueando mais de 600 ativos da B3
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
             Escolha o modelo e veja quais ações passaram nos seus critérios — com indicadores, upside e análise individual.

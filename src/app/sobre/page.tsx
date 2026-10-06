@@ -1,7 +1,7 @@
 import { Metadata } from "next"
 import Link from "next/link"
 import { Breadcrumbs } from "@/components/landing/breadcrumbs"
-import { COVERED_COMPANIES_LABEL, DATA_SOURCES_LABEL, LEGAL_NOTICE, UPDATE_FREQUENCY_LABEL } from "@/lib/site-constants"
+import { COVERED_ASSETS_LABEL, DATA_SOURCES_LABEL, LEGAL_NOTICE, UPDATE_FREQUENCY_LABEL } from "@/lib/site-constants"
 
 export const metadata: Metadata = {
   title: "Sobre",
@@ -41,7 +41,7 @@ export default function SobrePage() {
               </h2>
               <p>
                 Aplicar Graham, Bazin, Gordon ou um fluxo de caixa descontado à mão em centenas de empresas é lento e sujeito a
-                erro. Aqui os modelos rodam sobre os mesmos dados para {COVERED_COMPANIES_LABEL}, lado a lado, com as limitações
+                erro. Aqui os modelos rodam sobre os mesmos dados para {COVERED_ASSETS_LABEL}, lado a lado, com as limitações
                 de cada um à vista. A ideia é ajudar você a decidir onde estudar o próximo aporte, não decidir por você.
               </p>
               <p>

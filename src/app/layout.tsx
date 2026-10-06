@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     default: "Preço Justo AI - Análise Fundamentalista de Ações B3 com IA",
     template: "%s | Preço Justo AI"
   },
-  description: "Análise fundamentalista gratuita de ações B3 com IA. Modelos consagrados: Graham, Método Barsi, Fórmula Mágica + 5 estratégias. Rankings e comparador de +500 empresas.",
+  description: "Análise fundamentalista gratuita de ações B3 com IA. Modelos consagrados: Graham, Método Barsi, Fórmula Mágica + 5 estratégias. Rankings e comparador de mais de 600 ativos da B3.",
   keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, como investir em ações, valuation ações, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações bovespa, comparador ações B3, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista",
   authors: [{ name: "Preço Justo AI" }],
   creator: "Preço Justo AI",
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
     url: 'https://precojusto.ai',
     siteName: 'Preço Justo AI',
     title: 'Preço Justo AI - Análise Fundamentalista de Ações B3 com IA',
-    description: 'Análise fundamentalista gratuita de ações B3 com IA. Modelos consagrados: Graham, Método Barsi, Fórmula Mágica + 5 estratégias. Rankings e comparador de +500 empresas.',
+    description: 'Análise fundamentalista gratuita de ações B3 com IA. Modelos consagrados: Graham, Método Barsi, Fórmula Mágica + 5 estratégias. Rankings e comparador de mais de 600 ativos da B3.',
     images: [
       {
         url: 'https://precojusto.ai/icons/og-default.png',

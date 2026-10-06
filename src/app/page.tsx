@@ -10,7 +10,7 @@ import { CTASection } from "@/components/landing/cta-section"
 import { FAQSection } from "@/components/landing/faq-section"
 import { FloatingCTA } from "@/components/landing/floating-cta"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
-import { COVERED_COMPANIES_LABEL, DATA_SOURCES_LABEL } from "@/lib/site-constants"
+import { COVERED_ASSETS_LABEL, DATA_SOURCES_LABEL } from "@/lib/site-constants"
 import { FALLBACK_MONTHLY_PRICE_FORMATTED } from "@/lib/price-utils"
 
 const HERO_ID = "home-hero"
@@ -18,7 +18,7 @@ const FINAL_CTA_ID = "home-final-cta"
 
 export const metadata: Metadata = {
   title: "Preço justo e valuation de ações da B3",
-  description: `Preço justo de ${COVERED_COMPANIES_LABEL} da B3 calculado por 8 modelos de valuation (Graham, Barsi, Fórmula Mágica, FCD, Gordon e outros), com rankings, comparador e backtest. Comece grátis.`,
+  description: `Preço justo de ${COVERED_ASSETS_LABEL} da B3 calculado por 8 modelos de valuation (Graham, Barsi, Fórmula Mágica, FCD, Gordon e outros), com rankings, comparador e backtest. Comece grátis.`,
   keywords:
     "preço justo ações, valuation ações B3, análise fundamentalista, fórmula de Graham, método Barsi, fórmula mágica Greenblatt, fluxo de caixa descontado, ranking de ações, comparador de ações, backtest de carteira",
   publisher: "Preço Justo AI",
@@ -219,7 +219,7 @@ export default async function Home() {
       <LandingHero
         id={HERO_ID}
         headline="O preço justo de cada ação da B3, calculado por 8 modelos de valuation."
-        subheadline={`Preço, preço justo, margem de segurança e score de ${COVERED_COMPANIES_LABEL}, com a metodologia aberta.`}
+        subheadline={`Preço, preço justo, margem de segurança e score de ${COVERED_ASSETS_LABEL}, com a metodologia aberta.`}
         actions={<HeroSearch />}
         showQuickAccess={false}
         media={

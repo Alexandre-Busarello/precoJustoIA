@@ -27,7 +27,7 @@ export const HERO = {
 }
 
 export const STATS = [
-  { value: '350+', label: 'Empresas cobertas' },
+  { value: '600+', label: 'Ativos cobertos' },
   { value: '12', label: 'Modelos de análise' },
   { value: '12 meses', label: 'Projeção de dividendos' },
   { value: 'Diária', label: 'Atualização dos dados' },
@@ -117,7 +117,7 @@ export const FAQ_ITEMS = [
   {
     question: 'Quais ativos estão disponíveis na plataforma?',
     answer:
-      'Analisamos ações (B3), FIIs (fundos imobiliários), BDRs, ETFs e índices como Ibovespa, IFIX e S&P500. No total, mais de 500 ativos com dados fundamentalistas atualizados.',
+      'Analisamos ações (B3), FIIs (fundos imobiliários), BDRs, ETFs e índices como Ibovespa, IFIX e S&P500. No total, mais de 600 ativos com dados fundamentalistas atualizados.',
   },
   {
     question: 'O que está incluído na conta gratuita?',
@@ -264,7 +264,7 @@ export const PRICING_FEATURES_PREMIUM = [
   'Projeção de dividendos 12 meses',
   'Score de sustentabilidade',
   'Screening avançado com 20+ filtros',
-  'Ranking ilimitado (mais de 350 empresas)',
+  'Ranking ilimitado (mais de 600 ativos)',
   'Análise setorial comparativa',
   'Gestão de carteira virtual',
   'Backtesting de estratégias',

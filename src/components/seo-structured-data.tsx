@@ -96,7 +96,7 @@ export function SEOStructuredData({
               "name": "Plano Gratuito",
               "price": "0",
               "priceCurrency": "BRL",
-              "description": "Fórmula de Graham e análise de 350+ empresas da B3"
+              "description": "Fórmula de Graham e análise de mais de 600 ativos da B3"
             },
             {
               "@type": "Offer",
@@ -111,7 +111,7 @@ export function SEOStructuredData({
             "Análise fundamentalista automatizada",
             "8 modelos de valuation",
             "Análise com inteligência artificial",
-            "Mais de 350 empresas da B3",
+            "Mais de 600 ativos da B3 (ações, BDRs e FIIs)",
             "Comparador de ações",
             "Rankings personalizados"
           ],

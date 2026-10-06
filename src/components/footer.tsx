@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { FOOTER_SECTIONS, isFooterHidden } from '@/lib/navigation';
-import { COVERED_COMPANIES_LABEL, DATA_SOURCES_LABEL, LEGAL_NOTICE } from '@/lib/site-constants';
+import { COVERED_ASSETS_LABEL, DATA_SOURCES_LABEL, LEGAL_NOTICE } from '@/lib/site-constants';
 
 /**
  * Rodapé global, renderizado uma única vez pelo layout raiz.
@@ -23,7 +23,7 @@ export function SiteFooter() {
           <div className="col-span-2 space-y-3">
             <BrandLogo className="h-7" />
             <p className="max-w-xs text-sm text-muted-foreground">
-              Valuation e indicadores fundamentalistas de {COVERED_COMPANIES_LABEL} da B3.
+              Valuation e indicadores fundamentalistas de {COVERED_ASSETS_LABEL} da B3: ações, BDRs e FIIs.
             </p>
           </div>
           {FOOTER_SECTIONS.map((section) => (

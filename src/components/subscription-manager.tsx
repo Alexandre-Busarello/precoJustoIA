@@ -254,7 +254,7 @@ export function SubscriptionManager() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-600" />
-                  <span>350+ Empresas da B3</span>
+                  <span>600+ ativos da B3</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-600" />

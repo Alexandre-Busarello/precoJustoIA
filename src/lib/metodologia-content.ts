@@ -88,7 +88,7 @@ const STOCK_DOCS: MethodologyDoc[] = [
     formula:
       'Preço-teto = média anual dos proventos brutos ÷ DY alvo × multiplicador\n\nMédia = últimos 5 anos-calendário completos (sem extraordinários)\nDY alvo padrão = 6% (3% em BDRs); multiplicador padrão = 1,0\n\nScore Barsi = 40% desconto até o preço-teto\n            + 35% qualidade dos dividendos\n            + 25% saúde financeira',
     criteria: [
-      'Setores perenes (B.E.S.T.): bancos e serviços financeiros, energia, saneamento e utilidade pública, seguros, telecomunicações e gás, identificados pelo nome do setor. No ranking, o filtro vem ligado e pode ser desligado',
+      'Setores perenes (B.E.S.T.): bancos, energia elétrica, saneamento e gás canalizado, seguros e telecomunicações, identificados pela classificação de setor e indústria (petróleo e gás ficam de fora). No ranking, o filtro vem ligado e pode ser desligado',
       'ROE ≥ 10% e dívida líquida/PL ≤ 1,0x (12% e 1,5x em BDRs); os dois são ajustáveis',
       'Dividendos (DY acima de 1%) em 80% dos anos da janela escolhida, arredondado para baixo (no padrão de 3 anos, 2 de 3). Com histórico menor que a janela, basta DY atual acima de 3%',
       'Valor de mercado ≥ R$ 1 bi',

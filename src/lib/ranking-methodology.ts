@@ -118,7 +118,7 @@ export const RANKING_METHODOLOGY: Record<string, RankingMethodology> = {
       'Busca pagadoras de dividendos em setores perenes com preço abaixo do preço-teto, calculado como no método Bazin.',
     steps: [
       'Preço-teto = média anual dos proventos brutos (dividendos + JCP) dos últimos 5 anos completos, sem extraordinários, ÷ DY alvo (ajustável, padrão 6% em ações e 3% em BDRs) × multiplicador (padrão 1,0).',
-      'Setores perenes (B.E.S.T.): bancos e serviços financeiros, energia, saneamento e utilidade pública, seguros, telecomunicações e gás, pelo nome do setor. O filtro vem ligado e pode ser desligado.',
+      'Setores perenes (B.E.S.T.): bancos, energia elétrica, saneamento e gás canalizado, seguros e telecomunicações, pela classificação de setor e indústria (petróleo e gás ficam de fora). O filtro vem ligado e pode ser desligado.',
       'Critérios: preço igual ou abaixo do teto, ROE ≥ 10% (12% em BDRs), dívida líquida/PL ≤ 1,0x (1,5x em BDRs), dividendos em 80% dos anos da janela, arredondado para baixo (janela ajustável; no padrão de 3 anos, 2 de 3) e valor de mercado ≥ R$ 1 bi.',
       `Ficam de fora empresas com ${QUALITY_EXCLUSIONS}.`,
       'Ordem: Score Barsi, com 40% de desconto até o preço-teto, 35% de dividendos e 25% de saúde financeira.',

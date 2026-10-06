@@ -3,6 +3,7 @@ import { dividendEventsOf, resolveTargetYield, upsidePoints } from './bazin-stra
 import { BarsiParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 import { prisma } from '@/lib/prisma';
 import { fullYearTotals, removeExtraordinary, toDividendEvents } from '@/lib/finance/dividends';
+import { isFinancial, isUtility } from '@/lib/finance/sector-classification';
 import { formatBRL, formatMultiple, formatPct } from '@/lib/format';
 import { marginOfSafety } from '@/lib/valuation-metrics';
 
@@ -14,20 +15,6 @@ const BARSI_HISTORY_YEARS = 7;
 export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
   readonly name = 'barsi';
 
-  // Setores "perenes" do método B.E.S.T. + Gás
-  private readonly PERENNIAL_SECTORS = [
-    'Bancos',
-    'Energia Elétrica', 
-    'Saneamento',
-    'Seguros',
-    'Telecomunicações',
-    'Gás',
-    'Água e Saneamento',
-    'Energia',
-    'Serviços Financeiros',
-    'Utilities',
-    'Utilidade Pública'
-  ];
 
   /**
    * Média anual dos proventos brutos (dividendos + JCP) nos últimos 5 anos-calendário completos (N−1 … N−5).
@@ -67,15 +54,15 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
   }
 
   /**
-   * Verifica se a empresa está em setor "perene" (B.E.S.T.)
+   * Setor "perene" do método B.E.S.T.: bancos, energia elétrica e saneamento (e gás canalizado), seguros e telecom.
+   * Usa a classificação setorial dos demais modelos (setor + indústria): petróleo e gás, que a B3 chama de "Energia",
+   * não entra.
    */
-  private isPerennialSector(sector: string | null): boolean {
-    if (!sector) return false;
-    
-    return this.PERENNIAL_SECTORS.some(perennialSector => 
-      sector.toLowerCase().includes(perennialSector.toLowerCase()) ||
-      perennialSector.toLowerCase().includes(sector.toLowerCase())
-    );
+  private isPerennialSector(sector: string | null, industry?: string | null): boolean {
+    if (isUtility(sector, industry)) return true;
+    const text = `${sector ?? ''} ${industry ?? ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (isFinancial(sector, industry)) return /banco|segur|previd/.test(text);
+    return /telecom/.test(text);
   }
 
   /**
@@ -172,7 +159,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
     const discountFromCeiling = discount === null ? null : discount * 100;
     const isUnderCeiling = discount !== null && discount >= 0;
 
-    const isPerennialSector = this.isPerennialSector(sector);
+    const isPerennialSector = this.isPerennialSector(sector, companyData.industry);
     const hasConsistentDividends = this.hasConsistentDividendHistory(companyData, minConsecutiveDividends);
     const hasGoodProfitability = !!(roe && roe >= minROE);
     const hasLowDebt = !dividaLiquidaPl || dividaLiquidaPl <= maxDebtToEquity;
@@ -289,7 +276,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
       const { financials, currentPrice, sector, historicalFinancials } = company;
       const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
 
-      if (focusOnBEST && !this.isPerennialSector(sector)) continue;
+      if (focusOnBEST && !this.isPerennialSector(sector, company.industry)) continue;
 
       const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
       const { average: averageDividend, years: fullYears } = await this.calculateAverageDividend(company);

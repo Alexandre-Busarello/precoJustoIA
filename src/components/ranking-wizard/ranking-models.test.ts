@@ -194,10 +194,10 @@ test('parâmetros: formato e resumo do painel', () => {
   const [, margin] = graham.fields
   assert.equal(formatParamValue(margin, 0.2), '20%')
   assert.equal(formatParamValue(getRankingModel('dividendYield')!.fields[1], 0.025), '2,5%')
-  assert.equal(summarizeParams(graham, graham.defaults('b3')), 'Upside mínimo 20%')
+  assert.equal(summarizeParams(graham, graham.defaults('b3')), 'Margem de segurança mínima 20%')
   assert.equal(
     summarizeParams(graham, { ...graham.defaults('b3'), companySize: 'small_caps' }),
-    'Tamanho da empresa Small caps (até R$ 2 bi) · Upside mínimo 20%'
+    'Tamanho da empresa Small caps (até R$ 2 bi) · Margem de segurança mínima 20%'
   )
 })
 

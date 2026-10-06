@@ -403,7 +403,7 @@ export const RANKING_MODELS: RankingModel[] = [
         kind: 'switch',
         key: 'focusOnBEST',
         label: 'Só setores perenes',
-        hint: 'Bancos e serviços financeiros, energia, saneamento e utilidade pública, seguros, telecomunicações e gás.',
+        hint: 'Bancos, energia elétrica, saneamento e gás canalizado, seguros e telecomunicações (petróleo e gás ficam de fora).',
       },
       TECHNICAL,
     ],

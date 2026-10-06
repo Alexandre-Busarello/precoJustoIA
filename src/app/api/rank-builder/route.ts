@@ -43,6 +43,8 @@ const LEGACY_PREMIUM_MODELS: Record<string, string> = {
   ai: "Síntese com IA",
   barsi: "Método Barsi",
   fiiRanking: "Ranking PJ-FII",
+  dividendYield: "Anti-armadilha de dividendos",
+  lowPE: "P/L baixo com qualidade",
 };
 
 /** Modelos novos: o plano vem do registro (`ranking-models.ts`), então o dono pode liberar um deles no gratuito. */

@@ -1,26 +1,26 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useState, useEffect, useRef, type MouseEvent, type ReactNode } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, RefreshCw, TrendingUp, DollarSign, Scale, Sparkles, ArrowDownCircle, ArrowUpCircle, Star, Check, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Stat } from '@/components/ui/stat';
+import { SectionHeader } from '@/components/ui/section-header';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { useMutation } from '@tanstack/react-query';
+import { formatBRL, formatNumber } from '@/lib/format';
 import { PortfolioTransactionFormSuggested } from './portfolio-transaction-form-suggested';
 import { PortfolioRebalancingCombinedForm } from './portfolio-rebalancing-combined-form';
-import { useState, useEffect, useRef } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { PortfolioTabs } from '@/components/portfolio-tabs';
-// Formatting functions (local to avoid importing Node.js modules)
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return 'N/A';
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-};
+import {
+  PortfolioNotFound,
+  PortfolioPageShell,
+  PortfolioPageSkeleton,
+  usePortfolioSummary,
+} from '@/components/portfolio-page-shell';
 
+/** Quantos dividendos aparecem antes de "Mostrar mais". */
+const DIVIDENDS_PREVIEW = 10;
 
 interface PortfolioSuggestionsPageProps {
   portfolioId: string;
@@ -58,22 +58,13 @@ interface SuggestionsResponse {
 }
 
 export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPageProps) {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
+  const [showAllDividends, setShowAllDividends] = useState(false);
   const previousCashBalanceRef = useRef<number | undefined>(undefined);
 
-  // Fetch portfolio data to get cash balance
-  const { data: portfolioData } = useQuery({
-    queryKey: ['portfolio', portfolioId],
-    queryFn: async () => {
-      const response = await fetch(`/api/portfolio/${portfolioId}`);
-      if (!response.ok) throw new Error('Erro ao carregar carteira');
-      const data = await response.json();
-      return data.portfolio;
-    },
-  });
+  const { data: portfolioData, isLoading: portfolioLoading, error: portfolioError } = usePortfolioSummary(portfolioId);
 
   // Fetch metrics to monitor cash balance changes
   const { data: metricsData } = useQuery({
@@ -169,8 +160,8 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
     },
     onSuccess: () => {
       toast({
-        title: 'Transação rejeitada',
-        description: 'Aporte mensal rejeitado com sucesso. Não será sugerido novamente neste mês.',
+        title: 'Sugestão rejeitada',
+        description: 'Ela não será sugerida de novo neste mês.',
       });
       handleRefresh();
       queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
@@ -200,8 +191,8 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
     },
     onSuccess: () => {
       toast({
-        title: 'Transação confirmada',
-        description: 'Aporte mensal confirmado com sucesso.',
+        title: 'Transação registrada',
+        description: 'A sugestão foi registrada na carteira.',
       });
       handleRefresh();
       queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
@@ -216,14 +207,14 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
     },
   });
 
-  const handleReject = (e: React.MouseEvent, suggestion: Suggestion) => {
+  const handleReject = (e: MouseEvent, suggestion: Suggestion) => {
     e.stopPropagation();
     if (suggestion.transactionId) {
       rejectMutation.mutate(suggestion.transactionId);
     }
   };
 
-  const handleConfirm = (e: React.MouseEvent, suggestion: Suggestion) => {
+  const handleConfirm = (e: MouseEvent, suggestion: Suggestion) => {
     e.stopPropagation();
     if (suggestion.transactionId) {
       confirmMutation.mutate(suggestion.transactionId);
@@ -257,11 +248,6 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
       currentCashBalance !== undefined &&
       currentCashBalance !== previousCashBalance
     ) {
-      console.log('💰 Cash balance changed, refreshing suggestions...', {
-        previous: previousCashBalance,
-        current: currentCashBalance,
-      });
-      
       // Refetch contribution suggestions when cash changes
       refetchContributions();
       
@@ -277,7 +263,6 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
   // Listen for transaction events to auto-refresh
   useEffect(() => {
     const handleTransactionEvent = () => {
-      console.log('🔄 Transaction event detected, refreshing suggestions...');
       // Small delay to ensure backend has processed the transaction
       setTimeout(() => {
         refetchContributions();
@@ -307,498 +292,337 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
 
   const isLoading = loadingContributions || loadingRebalancing || loadingDividends;
 
-  return (
-    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-6">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push(`/carteira/${portfolioId}`)}
-              className="flex-shrink-0"
-            >
-              <ArrowLeft className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Voltar</span>
-            </Button>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold break-words">
-                Sugestões de Transações
-              </h1>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-words truncate">
-                {portfolioData?.name || 'Carteira'}
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isLoading}
-            className="flex-shrink-0 w-full sm:w-auto"
-          >
-            <RefreshCw className={`h-4 w-4 sm:mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            <span className="sm:inline">Atualizar</span>
-          </Button>
-        </div>
+  if (portfolioLoading) return <PortfolioPageSkeleton />;
+  if (portfolioError || !portfolioData) return <PortfolioNotFound />;
 
-        {/* Portfolio Navigation Tabs */}
-        <PortfolioTabs portfolioId={portfolioId} />
+  const isCombinedSuggestion = (suggestion: Suggestion) =>
+    suggestion.type === 'REBALANCING_COMBINED' ||
+    (suggestion.sellTransaction !== undefined && suggestion.buyTransactions !== undefined);
 
-        {/* Cash Balance Alert */}
-        {cashBalance >= 100 && (
-          <Card className="mb-6 border-blue-200 dark:border-blue-900 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950">
-            <CardContent className="py-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm sm:text-base">
-                    Dinheiro Disponível para Investimento
-                  </p>
-                  <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mt-1 break-words">
-                    Você tem {formatCurrency(cashBalance)} em caixa. Confirme as sugestões abaixo para investir.
-                  </p>
-                </div>
-                <Badge variant="outline" className="bg-white dark:bg-gray-900 border-blue-300 dark:border-blue-700 flex-shrink-0 self-start sm:self-center">
-                  {formatCurrency(cashBalance)}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Summary */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
-          <Card>
-            <CardContent className="py-3 sm:py-4">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Total de Sugestões</p>
-                  <p className="text-xl sm:text-2xl font-bold">{totalSuggestions}</p>
-                </div>
-                <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-primary opacity-50 flex-shrink-0 ml-2" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-3 sm:py-4">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Aportes/Compras</p>
-                  <p className="text-xl sm:text-2xl font-bold">{contributionSuggestions.length}</p>
-                </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 opacity-50 flex-shrink-0 ml-2" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-3 sm:py-4">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Rebalanceamento</p>
-                  <p className="text-xl sm:text-2xl font-bold">{rebalancingSuggestions.length}</p>
-                </div>
-                <Scale className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600 opacity-50 flex-shrink-0 ml-2" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Loading State */}
-        {isLoading && (
-          <Card>
-            <CardContent className="py-16 text-center">
-              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">Carregando sugestões...</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Empty State */}
-        {!isLoading && totalSuggestions === 0 && (
-          <Card>
-            <CardContent className="py-16 text-center">
-              <Sparkles className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">Nenhuma sugestão no momento</h3>
-              <p className="text-muted-foreground mb-4">
-                Sua carteira está equilibrada e não há sugestões de transações no momento.
-              </p>
-              <Button onClick={() => router.push(`/carteira/${portfolioId}`)} variant="outline">
-                Ver Detalhes da Carteira
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Contribution Suggestions */}
-        {!isLoading && contributionSuggestions.length > 0 && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 flex-wrap">
-                <TrendingUp className="h-5 w-5 text-green-600 flex-shrink-0" />
-                <span className="break-words">Aportes e Compras ({contributionSuggestions.length})</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {contributionSuggestions.map((suggestion, index) => {
-                  const isMonthlyContribution = suggestion.type === 'MONTHLY_CONTRIBUTION';
-                  const hasTransactionId = !!suggestion.transactionId;
-                  const showActionButtons = isMonthlyContribution && hasTransactionId;
-                  
-                  return (
-                    <div
-                      key={`contribution-${index}`}
-                      className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg transition-colors overflow-hidden ${
-                        showActionButtons ? '' : 'hover:bg-muted/50 cursor-pointer'
-                      }`}
-                      onClick={() => !showActionButtons && handleSuggestionClick(suggestion)}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2 mb-2 flex-wrap">
-                          <Badge variant={isMonthlyContribution ? 'default' : 'secondary'} className="text-xs flex-shrink-0">
-                            {isMonthlyContribution ? 'Aporte Mensal' : 'Compra'}
-                          </Badge>
-                          {suggestion.ticker && (
-                            <Badge variant="outline" className="text-xs flex-shrink-0">{suggestion.ticker}</Badge>
-                          )}
-                          {suggestion.isAttractivePrice && (
-                            <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 text-xs flex-shrink-0">
-                              <Star className="h-3 w-3 fill-current flex-shrink-0" />
-                              <span className="hidden sm:inline">Preço Atrativo (Análise Técnica)</span>
-                              <span className="sm:hidden">Preço Atrativo</span>
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground break-words">{suggestion.reason}</p>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-2">
-                          {suggestion.quantity && suggestion.price && (
-                            <p className="text-xs text-muted-foreground flex-shrink-0">
-                              {suggestion.quantity} ações × {formatCurrency(suggestion.price)}
-                            </p>
-                          )}
-                          {suggestion.fairPrice && (
-                            <p className="text-xs text-green-600 font-semibold flex-shrink-0">
-                              Preço Justo (Análise Técnica): {formatCurrency(suggestion.fairPrice)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3 flex-shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 sm:ml-4">
-                        <div className="text-left sm:text-right">
-                          <p className="font-semibold text-base sm:text-lg">{formatCurrency(suggestion.amount)}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Caixa após: {formatCurrency(suggestion.cashBalanceAfter)}
-                          </p>
-                        </div>
-                        {showActionButtons && (
-                          <div className="flex gap-2 mt-2 sm:mt-0">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                              onClick={(e) => handleConfirm(e, suggestion)}
-                              disabled={confirmMutation.isPending}
-                            >
-                              <Check className="h-4 w-4 mr-1" />
-                              Confirmar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={(e) => handleReject(e, suggestion)}
-                              disabled={rejectMutation.isPending}
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Rejeitar
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Rebalancing Suggestions */}
-        {!isLoading && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 flex-wrap">
-                <Scale className="h-5 w-5 text-orange-600 flex-shrink-0" />
-                <span className="break-words">Rebalanceamento ({rebalancingSuggestions.length})</span>
-              </CardTitle>
-              {rebalancingData?.message && (
-                <div className="mt-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md p-3">
-                  <p className="text-sm text-blue-800 dark:text-blue-200">
-                    <strong>ℹ️ Informação:</strong> {rebalancingData.message}
-                  </p>
-                </div>
-              )}
-            </CardHeader>
-            {rebalancingSuggestions.length > 0 && (
-            <CardContent>
-              <div className="space-y-4">
-                {rebalancingSuggestions.map((suggestion, index) => {
-                  // Check if this is a combined rebalancing suggestion
-                  const isCombined = suggestion.type === 'REBALANCING_COMBINED' || 
-                                    (suggestion.sellTransaction !== undefined && suggestion.buyTransactions !== undefined);
-                  
-                  if (isCombined) {
-                    // Combined rebalancing: show sell + buy together
-                    return (
-                      <div
-                        key={`rebalancing-combined-${index}`}
-                        className="p-4 border-2 border-orange-200 dark:border-orange-800 rounded-lg bg-orange-50/50 dark:bg-orange-950/20 hover:bg-orange-100/50 dark:hover:bg-orange-950/40 transition-colors cursor-pointer"
-                        onClick={() => handleSuggestionClick(suggestion)}
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Badge variant="outline" className="bg-orange-100 dark:bg-orange-900 border-orange-300 dark:border-orange-700">
-                                <Scale className="h-3 w-3 mr-1" />
-                                Rebalanceamento Combinado
-                              </Badge>
-                            </div>
-                            <p className="text-sm font-medium text-orange-900 dark:text-orange-100 mb-3">
-                              {suggestion.reason || 'Venda e compra combinadas para rebalanceamento'}
-                            </p>
-                            
-                            {/* Sell Transactions */}
-                            {suggestion.sellTransactions && suggestion.sellTransactions.length > 0 ? (
-                              <div className="mb-3 space-y-2">
-                                {suggestion.sellTransactions.map((sell, sellIndex) => (
-                                  <div key={sellIndex} className="p-3 bg-red-50 dark:bg-red-950/20 rounded border border-red-200 dark:border-red-900">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <Badge variant="destructive" className="text-xs">
-                                        <ArrowDownCircle className="h-3 w-3 mr-1" />
-                                        Vender
-                                      </Badge>
-                                      {sell.ticker && (
-                                        <Badge variant="outline" className="text-xs">
-                                          {sell.ticker}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                      {sell.quantity} ações × {formatCurrency(sell.price || 0)} = {formatCurrency(sell.amount)}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : suggestion.sellTransaction && (
-                              <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/20 rounded border border-red-200 dark:border-red-900">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Badge variant="destructive" className="text-xs">
-                                    <ArrowDownCircle className="h-3 w-3 mr-1" />
-                                    Vender
-                                  </Badge>
-                                  {suggestion.sellTransaction.ticker && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {suggestion.sellTransaction.ticker}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  {suggestion.sellTransaction.quantity} ações × {formatCurrency(suggestion.sellTransaction.price || 0)} = {formatCurrency(suggestion.sellTransaction.amount)}
-                                </p>
-                              </div>
-                            )}
-                            
-                            {/* Buy Transactions */}
-                            {suggestion.buyTransactions && suggestion.buyTransactions.length > 0 && (
-                              <div className="space-y-2">
-                                {suggestion.buyTransactions.map((buy, buyIndex) => (
-                                  <div key={`buy-${buyIndex}`} className="p-3 bg-green-50 dark:bg-green-950/20 rounded border border-green-200 dark:border-green-900">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <Badge variant="default" className="text-xs bg-green-600">
-                                        <ArrowUpCircle className="h-3 w-3 mr-1" />
-                                        Comprar
-                                      </Badge>
-                                      {buy.ticker && (
-                                        <Badge variant="outline" className="text-xs">
-                                          {buy.ticker}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                      {buy.quantity} ações × {formatCurrency(buy.price || 0)} = {formatCurrency(buy.amount)}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-right ml-4 flex-shrink-0">
-                            <div className="space-y-1">
-                              {suggestion.totalSold && suggestion.totalSold > 0 && (
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Venda Total</p>
-                                  <p className="font-semibold text-red-600">{formatCurrency(suggestion.totalSold)}</p>
-                                </div>
-                              )}
-                              {suggestion.totalBought && suggestion.totalBought > 0 && (
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Compra Total</p>
-                                  <p className="font-semibold text-green-600">{formatCurrency(suggestion.totalBought)}</p>
-                                </div>
-                              )}
-                              <div className="pt-2 border-t">
-                                <p className="text-xs text-muted-foreground">Caixa Final</p>
-                                <p className="font-semibold">{formatCurrency(suggestion.cashBalanceAfter)}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  } else {
-                    // Legacy single transaction (fallback)
-                    return (
-                      <div
-                        key={`rebalancing-${index}`}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                        onClick={() => handleSuggestionClick(suggestion)}
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={suggestion.type.includes('BUY') ? 'default' : 'destructive'}>
-                              {suggestion.type.includes('BUY') ? 'Comprar' : 'Vender'}
-                            </Badge>
-                            {suggestion.ticker && (
-                              <Badge variant="outline">{suggestion.ticker}</Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground">{suggestion.reason}</p>
-                          {suggestion.quantity && suggestion.price && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {suggestion.quantity} ações × {formatCurrency(suggestion.price)}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-right ml-4">
-                          <p className="font-semibold">{formatCurrency(Math.abs(suggestion.amount))}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Caixa após: {formatCurrency(suggestion.cashBalanceAfter)}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  }
-                })}
-              </div>
-            </CardContent>
-            )}
-          </Card>
-        )}
-
-        {/* Dividend Suggestions */}
-        {!isLoading && dividendSuggestions.length > 0 && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 flex-wrap">
-                <DollarSign className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                <span className="break-words">Dividendos ({dividendSuggestions.length})</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {dividendSuggestions.map((suggestion, index) => {
-                  const isDividend = suggestion.type === 'DIVIDEND';
-                  const hasTransactionId = !!suggestion.transactionId;
-                  const showActionButtons = isDividend && hasTransactionId;
-                  
-                  return (
-                    <div
-                      key={`dividend-${index}`}
-                      className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg transition-colors overflow-hidden ${
-                        showActionButtons ? '' : 'hover:bg-muted/50 cursor-pointer'
-                      }`}
-                      onClick={() => !showActionButtons && handleSuggestionClick(suggestion)}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2 mb-2 flex-wrap">
-                          <Badge variant="default">Dividendo</Badge>
-                          {suggestion.ticker && (
-                            <Badge variant="outline" className="text-xs flex-shrink-0">{suggestion.ticker}</Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground break-words">{suggestion.reason}</p>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3 flex-shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 sm:ml-4">
-                        <div className="text-left sm:text-right">
-                          <p className="font-semibold text-base sm:text-lg">{formatCurrency(suggestion.amount)}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Caixa após: {formatCurrency(suggestion.cashBalanceAfter)}
-                          </p>
-                        </div>
-                        {showActionButtons && (
-                          <div className="flex gap-2 mt-2 sm:mt-0">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                              onClick={(e) => handleConfirm(e, suggestion)}
-                              disabled={confirmMutation.isPending}
-                            >
-                              <Check className="h-4 w-4 mr-1" />
-                              Confirmar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={(e) => handleReject(e, suggestion)}
-                              disabled={rejectMutation.isPending}
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Rejeitar
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Transaction Form Modals */}
-        {selectedSuggestion && (
-          <>
-            {/* Combined Rebalancing Form */}
-            {(selectedSuggestion.type === 'REBALANCING_COMBINED' || 
-              (selectedSuggestion.sellTransaction !== undefined && selectedSuggestion.buyTransactions !== undefined)) ? (
-              <PortfolioRebalancingCombinedForm
-                portfolioId={portfolioId}
-                suggestion={selectedSuggestion as any}
-                open={!!selectedSuggestion}
-                onOpenChange={(open) => {
-                  if (!open) setSelectedSuggestion(null);
-                }}
-                onSuccess={handleTransactionConfirmed}
-              />
-            ) : (
-              /* Regular Transaction Form */
-              <PortfolioTransactionFormSuggested
-                portfolioId={portfolioId}
-                suggestion={selectedSuggestion}
-                open={!!selectedSuggestion}
-                onOpenChange={(open) => {
-                  if (!open) setSelectedSuggestion(null);
-                }}
-                onSuccess={handleTransactionConfirmed}
-              />
-            )}
-          </>
-        )}
-      </div>
+  const inlineActions = (suggestion: Suggestion) => (
+    <div className="flex gap-2">
+      <Button size="sm" onClick={(e) => handleConfirm(e, suggestion)} disabled={confirmMutation.isPending}>
+        Registrar
+      </Button>
+      <Button size="sm" variant="outline" onClick={(e) => handleReject(e, suggestion)} disabled={rejectMutation.isPending}>
+        Rejeitar
+      </Button>
     </div>
+  );
+
+  const reviewButton = (suggestion: Suggestion) => (
+    <Button size="sm" variant="outline" onClick={() => handleSuggestionClick(suggestion)}>
+      Revisar e registrar
+    </Button>
+  );
+
+  return (
+    <PortfolioPageShell
+      portfolioId={portfolioId}
+      portfolioName={portfolioData.name}
+      title="Sugestões"
+      crumb="Sugestões"
+      description="Aportes, ajustes para a sua alocação-alvo e dividendos a registrar."
+      actions={
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
+          <RefreshCw className={isLoading ? 'animate-spin' : undefined} strokeWidth={1.75} aria-hidden="true" />
+          Atualizar
+        </Button>
+      }
+    >
+      <section aria-label="Resumo das sugestões" className="rounded-lg border border-border bg-card p-4 sm:p-5">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4">
+          <Stat label="Caixa disponível" value={formatBRL(cashBalance)} />
+          <Stat label="Aportes e compras" value={isLoading ? '—' : formatNumber(contributionSuggestions.length)} />
+          <Stat label="Ajustes de alocação" value={isLoading ? '—' : formatNumber(rebalancingSuggestions.length)} />
+          <Stat label="Dividendos" value={isLoading ? '—' : formatNumber(dividendSuggestions.length)} />
+        </div>
+        <p className="mt-4 text-xs text-muted-foreground">
+          As sugestões seguem a alocação-alvo e o aporte mensal que você definiu. Não são recomendação de investimento.
+        </p>
+      </section>
+
+      {isLoading && (
+        <div className="space-y-3" aria-busy="true">
+          <span className="sr-only">Carregando sugestões</span>
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} className="h-20 w-full" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && totalSuggestions === 0 && (
+        <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
+          <p className="text-sm font-medium text-foreground">Nenhuma sugestão no momento</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            A carteira está alinhada à sua alocação-alvo e não há aportes ou dividendos pendentes.
+          </p>
+          {rebalancingData?.message && <p className="mt-2 text-xs text-muted-foreground">{rebalancingData.message}</p>}
+        </div>
+      )}
+
+      {!isLoading && contributionSuggestions.length > 0 && (
+        <section aria-labelledby="contributions-title" className="space-y-3">
+          <SectionHeader id="contributions-title" title={`Aportes e compras (${contributionSuggestions.length})`} />
+          <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+            {contributionSuggestions.map((suggestion, index) => {
+              const isMonthlyContribution = suggestion.type === 'MONTHLY_CONTRIBUTION';
+              const showActionButtons = isMonthlyContribution && !!suggestion.transactionId;
+              return (
+                <SuggestionItem
+                  key={`contribution-${index}`}
+                  label={
+                    isMonthlyContribution ? (
+                      <Badge variant="brand">Aporte mensal</Badge>
+                    ) : (
+                      <AllocationAdjustment action="comprar" quantity={suggestion.quantity} ticker={suggestion.ticker} />
+                    )
+                  }
+                  extraBadge={
+                    suggestion.isAttractivePrice ? <Badge variant="neutral">Abaixo do preço justo técnico</Badge> : undefined
+                  }
+                  reason={suggestion.reason}
+                  details={
+                    <>
+                      {suggestion.quantity && suggestion.price ? (
+                        <span>
+                          {formatNumber(suggestion.quantity)} × {formatBRL(suggestion.price)}
+                        </span>
+                      ) : null}
+                      {suggestion.fairPrice ? <span>Preço justo técnico (estimativa): {formatBRL(suggestion.fairPrice)}</span> : null}
+                    </>
+                  }
+                  amount={suggestion.amount}
+                  cashAfter={suggestion.cashBalanceAfter}
+                  action={showActionButtons ? inlineActions(suggestion) : reviewButton(suggestion)}
+                />
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {!isLoading && (rebalancingSuggestions.length > 0 || (totalSuggestions > 0 && rebalancingData?.message)) && (
+        <section aria-labelledby="rebalancing-title" className="space-y-3">
+          <SectionHeader
+            id="rebalancing-title"
+            title={`Ajustes para sua alocação-alvo (${rebalancingSuggestions.length})`}
+            description={rebalancingData?.message}
+          />
+          {rebalancingSuggestions.length > 0 && (
+            <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+              {rebalancingSuggestions.map((suggestion, index) => {
+                if (!isCombinedSuggestion(suggestion)) {
+                  const isBuy = suggestion.type.includes('BUY');
+                  return (
+                    <SuggestionItem
+                      key={`rebalancing-${index}`}
+                      label={
+                        <AllocationAdjustment
+                          action={isBuy ? 'comprar' : 'vender'}
+                          quantity={suggestion.quantity}
+                          ticker={suggestion.ticker}
+                        />
+                      }
+                      reason={suggestion.reason}
+                      details={
+                        suggestion.quantity && suggestion.price ? (
+                          <span>
+                            {formatNumber(suggestion.quantity)} × {formatBRL(suggestion.price)}
+                          </span>
+                        ) : null
+                      }
+                      amount={Math.abs(suggestion.amount)}
+                      cashAfter={suggestion.cashBalanceAfter}
+                      action={reviewButton(suggestion)}
+                    />
+                  );
+                }
+
+                const sells =
+                  suggestion.sellTransactions && suggestion.sellTransactions.length > 0
+                    ? suggestion.sellTransactions
+                    : suggestion.sellTransaction
+                      ? [suggestion.sellTransaction]
+                      : [];
+                const buys = suggestion.buyTransactions ?? [];
+
+                return (
+                  <li key={`rebalancing-combined-${index}`} className="space-y-3 p-4">
+                    <div>
+                      <Badge variant="neutral">Ajuste para sua alocação-alvo</Badge>
+                      <p className="mt-2 text-sm text-muted-foreground break-words">
+                        {suggestion.reason || 'Vendas e compras combinadas para aproximar a carteira da alocação-alvo.'}
+                      </p>
+                    </div>
+                    <ul className="space-y-1 text-sm">
+                      {sells.map((sell, sellIndex) => (
+                        <AdjustmentLine key={`sell-${sellIndex}`} action="vender" line={sell} />
+                      ))}
+                      {buys.map((buy, buyIndex) => (
+                        <AdjustmentLine key={`buy-${buyIndex}`} action="comprar" line={buy} />
+                      ))}
+                    </ul>
+                    <div className="flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-end sm:justify-between">
+                      <dl className="grid grid-cols-3 gap-4 text-xs">
+                        {suggestion.totalSold ? (
+                          <div>
+                            <dt className="text-muted-foreground">Total de vendas</dt>
+                            <dd className="text-sm font-medium tabular-nums text-foreground">{formatBRL(suggestion.totalSold)}</dd>
+                          </div>
+                        ) : null}
+                        {suggestion.totalBought ? (
+                          <div>
+                            <dt className="text-muted-foreground">Total de compras</dt>
+                            <dd className="text-sm font-medium tabular-nums text-foreground">{formatBRL(suggestion.totalBought)}</dd>
+                          </div>
+                        ) : null}
+                        <div>
+                          <dt className="text-muted-foreground">Caixa final</dt>
+                          <dd className="text-sm font-medium tabular-nums text-foreground">{formatBRL(suggestion.cashBalanceAfter)}</dd>
+                        </div>
+                      </dl>
+                      {reviewButton(suggestion)}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {!isLoading && dividendSuggestions.length > 0 && (
+        <section aria-labelledby="dividends-title" className="space-y-3">
+          <SectionHeader id="dividends-title" title={`Dividendos (${dividendSuggestions.length})`} />
+          <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+            {(showAllDividends ? dividendSuggestions : dividendSuggestions.slice(0, DIVIDENDS_PREVIEW)).map((suggestion, index) => {
+              const showActionButtons = suggestion.type === 'DIVIDEND' && !!suggestion.transactionId;
+              return (
+                <SuggestionItem
+                  key={`dividend-${index}`}
+                  label={
+                    <span className="flex items-center gap-2">
+                      <Badge variant="neutral">Dividendo</Badge>
+                      {suggestion.ticker && <span className="text-sm font-medium text-foreground">{suggestion.ticker}</span>}
+                    </span>
+                  }
+                  reason={suggestion.reason}
+                  amount={suggestion.amount}
+                  cashAfter={suggestion.cashBalanceAfter}
+                  action={showActionButtons ? inlineActions(suggestion) : reviewButton(suggestion)}
+                />
+              );
+            })}
+          </ul>
+          {!showAllDividends && dividendSuggestions.length > DIVIDENDS_PREVIEW && (
+            <Button variant="outline" className="w-full" onClick={() => setShowAllDividends(true)}>
+              Mostrar mais {dividendSuggestions.length - DIVIDENDS_PREVIEW} dividendos
+            </Button>
+          )}
+        </section>
+      )}
+
+      {selectedSuggestion &&
+        (isCombinedSuggestion(selectedSuggestion) ? (
+          <PortfolioRebalancingCombinedForm
+            portfolioId={portfolioId}
+            suggestion={{ ...selectedSuggestion, sellTransaction: selectedSuggestion.sellTransaction ?? null }}
+            open={!!selectedSuggestion}
+            onOpenChange={(open) => {
+              if (!open) setSelectedSuggestion(null);
+            }}
+            onSuccess={handleTransactionConfirmed}
+          />
+        ) : (
+          <PortfolioTransactionFormSuggested
+            portfolioId={portfolioId}
+            suggestion={selectedSuggestion}
+            open={!!selectedSuggestion}
+            onOpenChange={(open) => {
+              if (!open) setSelectedSuggestion(null);
+            }}
+            onSuccess={handleTransactionConfirmed}
+          />
+        ))}
+    </PortfolioPageShell>
   );
 }
 
+/** "Ajuste para sua alocação-alvo: comprar 10 PETR4" — o alvo é do próprio usuário. */
+function AllocationAdjustment({
+  action,
+  quantity,
+  ticker,
+}: {
+  action: 'comprar' | 'vender';
+  quantity?: number;
+  ticker?: string;
+}) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <Badge variant="neutral">Ajuste para sua alocação-alvo</Badge>
+      <span className="text-sm text-foreground">
+        {action}
+        {quantity ? ` ${formatNumber(quantity)}` : ''}
+        {ticker ? <span className="font-medium"> {ticker}</span> : null}
+      </span>
+    </span>
+  );
+}
+
+interface AdjustmentLineData {
+  ticker?: string;
+  amount: number;
+  price?: number;
+  quantity?: number;
+}
+
+function AdjustmentLine({ action, line }: { action: 'comprar' | 'vender'; line: AdjustmentLineData }) {
+  return (
+    <li className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+      <span className="text-foreground">
+        {action} {line.quantity ? formatNumber(line.quantity) : ''} <span className="font-medium">{line.ticker}</span>
+      </span>
+      <span className="text-xs tabular-nums text-muted-foreground">
+        {line.quantity ? `${formatNumber(line.quantity)} × ${formatBRL(line.price ?? 0)} = ` : ''}
+        {formatBRL(line.amount)}
+      </span>
+    </li>
+  );
+}
+
+interface SuggestionItemProps {
+  label: ReactNode;
+  extraBadge?: ReactNode;
+  reason?: string;
+  details?: ReactNode;
+  amount: number;
+  cashAfter: number;
+  action: ReactNode;
+}
+
+/** Linha de sugestão: rótulo, motivo, valor, caixa após e ação. */
+function SuggestionItem({ label, extraBadge, reason, details, amount, cashAfter, action }: SuggestionItemProps) {
+  return (
+    <li className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {label}
+          {extraBadge}
+        </div>
+        {reason && <p className="text-sm text-muted-foreground break-words">{reason}</p>}
+        {details && (
+          <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums text-muted-foreground">{details}</p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-end justify-between gap-3 sm:flex-col">
+        <div className="sm:text-right">
+          <p className="text-base font-semibold tabular-nums text-foreground">{formatBRL(amount)}</p>
+          <p className="text-xs tabular-nums text-muted-foreground">Caixa após {formatBRL(cashAfter)}</p>
+        </div>
+        {action}
+      </div>
+    </li>
+  );
+}

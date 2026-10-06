@@ -5,17 +5,20 @@ import { redirect } from "next/navigation"
 import { SpecialOfferCheckout } from '@/components/special-offer-checkout'
 
 export const metadata: Metadata = {
-  title: 'Oferta Especial Premium - Preço Justo AI',
-  description: 'Aproveite nossa oferta especial e tenha acesso completo às análises avançadas de ações',
+  title: 'Oferta especial Premium',
+  description: 'Condição especial do plano Premium por tempo limitado.',
+  robots: {
+    index: false,
+    follow: false,
+  },
 }
 
 export default async function SpecialOfferCheckoutPage() {
   const session = await getServerSession(authOptions)
-  
+
   if (!session) {
     redirect(`/login?callbackUrl=${encodeURIComponent('/checkout/oferta-especial')}`)
   }
 
   return <SpecialOfferCheckout />
 }
-

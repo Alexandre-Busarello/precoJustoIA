@@ -32,7 +32,7 @@ export function SocialShareButton({ url, title, description }: SocialShareButton
       await navigator.clipboard.writeText(url)
       setCopied(true)
       toast({
-        title: "Link copiado!",
+        title: "Link copiado",
         description: "O link foi copiado para a área de transferência.",
       })
       setTimeout(() => {
@@ -105,9 +105,10 @@ export function SocialShareButton({ url, title, description }: SocialShareButton
         <Button
           variant="outline"
           size="sm"
-          className="flex items-center gap-2"
+          className="flex h-11 min-w-11 items-center gap-2 md:h-8 md:min-w-0"
+          aria-label="Compartilhar"
         >
-          <Share2 className="w-4 h-4" />
+          <Share2 className="size-4" strokeWidth={1.75} aria-hidden="true" />
           <span className="hidden sm:inline">Compartilhar</span>
         </Button>
       </DropdownMenuTrigger>
@@ -116,10 +117,10 @@ export function SocialShareButton({ url, title, description }: SocialShareButton
         {canUseNativeShare && (
           <>
             <DropdownMenuItem
-              className="flex items-center gap-3 py-3 cursor-pointer"
+              className="flex min-h-11 cursor-pointer items-center gap-3 py-2"
               onClick={handleNativeShare}
             >
-              <Share2 className="w-5 h-5 text-blue-600" />
+              <Share2 className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
               <div className="flex flex-col items-start">
                 <span className="font-medium">Compartilhar</span>
                 <span className="text-xs text-muted-foreground">Usar app do dispositivo</span>
@@ -131,54 +132,54 @@ export function SocialShareButton({ url, title, description }: SocialShareButton
 
         {/* WhatsApp */}
         <DropdownMenuItem
-          className="flex items-center gap-3 py-3 cursor-pointer"
+          className="flex min-h-11 cursor-pointer items-center gap-3 py-2"
           onClick={() => handleShare("whatsapp")}
         >
-          <MessageCircle className="w-5 h-5 text-green-600" />
+          <MessageCircle className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           <span className="font-medium">WhatsApp</span>
         </DropdownMenuItem>
 
         {/* Twitter/X */}
         <DropdownMenuItem
-          className="flex items-center gap-3 py-3 cursor-pointer"
+          className="flex min-h-11 cursor-pointer items-center gap-3 py-2"
           onClick={() => handleShare("twitter")}
         >
-          <Twitter className="w-5 h-5 text-blue-400" />
+          <Twitter className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           <span className="font-medium">Twitter / X</span>
         </DropdownMenuItem>
 
         {/* LinkedIn */}
         <DropdownMenuItem
-          className="flex items-center gap-3 py-3 cursor-pointer"
+          className="flex min-h-11 cursor-pointer items-center gap-3 py-2"
           onClick={() => handleShare("linkedin")}
         >
-          <Linkedin className="w-5 h-5 text-blue-700" />
+          <Linkedin className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           <span className="font-medium">LinkedIn</span>
         </DropdownMenuItem>
 
         {/* Facebook */}
         <DropdownMenuItem
-          className="flex items-center gap-3 py-3 cursor-pointer"
+          className="flex min-h-11 cursor-pointer items-center gap-3 py-2"
           onClick={() => handleShare("facebook")}
         >
-          <Facebook className="w-5 h-5 text-blue-600" />
+          <Facebook className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           <span className="font-medium">Facebook</span>
         </DropdownMenuItem>
 
         {/* Copiar Link */}
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          className="flex items-center gap-3 py-3 cursor-pointer"
+          className="flex min-h-11 cursor-pointer items-center gap-3 py-2"
           onClick={handleCopy}
         >
           {copied ? (
             <>
-              <Check className="w-5 h-5 text-green-600" />
-              <span className="font-medium text-green-600">Link copiado!</span>
+              <Check className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              <span className="font-medium">Link copiado</span>
             </>
           ) : (
             <>
-              <Copy className="w-5 h-5 text-muted-foreground" />
+              <Copy className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
               <span className="font-medium">Copiar link</span>
             </>
           )}

@@ -1,199 +1,260 @@
-import { AbstractStrategy, toNumber, formatPercent } from './base-strategy';
+import { AbstractStrategy, averageOfLatest, companySectorClass, formatPercent, toNumber } from './base-strategy';
+import type { SectorClass } from '../finance/sector-classification';
+import { formatBRLCompact, formatNumber, formatPct } from '../format';
 import { DividendYieldParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
+import { STRATEGY_CONFIG } from './strategy-config';
+
+/** Perfil de critérios por tipo de negócio. */
+type DividendProfile = 'financial' | 'utility' | 'general';
+
+function profileOf(cls: SectorClass): DividendProfile {
+  if (cls === 'financial') return 'financial';
+  if (cls === 'utility') return 'utility';
+  return 'general';
+}
+
+const PROFILE_LABEL: Record<DividendProfile, string> = {
+  financial: 'critérios de bancos e seguradoras',
+  utility: 'critérios de utilidade pública',
+  general: 'critérios gerais',
+};
+
+/** Financeiras: ROE médio de 5 anos ≥ 12% e payout entre 25% e 80%. */
+const FINANCIAL_MIN_ROE_5Y = 0.12;
+const FINANCIAL_PAYOUT_RANGE = { min: 0.25, max: 0.8 } as const;
+/** Utilities: dívida líquida/EBITDA ≤ 3,5 no lugar de dívida líquida/PL ≤ 1. */
+const UTILITY_MAX_NET_DEBT_EBITDA = 3.5;
+
+interface DividendMetrics {
+  profile: DividendProfile;
+  dy: number | null;
+  roe: number | null;
+  roe5y: number | null;
+  payout: number | null;
+  liquidezCorrente: number | null;
+  dividaLiquidaPl: number | null;
+  dividaLiquidaEbitda: number | null;
+  pl: number | null;
+  margemLiquida: number | null;
+  marketCap: number | null;
+  roic: number | null;
+  consistentProfits: boolean;
+}
+
+/** DY mínimo informado, ou o padrão do modelo (4%) quando a chamada não traz o parâmetro. */
+function minYieldOf(params: DividendYieldParams): number {
+  const value = toNumber(params.minYield);
+  return value !== null && value >= 0 ? value : STRATEGY_CONFIG.dividendYield.minYield;
+}
 
 export class DividendYieldStrategy extends AbstractStrategy<DividendYieldParams> {
   readonly name = 'dividendYield';
 
   validateCompanyData(companyData: CompanyData, params: DividendYieldParams): boolean {
-    const { financials } = companyData;
-    const { minYield } = params;
-    // Dar benefício da dúvida - só requer dividend yield mínimo
-    return !!(
-      financials.dy && toNumber(financials.dy)! >= minYield
-    );
+    const dy = toNumber(companyData.financials.dy);
+    return dy !== null && dy >= minYieldOf(params);
+  }
+
+  private metrics(companyData: CompanyData, params: DividendYieldParams): DividendMetrics {
+    const { financials, historicalFinancials } = companyData;
+    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
+    const roeHistory = [...(historicalFinancials ?? [])].sort((a, b) => (b.year || 0) - (a.year || 0)).map((row) => toNumber(row.roe));
+    return {
+      profile: profileOf(companySectorClass(companyData)),
+      dy: this.getDividendYield(financials, use7YearAverages, historicalFinancials),
+      roe: this.getROE(financials, use7YearAverages, historicalFinancials),
+      roe5y: averageOfLatest([toNumber(financials.roe), ...roeHistory], 5)?.average ?? null,
+      payout: toNumber(financials.payout),
+      liquidezCorrente: this.getLiquidezCorrente(financials, false, historicalFinancials),
+      dividaLiquidaPl: this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials),
+      dividaLiquidaEbitda: toNumber(financials.dividaLiquidaEbitda),
+      pl: this.getPL(financials, false, historicalFinancials),
+      margemLiquida: this.getMargemLiquida(financials, use7YearAverages, historicalFinancials),
+      marketCap: toNumber(financials.marketCap),
+      roic: this.getROIC(financials, use7YearAverages, historicalFinancials),
+      consistentProfits: this.hasConsistentProfits(companyData),
+    };
   }
 
   runAnalysis(companyData: CompanyData, params: DividendYieldParams): StrategyAnalysis {
-    const { financials, historicalFinancials, ticker } = companyData;
-    const { minYield } = params;
-    const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
-    const isBDR = this.isBDRTicker(ticker);
-    
-    const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials);
-    const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
-    const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
-    const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials);
-    const pl = this.getPL(financials, false, historicalFinancials);
-    const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials);
-    const marketCap = toNumber(financials.marketCap);
-    const roic = this.getROIC(financials, use7YearAverages, historicalFinancials);
+    const minYield = minYieldOf(params);
+    const isBDR = this.isBDRTicker(companyData.ticker);
+    const m = this.metrics(companyData, params);
+    const { profile, dy, roe, roe5y, payout, liquidezCorrente, dividaLiquidaPl, dividaLiquidaEbitda, pl, margemLiquida, marketCap, roic } = m;
 
-    // Ajustar critérios para BDRs (empresas americanas pagam menos dividendos, mas são mais estáveis)
-    const minROE = isBDR ? 0.12 : 0.10; // ROE mínimo mais alto para BDRs (12% vs 10%)
-    const minLiquidez = isBDR ? 1.0 : 1.2; // Liquidez pode ser menor para BDRs
-    const maxDividaLiquidaPl = isBDR ? 1.5 : 1.0; // Mais tolerante com dívida para BDRs (150% vs 100%)
-    const maxPL = isBDR ? 30 : 25; // P/L máximo mais alto para BDRs (30 vs 25)
-    const minMargemLiquida = isBDR ? 0.05 : 0.05; // Mesmo padrão
-    const minMarketCap = isBDR ? 2000000000 : 1000000000; // Market Cap maior para BDRs (R$ 2B vs R$ 1B)
+    const minROE = isBDR ? 0.12 : 0.1;
+    const minLiquidez = isBDR ? 1.0 : 1.2;
+    const maxDividaLiquidaPl = isBDR ? 1.5 : 1.0;
+    const maxPL = isBDR ? 30 : 25;
+    const minMargemLiquida = 0.05;
+    const minMarketCap = isBDR ? 2_000_000_000 : 1_000_000_000;
 
-    const criteria = [
-      { label: `Dividend Yield ≥ ${(minYield * 100).toFixed(0)}%`, value: !!(dy && dy >= minYield), description: `DY: ${formatPercent(dy)}` },
-      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
-      { label: `Liquidez Corrente ≥ ${minLiquidez.toFixed(1)}${isBDR ? ' (BDR)' : ''}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
-      { label: `Dív. Líq./PL ≤ ${(maxDividaLiquidaPl * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
-      { label: `P/L entre 4-${maxPL}${isBDR ? ' (BDR)' : ''}`, value: !pl || (pl >= 4 && pl <= maxPL), description: `P/L: ${pl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
-      { label: `Margem Líquida ≥ ${(minMargemLiquida * 100).toFixed(0)}%`, value: !margemLiquida || margemLiquida >= minMargemLiquida, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
-      { label: `Market Cap ≥ ${isBDR ? 'R$ 2B' : 'R$ 1B'}${isBDR ? ' (BDR)' : ''}`, value: !marketCap || marketCap >= minMarketCap, description: `Market Cap: ${marketCap ? `R$ ${(marketCap / 1000000000).toFixed(1)}B` : 'N/A - Benefício da dúvida'}` }
-    ];
-    
-    const passedCriteria = criteria.filter(c => c.value).length;
-    const isEligible = passedCriteria >= 5 && !!dy && dy >= minYield; // Reduzido para dar benefício da dúvida
+    const dyCriterion = { label: `Dividend yield ≥ ${formatPercent(minYield)}`, value: !!(dy && dy >= minYield), description: `DY: ${formatPercent(dy)}` };
+    const plCriterion = { label: `P/L entre 4 e ${maxPL}`, value: !pl || (pl >= 4 && pl <= maxPL), description: `P/L: ${formatNumber(pl, { digits: 1 })}` };
+    const marketCapCriterion = {
+      label: `Market cap ≥ ${isBDR ? 'R$ 2 bi' : 'R$ 1 bi'}`,
+      value: !marketCap || marketCap >= minMarketCap,
+      description: `Market cap: ${marketCap ? formatBRLCompact(marketCap) : 'N/A'}`,
+    };
+
+    const criteria =
+      profile === 'financial'
+        ? [
+            dyCriterion,
+            { label: `ROE médio de 5 anos ≥ ${formatPercent(FINANCIAL_MIN_ROE_5Y)}`, value: roe5y !== null && roe5y >= FINANCIAL_MIN_ROE_5Y, description: `ROE médio: ${formatPercent(roe5y)}` },
+            {
+              label: `Payout entre ${formatPercent(FINANCIAL_PAYOUT_RANGE.min)} e ${formatPercent(FINANCIAL_PAYOUT_RANGE.max)}`,
+              value: payout !== null && payout >= FINANCIAL_PAYOUT_RANGE.min && payout <= FINANCIAL_PAYOUT_RANGE.max,
+              description: `Payout: ${formatPercent(payout)}`,
+            },
+            { label: 'Lucros consistentes', value: m.consistentProfits, description: m.consistentProfits ? 'Sem prejuízos recorrentes no histórico' : 'Prejuízos no histórico recente' },
+            plCriterion,
+            marketCapCriterion,
+          ]
+        : [
+            dyCriterion,
+            { label: `ROE ≥ ${formatPercent(minROE)}`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe)}` },
+            { label: `Liquidez corrente ≥ ${formatNumber(minLiquidez, { digits: 1 })}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${formatNumber(liquidezCorrente, { digits: 2 })}` },
+            profile === 'utility'
+              ? {
+                  label: `Dív. líq./EBITDA ≤ ${formatNumber(UTILITY_MAX_NET_DEBT_EBITDA, { digits: 1 })}`,
+                  value: dividaLiquidaEbitda === null || dividaLiquidaEbitda <= UTILITY_MAX_NET_DEBT_EBITDA,
+                  description: `Dív. líq./EBITDA: ${formatNumber(dividaLiquidaEbitda, { digits: 2 })}`,
+                }
+              : {
+                  label: `Dív. líq./PL ≤ ${formatPct(maxDividaLiquidaPl, { digits: 0 })}`,
+                  value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl,
+                  description: `Dív/PL: ${formatNumber(dividaLiquidaPl, { digits: 2 })}`,
+                },
+            plCriterion,
+            { label: `Margem líquida ≥ ${formatPercent(minMargemLiquida)}`, value: !margemLiquida || margemLiquida >= minMargemLiquida, description: `Margem: ${formatPercent(margemLiquida)}` },
+            marketCapCriterion,
+          ];
+
+    const passedCriteria = criteria.filter((c) => c.value).length;
+    const isEligible = passedCriteria >= criteria.length - 2 && dyCriterion.value;
     const score = (passedCriteria / criteria.length) * 100;
+    const sustainabilityScore = this.sustainabilityScore(m);
 
-    // Calcular sustainability score como no backend
-    let sustainabilityScore = (
-      Math.min(roe || 0, 0.30) * 25 +
-      Math.min(liquidezCorrente || 0, 3) * 15 +
-      Math.max(0, 50 - (dividaLiquidaPl || 0) * 50) +
-      Math.min(margemLiquida || 0, 0.20) * 75 +
-      Math.min(roic || 0, 0.25) * 20 +
-      (dy || 0) * 50
-    );
-
-    if (sustainabilityScore > 100) sustainabilityScore = 100;
-    
     return {
       isEligible,
       score,
       fairValue: null,
-      upside: dy ? (dy * 100) : null,
-      reasoning: isEligible 
-        ? `✅ Aprovada no Anti-Dividend Trap com DY ${formatPercent(dy)}. Score de sustentabilidade: ${sustainabilityScore.toFixed(1)}/100.`
-        : `❌ Empresa pode ser dividend trap (${passedCriteria}/7 critérios aprovados).`,
+      upside: null,
+      discount: null,
+      reasoning: isEligible
+        ? `Atende ao modelo anti-armadilha (${PROFILE_LABEL[profile]}) com DY de ${formatPercent(dy)}. Score de sustentabilidade: ${formatNumber(sustainabilityScore, { digits: 1 })}/100.`
+        : `Pode ser uma armadilha de dividendos: ${passedCriteria} de ${criteria.length} ${PROFILE_LABEL[profile]} atendidos.`,
       criteria,
       key_metrics: {
         dividendYield: dy,
         sustainabilityScore: Number(sustainabilityScore.toFixed(1)),
-        roe: roe,
-        pl: pl,
-        marketCap: marketCap
-      }
+        roe,
+        roe5y,
+        payout,
+        pl,
+        marketCap,
+        roic,
+      },
     };
   }
 
+  /**
+   * Score de sustentabilidade (0–100): rentabilidade, margem e DY para todos; a parte de saúde financeira segue o perfil
+   * (liquidez e dívida/PL em geral; dívida/EBITDA em utilities; payout e consistência de lucro em financeiras).
+   */
+  private sustainabilityScore(m: DividendMetrics): number {
+    const base = Math.min(m.roe || 0, 0.3) * 25 + Math.min(m.margemLiquida || 0, 0.2) * 75 + Math.min(m.roic || 0, 0.25) * 20 + (m.dy || 0) * 50;
+    let health: number;
+    if (m.profile === 'financial') {
+      const payoutInRange = m.payout !== null && m.payout >= FINANCIAL_PAYOUT_RANGE.min && m.payout <= FINANCIAL_PAYOUT_RANGE.max;
+      health = (payoutInRange ? 25 : 0) + (m.consistentProfits ? 25 : 0) + Math.min((m.roe5y || 0) / 0.2, 1) * 45;
+    } else if (m.profile === 'utility') {
+      const leverage = m.dividaLiquidaEbitda ?? 0;
+      health = Math.min(m.liquidezCorrente || 0, 3) * 15 + Math.max(0, 50 - (Math.max(leverage, 0) / UTILITY_MAX_NET_DEBT_EBITDA) * 50);
+    } else {
+      health = Math.min(m.liquidezCorrente || 0, 3) * 15 + Math.max(0, 50 - (m.dividaLiquidaPl || 0) * 50);
+    }
+    return Math.min(100, base + health);
+  }
+
   runRanking(companies: CompanyData[], params: DividendYieldParams): RankBuilderResult[] {
-    const { minYield } = params;
     const results: RankBuilderResult[] = [];
 
-    // Filtrar empresas por overall_score > 50 (remover empresas ruins)
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
-    
-    // Filtrar tickers que terminam em 5, 6, 7, 8 ou 9
     filteredCompanies = this.filterTickerEndingDigits(filteredCompanies);
-    
-    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
     filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
-    
-    // Filtrar empresas por tamanho se especificado
     filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');
 
     for (const company of filteredCompanies) {
-      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
+      if (!this.validateCompanyData(company, params)) continue;
+      // Mesmos critérios por tipo de negócio da página do ativo, mas no ranking ROE e P/L precisam existir.
+      const analysis = this.runAnalysis(company, params);
+      const metrics = analysis.key_metrics ?? {};
+      if (!analysis.isEligible || metrics.roe === null || metrics.roe === undefined || metrics.pl === null || metrics.pl === undefined) continue;
       if (this.shouldExcludeCompany(company)) continue;
-      
-      // Validação customizada para ranking
-      const { financials } = company;
-      if (!(
-        financials.dy && toNumber(financials.dy)! >= minYield &&
-        financials.roe && toNumber(financials.roe)! >= 0.10 &&
-        financials.liquidezCorrente && toNumber(financials.liquidezCorrente)! >= 1.2 &&
-        (!financials.dividaLiquidaPl || toNumber(financials.dividaLiquidaPl)! <= 1.0) &&
-        financials.pl && toNumber(financials.pl)! >= 5 && toNumber(financials.pl)! <= 25 &&
-        financials.margemLiquida && toNumber(financials.margemLiquida)! >= 0.05 &&
-        financials.marketCap && toNumber(financials.marketCap)! >= 1000000000
-      )) continue;
 
-      const { currentPrice, historicalFinancials } = company;
-      const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
-      const dy = this.getDividendYield(financials, use7YearAverages, historicalFinancials)!;
-      const pl = this.getPL(financials, false, historicalFinancials);
-      const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
-      const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials) || 0;
-      const dividaLiquidaPl = this.getDividaLiquidaPl(financials, use7YearAverages, historicalFinancials) || 0;
-      const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials) || 0;
-      const marketCap = toNumber(financials.marketCap);
-      const roic = this.getROIC(financials, use7YearAverages, historicalFinancials) || 0;
-
-      // Calcular "Score de Qualidade" para evitar dividend traps
-      let sustainabilityScore = (
-        Math.min(roe, 0.30) * 25 +       // ROE forte (peso 25%)
-        Math.min(liquidezCorrente, 3) * 15 +           // Liquidez adequada (peso alto)
-        Math.max(0, 50 - dividaLiquidaPl * 50) +        // Penaliza alta dívida
-        Math.min(margemLiquida, 0.20) * 75 +         // Margem líquida saudável
-        Math.min(roic, 0.25) * 20 +       // ROIC para eficiência
-        dy * 50                   // DY ainda importa, mas não domina
-      );
-
-      if (sustainabilityScore > 100) sustainabilityScore = 100;
-
+      const m = this.metrics(company, params);
       results.push({
         ticker: company.ticker,
         name: company.name,
         sector: company.sector,
-        currentPrice,
+        currentPrice: company.currentPrice,
         logoUrl: company.logoUrl,
         fairValue: null,
         upside: null,
         marginOfSafety: null,
-        rational: `Aprovada no Anti-Dividend Trap Model com DY ${dy.toFixed(1)}%. Empresa sustentável: ROE ${roe.toFixed(1)}%, LC ${liquidezCorrente.toFixed(2)}, Margem Líquida ${margemLiquida.toFixed(1)}%. Score de sustentabilidade: ${Number(sustainabilityScore.toFixed(1))}/100. Evita dividend traps.`,
+        rational: `Atende ao modelo anti-armadilha (${PROFILE_LABEL[m.profile]}) com DY de ${formatPercent(m.dy)}: ROE de ${formatPercent(m.profile === 'financial' ? m.roe5y : m.roe)}${m.profile === 'financial' ? ' (média de 5 anos)' : ''}, ${
+          m.profile === 'financial'
+            ? `payout de ${formatPercent(m.payout)}`
+            : m.profile === 'utility'
+              ? `dívida líquida/EBITDA de ${formatNumber(m.dividaLiquidaEbitda, { digits: 2 })}`
+              : `liquidez corrente de ${formatNumber(m.liquidezCorrente, { digits: 2 })}`
+        }, margem líquida de ${formatPercent(m.margemLiquida)}. Score de sustentabilidade: ${metrics.sustainabilityScore ?? 0}/100.`,
         key_metrics: {
-          dy: dy,
-          sustainabilityScore: Number(sustainabilityScore.toFixed(1)),
-          pl: pl,
-          roe: roe,
-          roic: roic,
-          liquidezCorrente: liquidezCorrente,
-          dividaLiquidaPl: dividaLiquidaPl,
-          margemLiquida: margemLiquida,
-          marketCapBi: marketCap ? Number((marketCap / 1000000000).toFixed(1)) : null,
-        }
+          dy: m.dy,
+          sustainabilityScore: metrics.sustainabilityScore ?? null,
+          pl: m.pl,
+          roe: m.roe,
+          roic: m.roic,
+          payout: m.payout,
+          liquidezCorrente: m.liquidezCorrente,
+          dividaLiquidaPl: m.dividaLiquidaPl,
+          dividaLiquidaEbitda: m.dividaLiquidaEbitda,
+          margemLiquida: m.margemLiquida,
+          marketCapBi: m.marketCap ? Number((m.marketCap / 1_000_000_000).toFixed(1)) : null,
+        },
       });
     }
 
-    // Ordenar por Score de Sustentabilidade
-    const sortedResults = results
-      .sort((a, b) => (b.key_metrics?.sustainabilityScore || 0) - (a.key_metrics?.sustainabilityScore || 0));
-
-    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    const sortedResults = results.sort((a, b) => (b.key_metrics?.sustainabilityScore || 0) - (a.key_metrics?.sustainabilityScore || 0));
     const uniqueResults = this.removeDuplicateCompanies(sortedResults);
-    
-    // Aplicar limite
-    const limitedResults = uniqueResults.slice(0, 50);
-
-    // Aplicar priorização técnica se habilitada
-    return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);
+    return this.applyTechnicalPrioritization(uniqueResults.slice(0, 50), companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: DividendYieldParams): string {
-    return `# MODELO ANTI-DIVIDEND TRAP
+    return `# Anti-armadilha de dividendos
 
-**Filosofia**: Focado em renda passiva sustentável, evitando empresas que pagam dividendos altos mas estão em declínio.
+**Ideia**: renda passiva sustentável, evitando empresas com dividend yield alto por queda de preço ou por dividendos que o lucro não sustenta.
 
-**Estratégia**: Dividend Yield ≥ ${(params.minYield * 100).toFixed(1)}% + rigorosos filtros de sustentabilidade.
+**Critério de entrada**: dividend yield ≥ ${formatPercent(minYieldOf(params))}.
 
-**Problema Resolvido**: Elimina "dividend traps" - empresas com DY artificial por queda no preço ou dividendos insustentáveis.
+## Critérios por tipo de negócio
 
-## Filtros Anti-Trap
+**Empresas em geral**
+- ROE ≥ 10% e margem líquida ≥ 5%
+- Liquidez corrente ≥ 1,2 e dívida líquida/PL ≤ 100%
+- P/L entre 4 e 25 e market cap ≥ R$ 1 bilhão
 
-- ROE ≥ 10% (rentabilidade forte e consistente)
-- Liquidez Corrente ≥ 1.2 (capacidade real de pagar dividendos)
-- P/L entre 4-25 (evita preços artificiais ou empresas caras demais)
-- Margem Líquida ≥ 5% (lucratividade real e saudável)
-- Dívida Líquida/PL ≤ 100% (não comprometida por dívidas)
-- Market Cap ≥ R$ 1B (tamanho e liquidez adequados)
+**Utilidade pública** (energia, saneamento, gás)
+- Os mesmos critérios, com dívida líquida/EBITDA ≤ 3,5 no lugar de dívida líquida/PL (são negócios naturalmente alavancados)
 
-**Ordenação**: Por Score de Sustentabilidade (combina DY + saúde financeira)${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}.
+**Bancos e seguradoras**
+- ROE médio de 5 anos ≥ 12%
+- Payout entre 25% e 80%
+- Lucros consistentes no histórico
+- Sem liquidez corrente nem dívida/PL, que não se aplicam a instituições financeiras
 
-**Objetivo**: Renda passiva de qualidade, não armadilhas disfarçadas${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
+**Ordenação**: score de sustentabilidade (DY e saúde financeira)${params.useTechnicalAnalysis ? ', com priorização técnica (sobrevenda) dentro de faixas de resultados semelhantes' : ''}.`;
   }
 }

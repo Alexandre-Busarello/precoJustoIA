@@ -1,10 +1,63 @@
 /**
  * CUSTOM TRIGGER SERVICE
- * 
- * Serviço para avaliar gatilhos customizados configurados pelos usuários
+ *
+ * Avalia os gatilhos customizados (UserAssetMonitor.triggerConfig) configurados pelos usuários.
+ *
+ * - `evaluateTriggerConfig(config, context)` é puro: recebe preço, indicadores, proventos e preços justos já carregados
+ *   e devolve `{ triggered, message }`. Os critérios são combinados com "OU": basta um ser atingido.
+ * - `evaluateTrigger(monitor)` carrega o contexto do banco e chama o avaliador puro (usado pelo cron).
+ * - Dado ausente nunca dispara: o critério é ignorado e o motivo vai em `missing`.
  */
 
+import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
+import {
+  averageFullYears,
+  removeExtraordinary,
+  sumTTM,
+  toDividendEvents,
+  type DividendEvent,
+} from './finance/dividends';
+import { marginOfSafety } from './valuation-metrics';
+import { formatBRL, formatNumber, formatPct } from './format';
+import { formatAlertPct } from '@/app/dashboard/monitoramentos-customizados/monitor-fields';
+
+/** Modelos com preço justo salvo no snapshot (`AssetSnapshot.snapshotData.strategies[modelo].fairValue`). */
+export const FAIR_VALUE_MODELS = ['graham', 'fcd', 'gordon', 'bazin', 'bankPvp'] as const;
+export type FairValueModel = (typeof FAIR_VALUE_MODELS)[number];
+
+export const FAIR_VALUE_MODEL_LABEL: Record<FairValueModel, string> = {
+  graham: 'Graham',
+  fcd: 'Fluxo de caixa descontado',
+  gordon: 'Gordon',
+  bazin: 'Preço-teto (Bazin)',
+  bankPvp: 'P/VP justo (bancos)',
+};
+
+/** DY-alvo padrão do método Bazin (6% ao ano). */
+export const DEFAULT_BAZIN_TARGET_YIELD = 0.06;
+/** Anos-calendário completos usados na média de proventos do preço-teto Bazin. */
+export const BAZIN_FULL_YEARS = 5;
+
+/** Preço ≤ preço-teto Bazin (média de proventos dos 5 anos completos ÷ DY-alvo). */
+export interface BazinCeilingTrigger {
+  /** DY-alvo em fração (0,06 = 6%). */
+  targetYield: number;
+}
+
+/** Desconto (margem de segurança = 1 − preço/preço justo) ≥ `minDiscount` no modelo escolhido. */
+export interface FairValueDiscountTrigger {
+  model: FairValueModel;
+  /** Desconto mínimo em fração (0,2 = 20%). */
+  minDiscount: number;
+}
+
+/** Dividend yield dos últimos 12 meses (soma dos proventos com data-com em 12 meses ÷ preço) ≥ `minDy`. */
+export interface DyTtmTrigger {
+  /** DY mínimo em fração (0,08 = 8%). */
+  minDy: number;
+}
 
 export interface TriggerConfig {
   // Filtros de screening básicos
@@ -106,6 +159,38 @@ export interface TriggerConfig {
   maxVariacao52Semanas?: number;
   minRetornoAnoAtual?: number;
   maxRetornoAnoAtual?: number;
+
+  // Alertas de valuation e proventos
+  bazinCeiling?: BazinCeilingTrigger;
+  fairValueDiscount?: FairValueDiscountTrigger;
+  dyTtmAbove?: DyTtmTrigger;
+}
+
+/** Indicadores numéricos usados pelos filtros min/max (mesmos nomes de `FinancialData`, mais `score`). */
+export type IndicatorValues = Record<string, number | undefined>;
+
+/** Tudo o que o avaliador puro precisa. Campos ausentes fazem o critério correspondente ser ignorado. */
+export interface TriggerContext {
+  price?: number | null;
+  indicators?: IndicatorValues;
+  /** Proventos (dividendos + JCP brutos) por ação. */
+  dividends?: readonly DividendEvent[];
+  /** Preço justo por modelo, lido do snapshot mais recente. */
+  fairValues?: Partial<Record<FairValueModel, number | null>>;
+  /** Data de referência para TTM e anos completos. Padrão: agora. */
+  asOf?: Date;
+}
+
+export interface TriggerConfigEvaluation {
+  triggered: boolean;
+  /** Frase pt-BR com os critérios atingidos, ou por que nada disparou. */
+  message: string;
+  /** Critérios atingidos, um por item. */
+  reasons: string[];
+  /** Critérios ignorados por falta de dado. */
+  missing: string[];
+  /** Valores calculados (preço-teto, DY 12m, desconto...) para o relatório. */
+  computed: Record<string, number | undefined>;
 }
 
 export interface TriggerEvaluation {
@@ -115,6 +200,295 @@ export interface TriggerEvaluation {
   triggered: boolean;
   reasons: string[];
   companyData: Record<string, number | undefined>;
+  /** Configuração avaliada, salva na fila para o relatório explicar cada critério. */
+  triggerConfig?: TriggerConfig;
+}
+
+const isPositive = (value: number | null | undefined): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+const fmtRatio = (v: number) => formatNumber(v, { digits: 2 });
+const fmtScore = (v: number) => formatNumber(v, { digits: 1 });
+const fmtPct = (v: number) => formatPct(v, { digits: 2 });
+
+type RangeRule = [minKey: keyof TriggerConfig, maxKey: keyof TriggerConfig, indicator: string, label: string, format: (v: number) => string];
+
+/** Filtros min/max: dispara quando o valor atual chega ao mínimo (≥) ou ao máximo (≤) configurado. */
+const RANGE_RULES: RangeRule[] = [
+  ['minPl', 'maxPl', 'pl', 'P/L', fmtRatio],
+  ['minPvp', 'maxPvp', 'pvp', 'P/VP', fmtRatio],
+  ['minScore', 'maxScore', 'score', 'Score', fmtScore],
+  ['minForwardPE', 'maxForwardPE', 'forwardPE', 'Forward P/L', fmtRatio],
+  ['minEarningsYield', 'maxEarningsYield', 'earningsYield', 'Earnings yield', fmtPct],
+  ['minDy', 'maxDy', 'dy', 'Dividend yield', fmtPct],
+  ['minEvEbitda', 'maxEvEbitda', 'evEbitda', 'EV/EBITDA', fmtRatio],
+  ['minEvEbit', 'maxEvEbit', 'evEbit', 'EV/EBIT', fmtRatio],
+  ['minEvRevenue', 'maxEvRevenue', 'evRevenue', 'EV/Receita', fmtRatio],
+  ['minPsr', 'maxPsr', 'psr', 'P/Receita', fmtRatio],
+  ['minPAtivos', 'maxPAtivos', 'pAtivos', 'P/Ativos', fmtRatio],
+  ['minPCapGiro', 'maxPCapGiro', 'pCapGiro', 'P/Cap. giro', fmtRatio],
+  ['minPEbit', 'maxPEbit', 'pEbit', 'P/EBIT', fmtRatio],
+  ['minLpa', 'maxLpa', 'lpa', 'LPA', fmtRatio],
+  ['minTrailingEps', 'maxTrailingEps', 'trailingEps', 'LPA (12 meses)', fmtRatio],
+  ['minVpa', 'maxVpa', 'vpa', 'VPA', fmtRatio],
+  ['minReceitaPorAcao', 'maxReceitaPorAcao', 'receitaPorAcao', 'Receita por ação', fmtRatio],
+  ['minCaixaPorAcao', 'maxCaixaPorAcao', 'caixaPorAcao', 'Caixa por ação', fmtRatio],
+  ['minRoe', 'maxRoe', 'roe', 'ROE', fmtPct],
+  ['minRoic', 'maxRoic', 'roic', 'ROIC', fmtPct],
+  ['minRoa', 'maxRoa', 'roa', 'ROA', fmtPct],
+  ['minMargemBruta', 'maxMargemBruta', 'margemBruta', 'Margem bruta', fmtPct],
+  ['minMargemEbitda', 'maxMargemEbitda', 'margemEbitda', 'Margem EBITDA', fmtPct],
+  ['minMargemLiquida', 'maxMargemLiquida', 'margemLiquida', 'Margem líquida', fmtPct],
+  ['minLiquidezCorrente', 'maxLiquidezCorrente', 'liquidezCorrente', 'Liquidez corrente', fmtRatio],
+  ['minLiquidezRapida', 'maxLiquidezRapida', 'liquidezRapida', 'Liquidez rápida', fmtRatio],
+  ['minDividaLiquidaPl', 'maxDividaLiquidaPl', 'dividaLiquidaPl', 'Dívida líquida/PL', fmtRatio],
+  ['minDividaLiquidaEbitda', 'maxDividaLiquidaEbitda', 'dividaLiquidaEbitda', 'Dívida líquida/EBITDA', fmtRatio],
+  ['minDebtToEquity', 'maxDebtToEquity', 'debtToEquity', 'Dívida/patrimônio', fmtRatio],
+  ['minGiroAtivos', 'maxGiroAtivos', 'giroAtivos', 'Giro de ativos', fmtRatio],
+  ['minCagrLucros5a', 'maxCagrLucros5a', 'cagrLucros5a', 'CAGR de lucros 5 anos', fmtPct],
+  ['minCagrReceitas5a', 'maxCagrReceitas5a', 'cagrReceitas5a', 'CAGR de receitas 5 anos', fmtPct],
+  ['minCrescimentoLucros', 'maxCrescimentoLucros', 'crescimentoLucros', 'Crescimento de lucros', fmtPct],
+  ['minCrescimentoReceitas', 'maxCrescimentoReceitas', 'crescimentoReceitas', 'Crescimento de receitas', fmtPct],
+  ['minPayout', 'maxPayout', 'payout', 'Payout', fmtPct],
+  ['minDividendYield12m', 'maxDividendYield12m', 'dividendYield12m', 'Dividend yield 12m', fmtPct],
+  ['minVariacao52Semanas', 'maxVariacao52Semanas', 'variacao52Semanas', 'Variação em 52 semanas', fmtPct],
+  ['minRetornoAnoAtual', 'maxRetornoAnoAtual', 'retornoAnoAtual', 'Retorno no ano', fmtPct],
+];
+
+/** Preço-teto Bazin = média anual de proventos dos anos completos (sem extraordinários) ÷ DY-alvo. `null` sem proventos ou DY-alvo inválido. */
+export function bazinCeilingPrice(
+  dividends: readonly DividendEvent[],
+  targetYield: number,
+  asOf: Date = new Date()
+): number | null {
+  if (!isPositive(targetYield)) return null;
+  // Mesma base do preço-teto da página do ativo: proventos extraordinários não entram na média.
+  const average = averageFullYears(removeExtraordinary(dividends), { years: BAZIN_FULL_YEARS, asOf });
+  return isPositive(average) ? average / targetYield : null;
+}
+
+/**
+ * Avaliador puro dos gatilhos. Cada critério configurado é testado de forma independente ("OU").
+ * Sem preço, proventos ou preço justo, o critério correspondente não dispara e o motivo vai em `missing`.
+ */
+export function evaluateTriggerConfig(config: TriggerConfig, context: TriggerContext): TriggerConfigEvaluation {
+  const reasons: string[] = [];
+  const missing: string[] = [];
+  const computed: Record<string, number | undefined> = {};
+  const indicators = context.indicators ?? {};
+  const asOf = context.asOf ?? new Date();
+  const price = isPositive(context.price) ? context.price : null;
+
+  for (const [minKey, maxKey, indicator, label, format] of RANGE_RULES) {
+    const min = config[minKey] as number | undefined;
+    const max = config[maxKey] as number | undefined;
+    if (min === undefined && max === undefined) continue;
+    const value = indicators[indicator];
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      missing.push(`${label}: indicador indisponível`);
+      continue;
+    }
+    if (min !== undefined && value >= min) {
+      reasons.push(`${label} (${format(value)}) atingiu o mínimo configurado (${format(min)})`);
+    }
+    if (max !== undefined && value <= max) {
+      reasons.push(`${label} (${format(value)}) atingiu o máximo configurado (${format(max)})`);
+    }
+  }
+
+  const hasPriceRule =
+    config.priceReached !== undefined || config.priceBelow !== undefined || config.priceAbove !== undefined;
+  if (hasPriceRule && price === null) missing.push('Preço: cotação indisponível');
+  if (price !== null) {
+    // "Atingiu" = até 1% de distância do valor configurado
+    if (config.priceReached !== undefined && Math.abs(price - config.priceReached) <= config.priceReached * 0.01) {
+      reasons.push(`Preço (${formatBRL(price)}) atingiu o valor configurado (${formatBRL(config.priceReached)})`);
+    }
+    if (config.priceBelow !== undefined && price <= config.priceBelow) {
+      reasons.push(`Preço (${formatBRL(price)}) está abaixo do valor configurado (${formatBRL(config.priceBelow)})`);
+    }
+    if (config.priceAbove !== undefined && price >= config.priceAbove) {
+      reasons.push(`Preço (${formatBRL(price)}) está acima do valor configurado (${formatBRL(config.priceAbove)})`);
+    }
+  }
+
+  if (config.bazinCeiling) {
+    const targetYield = config.bazinCeiling.targetYield;
+    const ceiling = bazinCeilingPrice(context.dividends ?? [], targetYield, asOf);
+    computed.bazinCeiling = ceiling ?? undefined;
+    if (ceiling === null) {
+      missing.push(`Preço-teto Bazin: sem proventos nos últimos ${BAZIN_FULL_YEARS} anos completos`);
+    } else if (price === null) {
+      missing.push('Preço-teto Bazin: cotação indisponível');
+    } else if (price <= ceiling) {
+      reasons.push(
+        `Preço (${formatBRL(price)}) está abaixo do preço-teto Bazin (${formatBRL(ceiling)}, DY-alvo ${formatAlertPct(targetYield)})`
+      );
+    }
+  }
+
+  if (config.fairValueDiscount) {
+    const { model, minDiscount } = config.fairValueDiscount;
+    const label = FAIR_VALUE_MODEL_LABEL[model] ?? model;
+    const fair = context.fairValues?.[model];
+    if (!isPositive(fair)) {
+      missing.push(`Desconto vs ${label}: preço justo indisponível`);
+    } else if (price === null) {
+      missing.push(`Desconto vs ${label}: cotação indisponível`);
+    } else {
+      const discount = marginOfSafety(price, fair);
+      computed.fairValue = fair;
+      computed.discount = discount ?? undefined;
+      if (discount !== null && discount >= minDiscount) {
+        reasons.push(
+          `Preço (${formatBRL(price)}) está ${formatPct(discount)} abaixo do preço justo estimado por ${label} (${formatBRL(fair)}), acima do desconto mínimo de ${formatAlertPct(minDiscount)}`
+        );
+      }
+    }
+  }
+
+  if (config.dyTtmAbove) {
+    const { minDy } = config.dyTtmAbove;
+    const total = sumTTM(context.dividends ?? [], asOf);
+    if (total <= 0) {
+      missing.push('DY 12 meses: sem proventos nos últimos 12 meses');
+    } else if (price === null) {
+      missing.push('DY 12 meses: cotação indisponível');
+    } else {
+      const dy = total / price;
+      computed.dyTtm = dy;
+      if (dy >= minDy) {
+        reasons.push(`Dividend yield 12 meses (${formatPct(dy)}) atingiu o mínimo configurado (${formatAlertPct(minDy)})`);
+      }
+    }
+  }
+
+  const triggered = reasons.length > 0;
+  let message: string;
+  if (triggered) message = reasons.join('; ');
+  else if (missing.length > 0) message = `Nenhum critério atingido. Dados indisponíveis: ${missing.join('; ')}`;
+  else message = 'Nenhum critério atingido';
+
+  return { triggered, message, reasons, missing, computed };
+}
+
+/** Limite de monitoramentos ativos no plano gratuito. Premium não tem limite. */
+export const FREE_MONITOR_LIMIT = 3;
+
+export interface MonitorLimitCheck {
+  allowed: boolean;
+  current: number;
+  /** `null` = sem limite (Premium). */
+  max: number | null;
+}
+
+/** Pode ativar mais um monitoramento? Gratuito: até `FREE_MONITOR_LIMIT` ativos; Premium: sempre. */
+export function checkMonitorLimit(isPremium: boolean, activeCount: number): MonitorLimitCheck {
+  const max = isPremium ? null : FREE_MONITOR_LIMIT;
+  return { allowed: max === null || activeCount < max, current: activeCount, max };
+}
+
+export function monitorLimitMessage(max: number): string {
+  return `O plano gratuito permite até ${max} monitoramentos ativos. Pause ou remova um para criar outro, ou veja os planos para ter monitoramentos sem limite.`;
+}
+
+const PRICE_KEYS = ['priceReached', 'priceBelow', 'priceAbove'] as const;
+
+/** Schema da configuração (API). Só aceita critérios conhecidos; frações em 0–1 para DY e desconto. */
+export const triggerConfigSchema = z
+  .object({
+    ...Object.fromEntries(PRICE_KEYS.map((key) => [key, z.number().positive('deve ser maior que zero').optional()])),
+    ...Object.fromEntries(RANGE_RULES.flatMap(([minKey, maxKey]) => [
+      [minKey, z.number().optional()],
+      [maxKey, z.number().optional()],
+    ])),
+    bazinCeiling: z
+      .object({ targetYield: z.number().gt(0, 'o DY-alvo deve ser maior que zero').max(1, 'o DY-alvo deve ser até 100%') })
+      .strict()
+      .optional(),
+    fairValueDiscount: z
+      .object({
+        model: z.enum(FAIR_VALUE_MODELS, 'modelo de preço justo inválido'),
+        minDiscount: z.number().gt(0, 'o desconto mínimo deve ser maior que zero').lt(1, 'o desconto mínimo deve ser menor que 100%'),
+      })
+      .strict()
+      .optional(),
+    dyTtmAbove: z
+      .object({ minDy: z.number().gt(0, 'o DY mínimo deve ser maior que zero').max(1, 'o DY mínimo deve ser até 100%') })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export type ParseTriggerConfigResult = { success: true; config: TriggerConfig } | { success: false; error: string };
+
+/**
+ * Remove critérios de primeiro nível com valor \`null\` (configurações antigas salvavam NaN como null).
+ * Critério vazio equivale a critério ausente; qualquer outro valor segue para a validação.
+ */
+function stripNullCriteria(input: unknown): unknown {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+  return Object.fromEntries(Object.entries(input as Record<string, unknown>).filter(([, value]) => value !== null));
+}
+
+/** Valida a configuração vinda da API. Exige ao menos um critério. */
+export function parseTriggerConfig(input: unknown): ParseTriggerConfigResult {
+  const parsed = triggerConfigSchema.safeParse(stripNullCriteria(input));
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const path = issue.path.join('.');
+    const detail =
+      issue.code === 'unrecognized_keys'
+        ? `critério desconhecido (${issue.keys.join(', ')})`
+        : issue.code === 'invalid_type'
+          ? issue.expected === 'number'
+            ? 'deve ser um número'
+            : 'formato inválido'
+          : issue.message;
+    return { success: false, error: `Critério inválido${path ? ` em ${path}` : ''}: ${detail}` };
+  }
+  const config = Object.fromEntries(
+    Object.entries(parsed.data).filter(([, value]) => value !== undefined)
+  ) as TriggerConfig;
+  if (Object.keys(config).length === 0) {
+    return { success: false, error: 'Defina pelo menos um critério' };
+  }
+  return { success: true, config };
+}
+
+/** Configuração já validada no formato JSON aceito pelo Prisma (`UserAssetMonitor.triggerConfig`). */
+export function triggerConfigToJson(config: TriggerConfig): Prisma.InputJsonObject {
+  return JSON.parse(JSON.stringify(config)) as Prisma.InputJsonObject;
+}
+
+/**
+ * Soma critérios novos a uma configuração já salva: chaves novas substituem as mesmas chaves,
+ * as demais são mantidas. Usado quando o usuário cria um alerta para um ativo que já monitora.
+ */
+export function mergeTriggerConfigs(existing: unknown, incoming: TriggerConfig): TriggerConfig {
+  const cleaned = stripNullCriteria(existing);
+  const base =
+    cleaned && typeof cleaned === 'object' && !Array.isArray(cleaned) ? (cleaned as TriggerConfig) : {};
+  const merged: TriggerConfig = { ...base };
+  for (const [key, value] of Object.entries(incoming) as Array<[keyof TriggerConfig, TriggerConfig[keyof TriggerConfig]]>) {
+    if (value !== undefined && value !== null) (merged as Record<string, unknown>)[key] = value;
+  }
+  return merged;
+}
+
+/** Converte `snapshotData.strategies` em preço justo por modelo, ignorando valores ausentes ou ≤ 0. */
+export function fairValuesFromSnapshot(snapshotData: unknown): Partial<Record<FairValueModel, number>> {
+  const result: Partial<Record<FairValueModel, number>> = {};
+  if (!snapshotData || typeof snapshotData !== 'object') return result;
+  const strategies = (snapshotData as { strategies?: unknown }).strategies;
+  if (!strategies || typeof strategies !== 'object') return result;
+  for (const model of FAIR_VALUE_MODELS) {
+    const strategy = (strategies as Record<string, unknown>)[model];
+    if (!strategy || typeof strategy !== 'object') continue;
+    const fair = Number((strategy as { fairValue?: unknown }).fairValue);
+    if (Number.isFinite(fair) && fair > 0) result[model] = fair;
+  }
+  return result;
 }
 
 /**
@@ -242,8 +616,25 @@ export async function checkCustomTriggers(): Promise<TriggerEvaluation[]> {
   return evaluations;
 }
 
+const INDICATOR_FIELDS = [
+  'pl', 'pvp', 'forwardPE', 'earningsYield', 'dy', 'evEbitda', 'evEbit', 'evRevenue', 'psr', 'pAtivos', 'pCapGiro',
+  'pEbit', 'lpa', 'trailingEps', 'vpa', 'receitaPorAcao', 'caixaPorAcao', 'roe', 'roic', 'roa', 'margemBruta',
+  'margemEbitda', 'margemLiquida', 'liquidezCorrente', 'liquidezRapida', 'dividaLiquidaPl', 'dividaLiquidaEbitda',
+  'debtToEquity', 'giroAtivos', 'cagrLucros5a', 'cagrReceitas5a', 'crescimentoLucros', 'crescimentoReceitas', 'payout',
+  'dividendYield12m', 'variacao52Semanas', 'retornoAnoAtual',
+] as const;
+
+function toNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 /**
- * Avalia se um gatilho customizado foi disparado
+ * Carrega do banco o contexto de um monitoramento (indicadores, score, preço justo, proventos e cotação)
+ * e avalia os critérios com `evaluateTriggerConfig`. Retorna `null` quando nada disparou.
+ *
+ * `overrides` substitui partes do contexto (ex.: `{ price }` em testes locais, sem consultar a cotação).
  */
 export async function evaluateTrigger(
   monitor: {
@@ -251,242 +642,70 @@ export async function evaluateTrigger(
     companyId: number;
     triggerConfig: TriggerConfig;
     company: { ticker: string };
-  }
+  },
+  overrides: Partial<TriggerContext> = {}
 ): Promise<TriggerEvaluation | null> {
   const { triggerConfig, company } = monitor;
   const ticker = company.ticker;
+  const needsDividends = !!(triggerConfig.bazinCeiling || triggerConfig.dyTtmAbove);
 
-  // Buscar dados financeiros mais recentes (todos os campos necessários)
-  const financialData = await prisma.financialData.findFirst({
-    where: {
-      companyId: monitor.companyId,
-    },
-    orderBy: {
-      year: 'desc',
-    },
-    select: {
-      pl: true,
-      pvp: true,
-      forwardPE: true,
-      earningsYield: true,
-      dy: true,
-      evEbitda: true,
-      evEbit: true,
-      evRevenue: true,
-      psr: true,
-      pAtivos: true,
-      pCapGiro: true,
-      pEbit: true,
-      lpa: true,
-      trailingEps: true,
-      vpa: true,
-      receitaPorAcao: true,
-      caixaPorAcao: true,
-      roe: true,
-      roic: true,
-      roa: true,
-      margemBruta: true,
-      margemEbitda: true,
-      margemLiquida: true,
-      liquidezCorrente: true,
-      liquidezRapida: true,
-      dividaLiquidaPl: true,
-      dividaLiquidaEbitda: true,
-      debtToEquity: true,
-      giroAtivos: true,
-      cagrLucros5a: true,
-      cagrReceitas5a: true,
-      crescimentoLucros: true,
-      crescimentoReceitas: true,
-      payout: true,
-      dividendYield12m: true,
-      variacao52Semanas: true,
-      retornoAnoAtual: true,
-    },
-  });
+  const select = Object.fromEntries(INDICATOR_FIELDS.map((field) => [field, true])) as Record<
+    (typeof INDICATOR_FIELDS)[number],
+    true
+  >;
 
-  // Buscar score mais recente
-  const snapshot = await prisma.assetSnapshot.findFirst({
-    where: {
-      companyId: monitor.companyId,
-      isLatest: true,
-    },
-    select: {
-      overallScore: true,
-    },
-  });
+  const [financialData, snapshot, dividendRows] = await Promise.all([
+    prisma.financialData.findFirst({
+      where: { companyId: monitor.companyId },
+      orderBy: { year: 'desc' },
+      select,
+    }),
+    prisma.assetSnapshot.findFirst({
+      where: { companyId: monitor.companyId, isLatest: true },
+      select: { overallScore: true, snapshotData: true },
+    }),
+    needsDividends && !overrides.dividends
+      ? prisma.dividendHistory.findMany({
+          where: {
+            companyId: monitor.companyId,
+            // Anos completos do Bazin (N−1 … N−5) e a janela de 12 meses
+            exDate: { gte: new Date(Date.UTC(new Date().getUTCFullYear() - BAZIN_FULL_YEARS - 1, 0, 1)) },
+          },
+          select: { exDate: true, paymentDate: true, amount: true, type: true },
+          orderBy: { exDate: 'asc' },
+        })
+      : Promise.resolve([]),
+  ]);
 
-  // Buscar preço atual
-  const { getTickerPrice } = await import('./quote-service');
-  const priceData = await getTickerPrice(ticker);
+  let price = overrides.price;
+  if (price === undefined) {
+    const { getTickerPrice } = await import('./quote-service');
+    price = (await getTickerPrice(ticker))?.price ?? null;
+  }
 
-  // Converter dados financeiros para números
-  const toNumber = (value: any): number | undefined => {
-    if (value === null || value === undefined) return undefined;
-    if (typeof value === 'object' && 'toNumber' in value) {
-      return (value as any).toNumber();
-    }
-    return Number(value);
+  const indicators: IndicatorValues = {};
+  for (const field of INDICATOR_FIELDS) indicators[field] = toNumber(financialData?.[field]);
+  indicators.score = toNumber(snapshot?.overallScore);
+
+  const context: TriggerContext = {
+    price,
+    indicators: { ...indicators, ...overrides.indicators },
+    dividends: overrides.dividends ?? toDividendEvents(dividendRows),
+    fairValues: overrides.fairValues ?? fairValuesFromSnapshot(snapshot?.snapshotData),
+    asOf: overrides.asOf,
   };
 
-  const companyData: Record<string, number | undefined> = {
-    pl: toNumber(financialData?.pl),
-    pvp: toNumber(financialData?.pvp),
-    forwardPE: toNumber(financialData?.forwardPE),
-    earningsYield: toNumber(financialData?.earningsYield),
-    dy: toNumber(financialData?.dy),
-    evEbitda: toNumber(financialData?.evEbitda),
-    evEbit: toNumber(financialData?.evEbit),
-    evRevenue: toNumber(financialData?.evRevenue),
-    psr: toNumber(financialData?.psr),
-    pAtivos: toNumber(financialData?.pAtivos),
-    pCapGiro: toNumber(financialData?.pCapGiro),
-    pEbit: toNumber(financialData?.pEbit),
-    lpa: toNumber(financialData?.lpa),
-    trailingEps: toNumber(financialData?.trailingEps),
-    vpa: toNumber(financialData?.vpa),
-    receitaPorAcao: toNumber(financialData?.receitaPorAcao),
-    caixaPorAcao: toNumber(financialData?.caixaPorAcao),
-    roe: toNumber(financialData?.roe),
-    roic: toNumber(financialData?.roic),
-    roa: toNumber(financialData?.roa),
-    margemBruta: toNumber(financialData?.margemBruta),
-    margemEbitda: toNumber(financialData?.margemEbitda),
-    margemLiquida: toNumber(financialData?.margemLiquida),
-    liquidezCorrente: toNumber(financialData?.liquidezCorrente),
-    liquidezRapida: toNumber(financialData?.liquidezRapida),
-    dividaLiquidaPl: toNumber(financialData?.dividaLiquidaPl),
-    dividaLiquidaEbitda: toNumber(financialData?.dividaLiquidaEbitda),
-    debtToEquity: toNumber(financialData?.debtToEquity),
-    giroAtivos: toNumber(financialData?.giroAtivos),
-    cagrLucros5a: toNumber(financialData?.cagrLucros5a),
-    cagrReceitas5a: toNumber(financialData?.cagrReceitas5a),
-    crescimentoLucros: toNumber(financialData?.crescimentoLucros),
-    crescimentoReceitas: toNumber(financialData?.crescimentoReceitas),
-    payout: toNumber(financialData?.payout),
-    dividendYield12m: toNumber(financialData?.dividendYield12m),
-    variacao52Semanas: toNumber(financialData?.variacao52Semanas),
-    retornoAnoAtual: toNumber(financialData?.retornoAnoAtual),
-    score: snapshot?.overallScore ? Number(snapshot.overallScore) : undefined,
-    currentPrice: priceData?.price,
-  };
-
-  const reasons: string[] = [];
-  let triggered = false;
-
-  // Função auxiliar para avaliar indicadores min/max
-  const evaluateIndicator = (
-    configMin: number | undefined,
-    configMax: number | undefined,
-    value: number | undefined,
-    indicatorName: string,
-    formatValue: (v: number) => string = (v) => v.toFixed(2)
-  ) => {
-    if (configMin !== undefined && value !== undefined && value >= configMin) {
-      triggered = true;
-      reasons.push(`${indicatorName} (${formatValue(value)}) atingiu mínimo configurado (${formatValue(configMin)})`);
-    }
-    if (configMax !== undefined && value !== undefined && value <= configMax) {
-      triggered = true;
-      reasons.push(`${indicatorName} (${formatValue(value)}) atingiu máximo configurado (${formatValue(configMax)})`);
-    }
-  };
-
-  // Avaliar filtros básicos
-  evaluateIndicator(triggerConfig.minPl, triggerConfig.maxPl, companyData.pl, 'P/L');
-  evaluateIndicator(triggerConfig.minPvp, triggerConfig.maxPvp, companyData.pvp, 'P/VP');
-  evaluateIndicator(triggerConfig.minScore, triggerConfig.maxScore, companyData.score, 'Score', (v) => v.toFixed(1));
-
-  // Avaliar indicadores que oscilam com preço
-  evaluateIndicator(triggerConfig.minForwardPE, triggerConfig.maxForwardPE, companyData.forwardPE, 'Forward P/E');
-  evaluateIndicator(triggerConfig.minEarningsYield, triggerConfig.maxEarningsYield, companyData.earningsYield, 'Earnings Yield', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minDy, triggerConfig.maxDy, companyData.dy, 'Dividend Yield', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minEvEbitda, triggerConfig.maxEvEbitda, companyData.evEbitda, 'EV/EBITDA');
-  evaluateIndicator(triggerConfig.minEvEbit, triggerConfig.maxEvEbit, companyData.evEbit, 'EV/EBIT');
-  evaluateIndicator(triggerConfig.minEvRevenue, triggerConfig.maxEvRevenue, companyData.evRevenue, 'EV/Revenue');
-  evaluateIndicator(triggerConfig.minPsr, triggerConfig.maxPsr, companyData.psr, 'P/S');
-  evaluateIndicator(triggerConfig.minPAtivos, triggerConfig.maxPAtivos, companyData.pAtivos, 'P/Ativos');
-  evaluateIndicator(triggerConfig.minPCapGiro, triggerConfig.maxPCapGiro, companyData.pCapGiro, 'P/Cap. Giro');
-  evaluateIndicator(triggerConfig.minPEbit, triggerConfig.maxPEbit, companyData.pEbit, 'P/EBIT');
-  evaluateIndicator(triggerConfig.minLpa, triggerConfig.maxLpa, companyData.lpa, 'LPA');
-  evaluateIndicator(triggerConfig.minTrailingEps, triggerConfig.maxTrailingEps, companyData.trailingEps, 'Trailing EPS');
-  evaluateIndicator(triggerConfig.minVpa, triggerConfig.maxVpa, companyData.vpa, 'VPA');
-  evaluateIndicator(triggerConfig.minReceitaPorAcao, triggerConfig.maxReceitaPorAcao, companyData.receitaPorAcao, 'Receita por Ação');
-  evaluateIndicator(triggerConfig.minCaixaPorAcao, triggerConfig.maxCaixaPorAcao, companyData.caixaPorAcao, 'Caixa por Ação');
-
-  // Avaliar indicadores de rentabilidade
-  evaluateIndicator(triggerConfig.minRoe, triggerConfig.maxRoe, companyData.roe, 'ROE', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minRoic, triggerConfig.maxRoic, companyData.roic, 'ROIC', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minRoa, triggerConfig.maxRoa, companyData.roa, 'ROA', (v) => (v * 100).toFixed(2) + '%');
-
-  // Avaliar indicadores de margem
-  evaluateIndicator(triggerConfig.minMargemBruta, triggerConfig.maxMargemBruta, companyData.margemBruta, 'Margem Bruta', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minMargemEbitda, triggerConfig.maxMargemEbitda, companyData.margemEbitda, 'Margem EBITDA', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minMargemLiquida, triggerConfig.maxMargemLiquida, companyData.margemLiquida, 'Margem Líquida', (v) => (v * 100).toFixed(2) + '%');
-
-  // Avaliar indicadores de liquidez
-  evaluateIndicator(triggerConfig.minLiquidezCorrente, triggerConfig.maxLiquidezCorrente, companyData.liquidezCorrente, 'Liquidez Corrente');
-  evaluateIndicator(triggerConfig.minLiquidezRapida, triggerConfig.maxLiquidezRapida, companyData.liquidezRapida, 'Liquidez Rápida');
-
-  // Avaliar indicadores de endividamento
-  evaluateIndicator(triggerConfig.minDividaLiquidaPl, triggerConfig.maxDividaLiquidaPl, companyData.dividaLiquidaPl, 'Dívida Líquida/PL');
-  evaluateIndicator(triggerConfig.minDividaLiquidaEbitda, triggerConfig.maxDividaLiquidaEbitda, companyData.dividaLiquidaEbitda, 'Dívida Líquida/EBITDA');
-  evaluateIndicator(triggerConfig.minDebtToEquity, triggerConfig.maxDebtToEquity, companyData.debtToEquity, 'Debt to Equity');
-
-  // Avaliar indicadores de eficiência
-  evaluateIndicator(triggerConfig.minGiroAtivos, triggerConfig.maxGiroAtivos, companyData.giroAtivos, 'Giro de Ativos');
-
-  // Avaliar indicadores de crescimento
-  evaluateIndicator(triggerConfig.minCagrLucros5a, triggerConfig.maxCagrLucros5a, companyData.cagrLucros5a, 'CAGR Lucros 5a', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minCagrReceitas5a, triggerConfig.maxCagrReceitas5a, companyData.cagrReceitas5a, 'CAGR Receitas 5a', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minCrescimentoLucros, triggerConfig.maxCrescimentoLucros, companyData.crescimentoLucros, 'Crescimento Lucros', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minCrescimentoReceitas, triggerConfig.maxCrescimentoReceitas, companyData.crescimentoReceitas, 'Crescimento Receitas', (v) => (v * 100).toFixed(2) + '%');
-
-  // Avaliar indicadores de dividendos
-  evaluateIndicator(triggerConfig.minPayout, triggerConfig.maxPayout, companyData.payout, 'Payout', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minDividendYield12m, triggerConfig.maxDividendYield12m, companyData.dividendYield12m, 'Dividend Yield 12m', (v) => (v * 100).toFixed(2) + '%');
-
-  // Avaliar indicadores de performance
-  evaluateIndicator(triggerConfig.minVariacao52Semanas, triggerConfig.maxVariacao52Semanas, companyData.variacao52Semanas, 'Variação 52 Semanas', (v) => (v * 100).toFixed(2) + '%');
-  evaluateIndicator(triggerConfig.minRetornoAnoAtual, triggerConfig.maxRetornoAnoAtual, companyData.retornoAnoAtual, 'Retorno Ano Atual', (v) => (v * 100).toFixed(2) + '%');
-
-  // Avaliar alertas de preço
-  if (triggerConfig.priceReached !== undefined && companyData.currentPrice !== undefined) {
-    // Considerar "atingiu" se estiver dentro de 1% do valor configurado
-    const tolerance = triggerConfig.priceReached * 0.01;
-    if (
-      Math.abs(companyData.currentPrice - triggerConfig.priceReached) <= tolerance
-    ) {
-      triggered = true;
-      reasons.push(`Preço (R$ ${companyData.currentPrice.toFixed(2)}) atingiu valor configurado (R$ ${triggerConfig.priceReached.toFixed(2)})`);
-    }
-  }
-
-  if (triggerConfig.priceBelow !== undefined && companyData.currentPrice !== undefined) {
-    if (companyData.currentPrice <= triggerConfig.priceBelow) {
-      triggered = true;
-      reasons.push(`Preço (R$ ${companyData.currentPrice.toFixed(2)}) está abaixo do valor configurado (R$ ${triggerConfig.priceBelow.toFixed(2)})`);
-    }
-  }
-
-  if (triggerConfig.priceAbove !== undefined && companyData.currentPrice !== undefined) {
-    if (companyData.currentPrice >= triggerConfig.priceAbove) {
-      triggered = true;
-      reasons.push(`Preço (R$ ${companyData.currentPrice.toFixed(2)}) está acima do valor configurado (R$ ${triggerConfig.priceAbove.toFixed(2)})`);
-    }
-  }
-
-  if (!triggered) {
-    return null;
-  }
+  const result = evaluateTriggerConfig(triggerConfig, context);
+  if (!result.triggered) return null;
 
   return {
     monitorId: monitor.id,
     companyId: monitor.companyId,
     ticker,
-    triggered,
-    reasons,
-    companyData,
+    triggered: true,
+    reasons: result.reasons,
+    companyData: { ...context.indicators, ...result.computed, currentPrice: price ?? undefined },
+    triggerConfig,
   };
 }
 
@@ -505,6 +724,7 @@ export async function createQueueEntry(
         monitorId,
         reasons: evaluation.reasons,
         companyData: evaluation.companyData,
+        ...(evaluation.triggerConfig ? { triggerConfig: triggerConfigToJson(evaluation.triggerConfig) } : {}),
       },
       status: 'PENDING',
       priority: 0,

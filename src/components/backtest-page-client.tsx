@@ -1,48 +1,32 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { BacktestConfigForm } from '@/components/backtest-config-form';
 import { BacktestResults } from '@/components/backtest-results';
 import { BacktestHistory } from '@/components/backtest-history';
 import { BacktestDataQualityPanel } from '@/components/backtest-data-quality-panel';
-import { BacktestWelcomeScreen } from '@/components/backtest-welcome-screen';
 import { BacktestConfigHistory } from '@/components/backtest-config-history';
-import { BacktestProgressIndicator } from '@/components/backtest-progress-indicator';
 import { BacktestLoadingOverlay } from '@/components/backtest-loading-overlay';
-import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useTracking } from '@/hooks/use-tracking';
 import { EventType } from '@/lib/tracking-types';
-import { 
-  TrendingUp, 
-  Settings, 
-  History, 
-  BarChart3,
-  AlertTriangle,
-  DollarSign
-} from 'lucide-react';
+import { formatDeltaPct } from '@/lib/format';
+import { cn } from '@/lib/utils';
+import { FilePlus2 } from 'lucide-react';
+import {
+  buildExampleConfig,
+  dateFromApi,
+  needsValidationReview,
+  type BacktestAssetInput,
+  type BacktestConfigInput,
+} from '@/app/backtest/backtest-utils';
 
-// Interfaces
-interface BacktestAsset {
-  ticker: string;
-  companyName?: string;
-  allocation: number;
-  averageDividendYield?: number; // DY médio dos últimos 5 anos (formato decimal, ex: 0.085 = 8.5%)
-}
-
-interface BacktestConfig {
-  name: string;
-  description?: string;
-  assets: BacktestAsset[];
-  startDate: Date;
-  endDate: Date;
-  initialCapital: number;
-  monthlyContribution: number;
-  rebalanceFrequency: 'monthly' | 'quarterly' | 'yearly';
-}
+type BacktestAsset = BacktestAssetInput;
+type BacktestConfig = BacktestConfigInput;
 
 interface BacktestResult {
   totalReturn: number;
@@ -54,8 +38,8 @@ interface BacktestResult {
   negativeMonths: number;
   totalInvested: number;
   finalValue: number;
-  finalCashReserve?: number; // Saldo de caixa final
-  totalDividendsReceived?: number; // Total de dividendos recebidos
+  finalCashReserve?: number;
+  totalDividendsReceived?: number;
   monthlyReturns: Array<{
     date: string;
     return: number;
@@ -99,347 +83,363 @@ interface DataValidation {
   recommendations: string[];
 }
 
-export function BacktestPageClient() {
+type TabValue = 'configure' | 'results' | 'history' | 'lista';
+const TABS: TabValue[] = ['configure', 'results', 'history', 'lista'];
+
+function toTab(view: string | null): TabValue {
+  return TABS.includes(view as TabValue) ? (view as TabValue) : 'configure';
+}
+
+// Resultado salvo no banco → formato usado pela tela de resultados
+function formatSavedResult(saved: any, config: { startDate: string | Date; endDate: string | Date }) {
+  return {
+    totalReturn: saved.totalReturn,
+    annualizedReturn: saved.annualizedReturn,
+    volatility: saved.volatility,
+    sharpeRatio: saved.sharpeRatio,
+    maxDrawdown: saved.maxDrawdown,
+    positiveMonths: saved.positiveMonths,
+    negativeMonths: saved.negativeMonths,
+    totalInvested: saved.totalInvested,
+    finalValue: saved.finalValue,
+    finalCashReserve: saved.finalCashReserve || 0,
+    totalDividendsReceived: saved.totalDividendsReceived || 0,
+    monthlyReturns: saved.monthlyReturns || [],
+    assetPerformance: saved.assetPerformance || [],
+    portfolioEvolution: saved.portfolioEvolution || [],
+    dataValidation: null,
+    dataQualityIssues: [],
+    effectiveStartDate: dateFromApi(config.startDate),
+    effectiveEndDate: dateFromApi(config.endDate),
+    actualInvestment: saved.totalInvested,
+    plannedInvestment: saved.totalInvested,
+    missedContributions: 0,
+    missedAmount: 0
+  };
+}
+
+// Preview de configuração (lista/API) → configuração do formulário
+function configFromPreview(preview: any, name = preview.name): BacktestConfig {
+  return {
+    name,
+    description: preview.description,
+    assets: preview.assets.map((asset: any) => ({
+      ticker: asset.ticker,
+      companyName: asset.ticker,
+      allocation: asset.targetAllocation,
+      averageDividendYield: asset.averageDividendYield
+    })),
+    startDate: dateFromApi(preview.startDate),
+    endDate: dateFromApi(preview.endDate),
+    initialCapital: preview.initialCapital ?? 10000,
+    monthlyContribution: preview.monthlyContribution,
+    rebalanceFrequency: preview.rebalanceFrequency
+  };
+}
+
+const SIDE_NOTES = [
+  'Rebalanceamento automático na frequência escolhida.',
+  'Aportes mensais regulares ou apenas o capital inicial.',
+  'Proventos simulados pelo DY médio informado, pagos em março, agosto e outubro e reinvestidos. Com o campo vazio, a simulação considera só a variação de preço.',
+  'Métricas: retorno total e anualizado, volatilidade, Sharpe, drawdown máximo e consistência mensal, com comparação com CDI e Ibovespa.',
+];
+
+interface BacktestPageClientProps {
+  /** Mês de referência da carteira de exemplo (calculado no servidor, fuso de Brasília), para o HTML do servidor e do navegador coincidirem. */
+  exampleMonth?: { year: number; month: number };
+}
+
+// Dados enviados para salvar/criar a configuração (mesmo formato no POST e no PUT)
+function toSaveParams(config: BacktestConfig) {
+  return {
+    name: config.name,
+    description: config.description,
+    assets: config.assets,
+    startDate: config.startDate.toISOString(),
+    endDate: config.endDate.toISOString(),
+    initialCapital: config.initialCapital,
+    monthlyContribution: config.monthlyContribution,
+    rebalanceFrequency: config.rebalanceFrequency
+  };
+}
+
+function savedIdOf(config: BacktestConfig | null): string | undefined {
+  const id = (config as any)?.id as string | undefined;
+  return id && !id.startsWith('temp-') ? id : undefined;
+}
+
+export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { trackEvent } = useTracking();
-  
-  // Ler estado da URL
-  const urlView = searchParams.get('view') || 'welcome'; // welcome, lista, configure, results, history
+
   const urlConfigId = searchParams.get('configId');
-  
-  const [activeTab, setActiveTab] = useState(urlView === 'welcome' ? 'configure' : urlView);
-  const [currentConfig, setCurrentConfig] = useState<BacktestConfig | null>(null);
+
+  const exampleYear = exampleMonth?.year;
+  const exampleMonthIndex = exampleMonth?.month;
+  const makeExample = useCallback(
+    () =>
+      buildExampleConfig(
+        exampleYear !== undefined && exampleMonthIndex !== undefined ? new Date(exampleYear, exampleMonthIndex, 1) : new Date()
+      ),
+    [exampleYear, exampleMonthIndex]
+  );
+
+  const [activeTab, setActiveTab] = useState<TabValue>(toTab(searchParams.get('view')));
+  // Sem configuração na URL, a ferramenta abre com a carteira de exemplo (roda sem nenhum ajuste)
+  const [currentConfig, setCurrentConfig] = useState<BacktestConfig | null>(() => (urlConfigId ? null : makeExample()));
   const [currentResult, setCurrentResult] = useState<BacktestResult | null>(null);
   const [currentTransactions, setCurrentTransactions] = useState<any[]>([]);
   const [dataValidation, setDataValidation] = useState<DataValidation | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showValidation, setShowValidation] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(urlView === 'welcome' || (!urlView && !urlConfigId));
   const [isLoadingResults, setIsLoadingResults] = useState(false);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+  // Muda a cada "Nova simulação": remonta o formulário sem erros nem textos da configuração anterior
+  const [formKey, setFormKey] = useState(0);
 
-  // Sincronizar URL com estado interno
-  useEffect(() => {
-    const view = searchParams.get('view');
-    const configId = searchParams.get('configId');
-    
-    if (view) {
-      setActiveTab(view);
-      setShowWelcome(false);
-    }
-    
-    if (configId) {
-      const shouldLoadResults = view === 'results';
-      
-      // Se é a mesma config e já tem resultado, não precisa carregar novamente
-      if (configId === (currentConfig as any)?.id && currentResult && shouldLoadResults) {
-        console.log('✅ Config e resultado já carregados, não precisa buscar novamente');
-        setIsLoadingResults(false);
-        return;
-      }
-      
-      // Limpar resultado anterior se estiver mudando para results e não tem resultado
-      if (shouldLoadResults && !currentResult) {
-        setIsLoadingResults(true);
-        setCurrentResult(null);
-      }
-      
-      // Se é a mesma config mas precisa carregar results, apenas carregar o resultado
-      if (configId === (currentConfig as any)?.id && shouldLoadResults && !currentResult) {
-        loadLatestResult(configId, currentConfig);
-      } 
-      // Se é config diferente, carregar tudo
-      else if (configId !== (currentConfig as any)?.id) {
-        loadConfigFromUrl(configId, shouldLoadResults);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
-  
-  // Scroll para o topo quando o componente for montado (apenas se não for para configure)
-  useEffect(() => {
-    if (urlView !== 'configure') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Função compartilhada para scroll suave até a área de configuração
-  const scrollToConfigure = useCallback(() => {
-    // Tentar encontrar o elemento específico do formulário primeiro (mais preciso)
-    let targetElement = document.getElementById('backtest-config-form-start');
-    
-    // Se não encontrar, usar o TabsContent como fallback
-    if (!targetElement) {
-      targetElement = document.getElementById('backtest-configure');
-    }
-    
-    if (targetElement) {
-      // Calcular offset aumentado para ficar mais para cima (descontar header fixo + tabs + barra de busca)
-      // Mobile: header + tabs + barra de busca + padding
-      // Desktop: header + tabs + barra de busca + padding
-      const offset = window.innerWidth < 768 ? 140 : 120;
-      const elementPosition = targetElement.getBoundingClientRect().top;
-      const offsetPosition = Math.max(0, elementPosition + window.pageYOffset - offset);
-
-      // Usar requestAnimationFrame para garantir que o scroll seja suave mesmo quando já está na página
-      requestAnimationFrame(() => {
-        window.scrollTo({
-          top: offsetPosition,
-          behavior: 'smooth'
-        });
-      });
-    }
-  }, []);
-
-  // Scroll para área de configuração quando view=configure for detectado ou hash presente
-  useEffect(() => {
-    // Se tem hash #backtest-configure na URL, sempre fazer scroll
-    if (window.location.hash === '#backtest-configure') {
-      // Delay maior quando já está na página para garantir renderização completa
-      setTimeout(scrollToConfigure, 100);
-      // Remover hash após scroll para não interferir em navegação futura
-      setTimeout(() => {
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
-      }, 2000);
-    }
-    // Se está na aba configure, também fazer scroll
-    else if (activeTab === 'configure' && urlView === 'configure') {
-      setTimeout(scrollToConfigure, 300);
-    }
-  }, [activeTab, urlView, scrollToConfigure]);
-
-  // Escutar mudanças no hash da URL (para quando usuário já está na página e clica no link)
-  useEffect(() => {
-    const handleHashChange = () => {
-      if (window.location.hash === '#backtest-configure') {
-        // Pequeno delay para garantir que o DOM está pronto
-        setTimeout(scrollToConfigure, 100);
-        // Remover hash após scroll
-        setTimeout(() => {
-          window.history.replaceState(null, '', window.location.pathname + window.location.search);
-        }, 2000);
-      }
-    };
-
-    // Escutar eventos de hashchange
-    window.addEventListener('hashchange', handleHashChange);
-    
-    // Verificar hash inicial também (quando já está na página com hash)
-    if (window.location.hash === '#backtest-configure') {
-      handleHashChange();
-    }
-
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-    };
-  }, [scrollToConfigure]);
-
-  // Função auxiliar para atualizar URL
-  const updateUrl = useCallback((view?: string, configId?: string) => {
+  const updateUrl = useCallback((view?: TabValue, configId?: string) => {
     const params = new URLSearchParams();
-    if (view && view !== 'welcome') params.set('view', view);
-    if (configId) params.set('configId', configId);
-    
+    if (view && view !== 'configure') params.set('view', view);
+    if (configId && !configId.startsWith('temp-')) params.set('configId', configId);
     const query = params.toString();
     router.push(`/backtest${query ? `?${query}` : ''}`, { scroll: false });
   }, [router]);
-  
-  // Carregar config da URL
-  const loadConfigFromUrl = async (configId: string, loadResults = false) => {
+
+  const selectTab = useCallback((tab: TabValue) => {
+    setActiveTab(tab);
+    updateUrl(tab, (currentConfig as any)?.id);
+  }, [currentConfig, updateUrl]);
+
+  // Busca a configuração (e o último resultado) quando a URL traz um configId
+  const loadConfigFromUrl = async (configId: string, loadResults: boolean) => {
     try {
-      setIsLoadingConfig(true);
-      if (loadResults) {
-        setIsLoadingResults(true);
-      }
-      
+      setIsLoadingConfig(!loadResults);
+      if (loadResults) setIsLoadingResults(true);
+
       const response = await fetch(`/api/backtest/configs/${configId}`);
-      if (!response.ok) {
-        setIsLoadingResults(false);
-        return;
-      }
-      
+      if (!response.ok) return;
+
       const data = await response.json();
-      const loadedConfig: BacktestConfig = {
-        name: data.config.name,
-        description: data.config.description,
-        assets: data.config.assets.map((asset: any) => ({
-          ticker: asset.ticker,
-          companyName: asset.ticker,
-          allocation: asset.targetAllocation,
-          averageDividendYield: asset.averageDividendYield
-        })),
-        startDate: new Date(data.config.startDate),
-        endDate: new Date(data.config.endDate),
-        initialCapital: data.config.initialCapital,
-        monthlyContribution: data.config.monthlyContribution,
-        rebalanceFrequency: data.config.rebalanceFrequency
-      };
+      const loadedConfig = configFromPreview(data.config);
       (loadedConfig as any).id = configId;
       setCurrentConfig(loadedConfig);
-      
-      // Se deve carregar resultados, buscar o último resultado
+
       if (loadResults) {
-        await loadLatestResult(configId, data.config);
+        const latest = data.config?.results?.[0];
+        setCurrentResult(latest ? formatSavedResult(latest, data.config) : null);
+        setCurrentTransactions(latest ? data.config.transactions || [] : []);
       }
     } catch (error) {
-      console.error('Erro ao carregar config da URL:', error);
-      setIsLoadingResults(false);
+      console.error('Erro ao carregar configuração da URL:', error);
     } finally {
       setIsLoadingConfig(false);
-    }
-  };
-  
-  // Carregar último resultado de uma config
-  const loadLatestResult = async (configId: string, config: any) => {
-    try {
-      setIsLoadingResults(true);
-      
-      // Buscar resultados específicos da config
-      const response = await fetch(`/api/backtest/configs/${configId}`);
-      if (!response.ok) {
-        setIsLoadingResults(false);
-        return;
-      }
-      
-      const data = await response.json();
-      const configWithResults = data.config;
-      
-      console.log('📊 Carregando resultados para config:', configId);
-      console.log('🔍 Resultados encontrados:', configWithResults?.results?.length || 0);
-      
-      if (configWithResults?.results && configWithResults.results.length > 0) {
-        const latestResult = configWithResults.results[0];
-        
-        const formattedResult = {
-          totalReturn: latestResult.totalReturn,
-          annualizedReturn: latestResult.annualizedReturn,
-          volatility: latestResult.volatility,
-          sharpeRatio: latestResult.sharpeRatio,
-          maxDrawdown: latestResult.maxDrawdown,
-          positiveMonths: latestResult.positiveMonths,
-          negativeMonths: latestResult.negativeMonths,
-          totalInvested: latestResult.totalInvested,
-          finalValue: latestResult.finalValue,
-          finalCashReserve: latestResult.finalCashReserve || 0,
-          totalDividendsReceived: latestResult.totalDividendsReceived || 0,
-          monthlyReturns: latestResult.monthlyReturns || [],
-          assetPerformance: latestResult.assetPerformance || [],
-          portfolioEvolution: latestResult.portfolioEvolution || [],
-          dataValidation: null,
-          dataQualityIssues: [],
-          effectiveStartDate: new Date(config.startDate),
-          effectiveEndDate: new Date(config.endDate),
-          actualInvestment: latestResult.totalInvested,
-          plannedInvestment: latestResult.totalInvested,
-          missedContributions: 0,
-          missedAmount: 0
-        };
-        
-        console.log('✅ Resultado formatado e setado no estado');
-        setCurrentResult(formattedResult);
-        setCurrentTransactions(configWithResults.transactions || []);
-      } else {
-        console.log('⚠️ Nenhum resultado encontrado para esta config');
-        setCurrentResult(null);
-        setCurrentTransactions([]);
-      }
-    } catch (error) {
-      console.error('❌ Erro ao carregar resultado:', error);
-      setCurrentResult(null);
-      setCurrentTransactions([]);
-    } finally {
       setIsLoadingResults(false);
     }
   };
 
-  // Carregar ativos pré-configurados do localStorage
+  // Volta a uma simulação nova (carteira de exemplo, sem vínculo com configuração salva)
+  const resetToExample = useCallback(() => {
+    setCurrentConfig(makeExample());
+    setCurrentResult(null);
+    setCurrentTransactions([]);
+    setDataValidation(null);
+    setIsLoadingResults(false);
+    setFormKey(key => key + 1);
+  }, [makeExample]);
+
+  const startNewSimulation = () => {
+    resetToExample();
+    setActiveTab('configure');
+    router.push('/backtest', { scroll: false });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Voltar/avançar do navegador não deve descartar a configuração em edição
+  const isHistoryNavigationRef = useRef(false);
   useEffect(() => {
-    const preconfiguredAssets = localStorage.getItem('backtest-preconfigured-assets');
-    if (preconfiguredAssets) {
-      try {
-        const assets = JSON.parse(preconfiguredAssets);
-        console.log('📊 Carregando ativos pré-configurados:', assets);
-        
-        // Processar ativos para o formato esperado
-        const processedAssets: BacktestAsset[] = assets.map((asset: any) => ({
+    const markHistoryNavigation = () => {
+      isHistoryNavigationRef.current = true;
+    };
+    window.addEventListener('popstate', markHistoryNavigation);
+    return () => window.removeEventListener('popstate', markHistoryNavigation);
+  }, []);
+
+  // Sincroniza a aba e a configuração com a URL (voltar/avançar e links diretos)
+  useEffect(() => {
+    const view = searchParams.get('view');
+    const configId = searchParams.get('configId');
+    const isHistoryNavigation = isHistoryNavigationRef.current;
+    isHistoryNavigationRef.current = false;
+    setActiveTab(toTab(view));
+
+    if (!configId) {
+      // Link para /backtest sem configId (menu, rodapé): abre uma simulação nova em vez de editar a salva
+      if (!isHistoryNavigation && savedIdOf(currentConfig)) resetToExample();
+      return;
+    }
+    const shouldLoadResults = view === 'results';
+    const sameConfig = configId === (currentConfig as any)?.id;
+    if (sameConfig && (!shouldLoadResults || currentResult)) return;
+    loadConfigFromUrl(configId, shouldLoadResults);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Ativos enviados por outras telas ("Adicionar ao backtest") substituem a carteira de exemplo
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem('backtest-preconfigured-assets');
+    } catch {
+      return;
+    }
+    if (!stored) return;
+
+    try {
+      const assets = JSON.parse(stored) as Array<{ ticker: string; companyName?: string }>;
+      if (assets.length > 0) {
+        const processedAssets: BacktestAsset[] = assets.map(asset => ({
           ticker: asset.ticker,
           companyName: asset.companyName,
-          allocation: 1 / assets.length // Distribuir igualmente inicialmente
+          allocation: 1 / assets.length
         }));
-
-        // Criar configuração inicial
-        const initialConfig: BacktestConfig = {
-          name: 'Carteira Personalizada',
+        const example = makeExample();
+        setCurrentConfig({
+          ...example,
+          name: 'Carteira personalizada',
           description: 'Carteira criada a partir de ativos selecionados',
           assets: processedAssets,
-          startDate: new Date(new Date().getFullYear() - 3, 0, 1), // 3 anos atrás
-          endDate: new Date(),
-          initialCapital: 10000,
-          monthlyContribution: 1000,
-          rebalanceFrequency: 'monthly'
-        };
-
-        setCurrentConfig(initialConfig);
-        setShowWelcome(false); // Pular tela de boas-vindas se há ativos pré-configurados
-        
-        // Limpar localStorage após usar
+          monthlyContribution: 1000
+        });
+        setActiveTab('configure');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar ativos pré-configurados:', error);
+    } finally {
+      try {
         localStorage.removeItem('backtest-preconfigured-assets');
-        
-      } catch (error) {
-        console.error('Erro ao carregar ativos pré-configurados:', error);
-        localStorage.removeItem('backtest-preconfigured-assets');
+      } catch {
+        // armazenamento indisponível: nada a limpar
       }
     }
-  }, []);
+  }, [makeExample]);
 
   const handleConfigChange = useCallback((config: BacktestConfig) => {
     setCurrentConfig(prev => {
-      // Evitar atualizações desnecessárias se o config for igual
-      if (prev && JSON.stringify(prev) === JSON.stringify(config)) {
-        return prev;
-      }
-      
-      // IMPORTANTE: Preservar o ID da configuração original se existir
       const updatedConfig = { ...config };
-      if (prev && (prev as any).id) {
-        (updatedConfig as any).id = (prev as any).id;
-        console.log('🔄 handleConfigChange - Preservando ID:', (prev as any).id);
-      }
-      
-      // Verificar se houve mudança real nos dados da configuração
-      const prevWithoutId = prev ? { ...prev } : null;
-      if (prevWithoutId) delete (prevWithoutId as any).id;
-      
-      const configWithoutId = { ...config };
-      delete (configWithoutId as any).id;
-      
-      const hasRealChange = !prev || JSON.stringify(prevWithoutId) !== JSON.stringify(configWithoutId);
-      
-      if (hasRealChange) {
-        console.log('🔄 handleConfigChange - Mudança real detectada, limpando resultado');
-        // Só limpar resultado se houve mudança real na configuração
+      const prevId = (prev as any)?.id;
+      const nextId = (config as any).id;
+      if (!nextId && prevId) (updatedConfig as any).id = prevId;
+
+      const strip = (value: BacktestConfig | null) => {
+        if (!value) return null;
+        const copy = { ...value };
+        delete (copy as any).id;
+        return JSON.stringify(copy);
+      };
+
+      if (!prev || strip(prev) !== strip(config)) {
+        // Mudou a configuração: o resultado anterior deixa de valer
         setCurrentResult(null);
-      } else {
-        console.log('🔄 handleConfigChange - Sem mudança real, mantendo resultado');
       }
-      
       return updatedConfig;
     });
-    
     setDataValidation(null);
-    setShowValidation(false);
   }, []);
 
-  const handleValidateData = async (config: BacktestConfig) => {
+  const executeBacktest = async (config: BacktestConfig) => {
+    setIsRunning(true);
+    try {
+      const params = {
+        assets: config.assets,
+        startDate: config.startDate.toISOString(),
+        endDate: config.endDate.toISOString(),
+        initialCapital: config.initialCapital,
+        monthlyContribution: config.monthlyContribution,
+        rebalanceFrequency: config.rebalanceFrequency
+      };
+      let savedId = savedIdOf(config);
+
+      // Carteira ainda não salva: grava antes com o nome do formulário. Sem isso a execução cria uma
+      // configuração "Backtest <data>" e o nome exibido nos resultados não bate com Minhas configurações.
+      if (!savedId) {
+        try {
+          const saveResponse = await fetch('/api/backtest/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(toSaveParams(config))
+          });
+          if (saveResponse.ok) savedId = (await saveResponse.json()).configId || undefined;
+        } catch (error) {
+          console.error('Erro ao salvar a configuração antes da execução:', error);
+        }
+      }
+
+      const response = await fetch('/api/backtest/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(savedId ? { configId: savedId, params } : { params })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao executar o backtest');
+      }
+
+      const data = await response.json();
+      const configId: string | undefined = data.configId || savedId;
+      setCurrentResult(data.result);
+
+      trackEvent(EventType.BACKTEST_RUN, undefined, {
+        assetCount: config.assets.length,
+        startDate: config.startDate.toISOString(),
+        endDate: config.endDate.toISOString(),
+        initialCapital: config.initialCapital,
+        monthlyContribution: config.monthlyContribution,
+        rebalanceFrequency: config.rebalanceFrequency,
+        configId,
+      });
+
+      if (configId && configId !== savedIdOf(config)) {
+        setCurrentConfig({ ...config, id: configId } as BacktestConfig);
+      }
+
+      const transactions: any[] = [];
+      for (const monthData of data.result.monthlyHistory ?? []) {
+        for (const transaction of monthData.transactions) {
+          transactions.push({
+            ...transaction,
+            totalContribution: monthData.totalContribution,
+            portfolioValue: monthData.portfolioValue,
+            cashBalance: transaction.cashBalance || monthData.cashBalance
+          });
+        }
+      }
+      setCurrentTransactions(transactions);
+
+      setActiveTab('results');
+      updateUrl('results', configId);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (error) {
+      console.error('Erro no backtest:', error);
+      toast({
+        title: 'Erro ao executar o backtest',
+        description: error instanceof Error ? error.message : 'Tente novamente em instantes.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  // Valida os dados históricos; só abre a janela de revisão quando há avisos ou dados insuficientes
+  const handleRunBacktest = async (config: BacktestConfig) => {
     if (!config.assets.length) return;
 
+    setIsRunning(true);
+    let validation: DataValidation;
     try {
-      setIsRunning(true);
-      
       const response = await fetch('/api/backtest/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -452,141 +452,33 @@ export function BacktestPageClient() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Erro ao validar dados');
+        throw new Error(error.error || 'Erro ao validar os dados');
       }
 
-      const data = await response.json();
-      setDataValidation(data.validation);
-      setShowValidation(true);
-      
+      validation = (await response.json()).validation;
     } catch (error) {
       console.error('Erro na validação:', error);
       toast({
-        title: "Erro na validação",
-        description: error instanceof Error ? error.message : 'Erro ao validar dados',
-        variant: "destructive"
+        title: 'Erro na validação',
+        description: error instanceof Error ? error.message : 'Erro ao validar os dados',
+        variant: 'destructive'
       });
-    } finally {
       setIsRunning(false);
+      return;
     }
-  };
 
-  const handleRunBacktest = async (config: BacktestConfig, skipValidation = false) => {
-    if (!config.assets.length) return;
-
-    try {
-      setIsRunning(true);
-      
-      // Validar dados primeiro se não foi pulado
-      if (!skipValidation) {
-        await handleValidateData(config);
-        return;
-      }
-
-      // Sempre enviar os parâmetros atuais da tela
-      const params = {
-        assets: config.assets,
-        startDate: config.startDate.toISOString(),
-        endDate: config.endDate.toISOString(),
-        initialCapital: config.initialCapital,
-        monthlyContribution: config.monthlyContribution,
-        rebalanceFrequency: config.rebalanceFrequency
-      };
-
-      // Se há configId, enviar junto com os parâmetros para atualizar a config
-      const requestBody = (config as any).id ? {
-        configId: (config as any).id,
-        params: params
-      } : {
-        params: params
-      };
-
-      const response = await fetch('/api/backtest/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Erro ao executar backtesting');
-      }
-
-      const data = await response.json();
-      console.log('🔍 BacktestPageClient - Resultado recebido:', data.result);
-      console.log('🔍 BacktestPageClient - configId usado:', (config as any).id);
-      console.log('🔍 BacktestPageClient - configId retornado:', data.configId);
-      setCurrentResult(data.result);
-      
-      // Track evento de execução de backtest
-      trackEvent(EventType.BACKTEST_RUN, undefined, {
-        assetCount: config.assets.length,
-        startDate: config.startDate.toISOString(),
-        endDate: config.endDate.toISOString(),
-        initialCapital: config.initialCapital,
-        monthlyContribution: config.monthlyContribution,
-        rebalanceFrequency: config.rebalanceFrequency,
-        configId: data.configId || (config as any).id,
-      });
-      
-      // IMPORTANTE: Atualizar o currentConfig com o configId retornado se não tinha antes
-      if (!((config as any).id) && data.configId) {
-        console.log('🔄 Atualizando config com novo ID:', data.configId);
-        const updatedConfig = { ...config, id: data.configId };
-        setCurrentConfig(updatedConfig as BacktestConfig);
-      }
-      
-      // 🎯 MELHORIA UX: Auto-redirect para aba de resultados após sucesso
-      setTimeout(() => {
-        const configId = data.configId || (config as any).id;
-        updateUrl('results', configId);
-        setActiveTab('results');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 500);
-      
-      // Extrair transações do monthlyHistory se disponível
-      if (data.result.monthlyHistory) {
-        const transactions = [];
-        for (const monthData of data.result.monthlyHistory) {
-          for (const transaction of monthData.transactions) {
-            transactions.push({
-              ...transaction,
-              totalContribution: monthData.totalContribution,
-              portfolioValue: monthData.portfolioValue,
-              cashBalance: (transaction as any).cashBalance || monthData.cashBalance // Usar saldo progressivo da transação
-            });
-          }
-        }
-        setCurrentTransactions(transactions);
-        console.log('🔍 Transações extraídas do resultado direto:', transactions.length);
-      } else {
-        setCurrentTransactions([]);
-      }
-      
-      setActiveTab('results');
-      
-    } catch (error) {
-      console.error('Erro no backtesting:', error);
-      toast({
-        title: "Erro ao executar backtest",
-        description: error instanceof Error ? error.message : 'Erro ao executar backtesting',
-        variant: "destructive"
-      });
-    } finally {
+    if (needsValidationReview(validation, config)) {
+      setDataValidation(validation);
       setIsRunning(false);
+      return;
     }
+
+    await executeBacktest(config);
   };
 
   const handleAcceptValidation = () => {
-    if (currentConfig) {
-      setShowValidation(false);
-      handleRunBacktest(currentConfig, true);
-    }
-  };
-
-  const handleCancelValidation = () => {
-    setShowValidation(false);
     setDataValidation(null);
+    if (currentConfig) executeBacktest(currentConfig);
   };
 
   const handleSaveConfig = async (config: BacktestConfig) => {
@@ -594,56 +486,31 @@ export function BacktestPageClient() {
 
     try {
       setIsSaving(true);
-      
-      const params = {
-        name: config.name,
-        description: config.description,
-        assets: config.assets,
-        startDate: config.startDate.toISOString(),
-        endDate: config.endDate.toISOString(),
-        initialCapital: config.initialCapital,
-        monthlyContribution: config.monthlyContribution,
-        rebalanceFrequency: config.rebalanceFrequency
-      };
-
-      // Se há configId, é uma atualização, senão é criação
-      const endpoint = (config as any).id 
-        ? `/api/backtest/configs/${(config as any).id}`
-        : '/api/backtest/config';
-      
-      const method = (config as any).id ? 'PUT' : 'POST';
-
-      const response = await fetch(endpoint, {
-        method,
+      const params = toSaveParams(config);
+      const savedId = savedIdOf(config);
+      const response = await fetch(savedId ? `/api/backtest/configs/${savedId}` : '/api/backtest/config', {
+        method: savedId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params)
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Erro ao salvar configuração');
+        throw new Error(error.error || 'Erro ao salvar a configuração');
       }
 
       const data = await response.json();
-      
-      // Atualizar o currentConfig com o configId retornado
-      if (!((config as any).id) && data.configId) {
-        console.log('🔄 Configuração salva com ID:', data.configId);
-        const updatedConfig = { ...config, id: data.configId };
-        setCurrentConfig(updatedConfig as BacktestConfig);
+      if (!savedId && data.configId) {
+        setCurrentConfig({ ...config, id: data.configId } as BacktestConfig);
       }
-      
-      toast({
-        title: "Configuração salva!",
-        description: "Suas configurações foram salvas com sucesso."
-      });
-      
+
+      toast({ title: 'Configuração salva', description: 'Ela aparece em Minhas configurações.' });
     } catch (error) {
       console.error('Erro ao salvar configuração:', error);
       toast({
-        title: "Erro ao salvar",
-        description: error instanceof Error ? error.message : 'Erro ao salvar configuração',
-        variant: "destructive"
+        title: 'Erro ao salvar',
+        description: error instanceof Error ? error.message : 'Erro ao salvar a configuração',
+        variant: 'destructive'
       });
     } finally {
       setIsSaving(false);
@@ -651,150 +518,17 @@ export function BacktestPageClient() {
   };
 
   const handleShowDetails = useCallback((result: any, config: any, transactions?: any[]) => {
-    console.log('🔍 handleShowDetails - Transações recebidas:', transactions?.length || 0);
-    console.log('📋 Primeira transação:', transactions?.[0] || 'Nenhuma');
-    console.log('✅ Dados já carregados da lista, não precisa buscar novamente');
-    
     setCurrentResult(result);
     setCurrentConfig(config);
     setCurrentTransactions(transactions || []);
-    setShowWelcome(false);
-    setIsLoadingResults(false); // Garantir que não está em loading
-    updateUrl('results', config.id);
+    setIsLoadingResults(false);
     setActiveTab('results');
+    updateUrl('results', config.id);
   }, [updateUrl]);
 
-  // Handlers para a tela de boas-vindas
-  const handleCreateNew = useCallback(() => {
-    setShowWelcome(false);
-    setCurrentConfig(null);
-    setCurrentResult(null);
-    setCurrentTransactions([]);
-    updateUrl('configure');
-    setActiveTab('configure');
-  }, [updateUrl]);
-  
-  const handleViewList = useCallback(() => {
-    setShowWelcome(false);
-    updateUrl('lista');
-    setActiveTab('lista');
-  }, [updateUrl]);
-
-  const handleSelectExisting = useCallback(async (configPreview: any) => {
-    try {
-      console.log('🔍 handleSelectExisting - Config:', configPreview.name, 'hasResults:', configPreview.hasResults);
-      
-      // Converter preview para formato completo
-      const fullConfig: BacktestConfig = {
-        name: configPreview.name,
-        description: configPreview.description,
-        assets: configPreview.assets.map((asset: any) => ({
-          ticker: asset.ticker,
-          companyName: asset.ticker, // Fallback
-          allocation: asset.targetAllocation,
-          averageDividendYield: asset.averageDividendYield
-        })),
-        startDate: new Date(configPreview.startDate),
-        endDate: new Date(configPreview.endDate),
-        initialCapital: configPreview.initialCapital || 10000,
-        monthlyContribution: configPreview.monthlyContribution,
-        rebalanceFrequency: configPreview.rebalanceFrequency as 'monthly' | 'quarterly' | 'yearly'
-      };
-
-      // Adicionar ID da config para permitir updates em vez de criar nova
-      (fullConfig as any).id = configPreview.id;
-
-      setCurrentConfig(fullConfig);
-      setShowWelcome(false);
-
-      // Se a config tem resultados, mostrar o último resultado e ir para aba de resultados
-      if (configPreview.hasResults && configPreview.results && configPreview.results.length > 0) {
-        console.log('✅ Config tem resultados, carregando último resultado...');
-        // Pegar o primeiro resultado (mais recente, pois está ordenado desc)
-        const latestResult = configPreview.results[0];
-        
-        // Converter para formato esperado pelo componente
-        const formattedResult = {
-          totalReturn: latestResult.totalReturn,
-          annualizedReturn: latestResult.annualizedReturn,
-          volatility: latestResult.volatility,
-          sharpeRatio: latestResult.sharpeRatio,
-          maxDrawdown: latestResult.maxDrawdown,
-          positiveMonths: latestResult.positiveMonths,
-          negativeMonths: latestResult.negativeMonths,
-          totalInvested: latestResult.totalInvested,
-          finalValue: latestResult.finalValue,
-          finalCashReserve: latestResult.finalCashReserve || 0,
-          totalDividendsReceived: latestResult.totalDividendsReceived || 0,
-          monthlyReturns: latestResult.monthlyReturns || [],
-          assetPerformance: latestResult.assetPerformance || [],
-          portfolioEvolution: latestResult.portfolioEvolution || [],
-          // Campos opcionais com valores padrão
-          dataValidation: null,
-          dataQualityIssues: [],
-          effectiveStartDate: new Date(configPreview.startDate),
-          effectiveEndDate: new Date(configPreview.endDate),
-          actualInvestment: latestResult.totalInvested,
-          plannedInvestment: latestResult.totalInvested,
-          missedContributions: 0,
-          missedAmount: 0
-        };
-
-        setCurrentResult(formattedResult);
-        setCurrentTransactions(configPreview.transactions || []);
-        updateUrl('results', configPreview.id);
-        setActiveTab('results');
-        console.log('✅ Resultado carregado, indo para aba Results');
-      } else {
-        console.log('⚠️ Config não tem resultados, indo para aba Configure');
-        // Se não tem resultados, ir para configuração
-        setCurrentResult(null);
-        setCurrentTransactions([]);
-        updateUrl('configure', configPreview.id);
-        setActiveTab('configure');
-      }
-    } catch (error) {
-      console.error('Erro ao carregar configuração:', error);
-      toast({
-        title: "Erro ao carregar",
-        description: "Não foi possível carregar a configuração selecionada",
-        variant: "destructive"
-      });
-    }
-  }, [updateUrl, toast]);
-
-  const handleUseAsBase = useCallback((configPreview: any) => {
-    // Converter preview para formato completo (similar ao handleSelectExisting)
-    const fullConfig: BacktestConfig = {
-      name: `${configPreview.name} (Cópia)`,
-      description: configPreview.description,
-      assets: configPreview.assets.map((asset: any) => ({
-        ticker: asset.ticker,
-        companyName: asset.ticker, // Fallback
-        allocation: asset.targetAllocation,
-        averageDividendYield: asset.averageDividendYield
-      })),
-      startDate: new Date(configPreview.startDate),
-      endDate: new Date(configPreview.endDate),
-      initialCapital: configPreview.initialCapital || 10000,
-      monthlyContribution: configPreview.monthlyContribution,
-      rebalanceFrequency: configPreview.rebalanceFrequency as 'monthly' | 'quarterly' | 'yearly'
-    };
-
-    // Não adicionar ID para que seja tratada como nova configuração
-    setCurrentConfig(fullConfig);
-    setCurrentResult(null);
-    setCurrentTransactions([]);
-    setShowWelcome(false);
-    updateUrl('configure');
-    setActiveTab('configure');
-  }, [updateUrl]);
-
-  // Estabilizar initialConfig para evitar re-renders desnecessários
+  // Referência estável para o formulário (preserva o id da configuração)
   const stableInitialConfig = useMemo(() => {
     if (!currentConfig) return null;
-    
-    // Criar uma cópia estável do config PRESERVANDO O ID
     const stableConfig: any = {
       name: currentConfig.name,
       description: currentConfig.description,
@@ -805,338 +539,131 @@ export function BacktestPageClient() {
       monthlyContribution: currentConfig.monthlyContribution,
       rebalanceFrequency: currentConfig.rebalanceFrequency
     };
-    
-    // Preservar ID se existir
-    if ((currentConfig as any).id) {
-      stableConfig.id = (currentConfig as any).id;
-    }
-    
-    return stableConfig;
+    if ((currentConfig as any).id) stableConfig.id = (currentConfig as any).id;
+    return stableConfig as BacktestConfig;
   }, [currentConfig]);
 
-  // Mostrar tela de boas-vindas quando showWelcome é true
-  if (showWelcome) {
-    return (
-      <BacktestWelcomeScreen
-        onCreateNew={handleCreateNew}
-        onSelectExisting={handleSelectExisting}
-        onUseAsBase={handleUseAsBase}
-        onViewList={handleViewList}
-      />
-    );
-  }
+  const savedConfigId = savedIdOf(currentConfig);
 
   return (
     <>
-      {/* Loading Overlay Fullscreen */}
       {isLoadingConfig && (
-        <BacktestLoadingOverlay
-          title="Carregando configuração..."
-          description="Buscando dados da configuração de backtest"
-        />
+        <BacktestLoadingOverlay title="Carregando configuração" description="Buscando os dados da configuração salva" />
       )}
-      
-    <div className="space-y-6">
-      {/* Status Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500 rounded-lg">
-                <Settings className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                  Configuração
-                </p>
-                <p className="text-xs text-blue-600 dark:text-blue-300">
-                  {currentConfig ? `${currentConfig.assets.length} ativos` : 'Não configurado'}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card className="border-green-200 bg-green-50 dark:bg-green-950/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-500 rounded-lg">
-                <BarChart3 className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                  Simulação
-                </p>
-                <p className="text-xs text-green-600 dark:text-green-300">
-                  {currentResult ? 'Concluída' : 'Pendente'}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-purple-200 bg-purple-50 dark:bg-purple-950/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-500 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-purple-800 dark:text-purple-200">
-                  Retorno
-                </p>
-                <p className="text-xs text-purple-600 dark:text-purple-300">
-                  {currentResult ? 
-                    `${(currentResult.totalReturn * 100).toFixed(1)}%` : 
-                    'N/A'
-                  }
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Modal de Validação de Dados */}
-      {showValidation && dataValidation && (
+      {dataValidation && (
         <BacktestDataQualityPanel
           validation={dataValidation}
+          requested={currentConfig ?? makeExample()}
           onAccept={handleAcceptValidation}
-          onCancel={handleCancelValidation}
+          onCancel={() => setDataValidation(null)}
         />
       )}
 
-      {/* Main Content Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 -mx-4 sm:mx-0 px-4 sm:px-0">
-          <div className="overflow-x-auto pb-2 -mx-4 sm:mx-0 px-4 sm:px-0">
-            <TabsList className="inline-flex h-10 min-w-max w-full sm:w-auto items-center justify-start rounded-md bg-muted p-1 text-muted-foreground">
-              <TabsTrigger 
-                value="lista" 
-                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0"
-                onClick={() => updateUrl('lista')}
+      <Tabs value={activeTab} onValueChange={(value) => selectTab(value as TabValue)} className="gap-6">
+        <TabsList variant="underline">
+          <TabsTrigger value="configure">Configurar</TabsTrigger>
+          <TabsTrigger value="results" disabled={!currentResult && !isLoadingResults}>
+            Resultados
+            {currentResult && (
+              <span
+                className={cn(
+                  'text-xs tabular-nums',
+                  currentResult.totalReturn > 0 ? 'text-positive' : currentResult.totalReturn < 0 ? 'text-negative' : 'text-muted-foreground'
+                )}
               >
-                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Minhas Configurações</span>
-                <span className="sm:hidden">Configs</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="configure" 
-                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0"
-                onClick={() => updateUrl('configure', (currentConfig as any)?.id)}
-              >
-                <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Configurar</span>
-                <span className="sm:hidden">Config</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="results" 
-                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0" 
-                disabled={!currentResult}
-                onClick={() => updateUrl('results', (currentConfig as any)?.id)}
-              >
-                <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Resultados</span>
-                <span className="sm:hidden">Result</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="history" 
-                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap flex-shrink-0"
-                onClick={() => updateUrl('history', (currentConfig as any)?.id)}
-              >
-                <History className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Execuções</span>
-                <span className="sm:hidden">Execuções</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
-        </div>
+                {formatDeltaPct(currentResult.totalReturn)}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="history">Execuções</TabsTrigger>
+          <TabsTrigger value="lista">Minhas configurações</TabsTrigger>
+        </TabsList>
 
-        {/* Lista de Configurações */}
-        <TabsContent value="lista">
-          <BacktestHistory 
-            onShowDetails={handleShowDetails}
-          />
-        </TabsContent>
-
-        {/* Configuração */}
-        <TabsContent value="configure" id="backtest-configure" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Formulário de Configuração */}
-            <div className="lg:col-span-2">
-              <BacktestConfigForm
-                initialConfig={stableInitialConfig}
-                onConfigChange={handleConfigChange}
-                onRunBacktest={handleRunBacktest}
-                onSaveConfig={handleSaveConfig}
-                isRunning={isRunning}
-                isSaving={isSaving}
-              />
+        <TabsContent value="configure" id="backtest-configure" className="space-y-4">
+          {savedConfigId && currentConfig && (
+            <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="min-w-0 text-sm text-muted-foreground">
+                Editando <span className="font-medium text-foreground">{currentConfig.name}</span>, salva em Minhas configurações.
+                Mudanças nos ativos são gravadas nela.
+              </p>
+              <Button variant="outline" size="sm" onClick={startNewSimulation} className="shrink-0">
+                <FilePlus2 strokeWidth={1.75} aria-hidden="true" />
+                Nova simulação
+              </Button>
             </div>
+          )}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            <BacktestConfigForm
+              key={formKey}
+              initialConfig={stableInitialConfig}
+              onConfigChange={handleConfigChange}
+              onRunBacktest={handleRunBacktest}
+              onSaveConfig={handleSaveConfig}
+              isRunning={isRunning}
+              isSaving={isSaving}
+            />
 
-            {/* Painel Lateral de Informações */}
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-500" />
-                    Importante
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800 flex items-start gap-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-amber-800 dark:text-amber-200">
-                      <strong>Aviso:</strong> Resultados passados não garantem resultados futuros. 
-                      Use o backtesting como ferramenta de análise, não como previsão.
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Settings className="w-4 h-4" />
-                      <h4 className="font-semibold">Como funciona:</h4>
-                    </div>
-                    <ul className="space-y-1 text-xs text-muted-foreground">
-                      <li>• Simula aportes mensais regulares ou <strong>apenas capital inicial</strong></li>
-                      <li>• <strong>Rebalanceamento mensal automático</strong> da carteira</li>
-                      <li>• Calcula métricas de risco e retorno</li>
-                      <li>• Considera dados históricos reais</li>
-                      <li>• <strong>Dividendos:</strong> Simulação com yield médio pago em Mar/Ago/Out</li>
-                    </ul>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4" />
-                      <h4 className="font-semibold">Simulação de Dividendos:</h4>
-                    </div>
-                    <ul className="space-y-1 text-xs text-muted-foreground">
-                      <li>• Yield médio configurado por ativo</li>
-                      <li>• Pagamentos apenas em <strong>Março, Agosto e Outubro</strong></li>
-                      <li>• 33,33% do yield anual em cada mês</li>
-                      <li>• <strong>Reinvestimento automático:</strong> dividendos compram mais ações</li>
-                      <li>• <strong>Para apenas valorização:</strong> configure DY = 0%</li>
-                    </ul>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4" />
-                      <h4 className="font-semibold">Métricas incluídas:</h4>
-                    </div>
-                    <ul className="space-y-1 text-xs text-muted-foreground">
-                      <li>• Retorno total e anualizado</li>
-                      <li>• Volatilidade e Sharpe Ratio</li>
-                      <li>• Drawdown máximo</li>
-                      <li>• Consistência mensal</li>
-                    </ul>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Status da Simulação - Indicador Visual Melhorado */}
-              <BacktestProgressIndicator isRunning={isRunning} />
-            </div>
+            <aside aria-labelledby="backtest-notes-title" className="h-fit space-y-3 rounded-lg border border-border bg-surface p-4 text-sm lg:sticky lg:top-24">
+              <h3 id="backtest-notes-title" className="font-medium text-foreground">
+                Como a simulação funciona
+              </h3>
+              <ul className="list-disc space-y-2 pl-4 text-muted-foreground marker:text-border">
+                {SIDE_NOTES.map(note => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+              <p className="border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
+                Resultados passados não garantem resultados futuros. Custos, spread e impostos não são considerados. Não é
+                recomendação de investimento.
+              </p>
+            </aside>
           </div>
         </TabsContent>
 
-        {/* Resultados */}
         <TabsContent value="results">
           {isLoadingResults ? (
-            <Card>
-              <CardContent className="p-12 text-center">
-                <div className="relative w-16 h-16 mx-auto mb-4">
-                  <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-900 rounded-full"></div>
-                  <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                  <BarChart3 className="absolute inset-0 m-auto w-8 h-8 text-blue-600" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">Carregando resultados...</h3>
-                <p className="text-muted-foreground">
-                  Buscando os dados do backtest
-                </p>
-              </CardContent>
-            </Card>
+            <div className="space-y-4" aria-busy="true" aria-label="Carregando resultados">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-80 w-full" />
+            </div>
           ) : currentResult ? (
-            <BacktestResults 
-              result={currentResult} 
-              config={currentConfig}
-              transactions={currentTransactions}
-            />
+            <BacktestResults result={currentResult} config={currentConfig} transactions={currentTransactions} />
           ) : (
-            <Card>
-              <CardContent className="p-12 text-center">
-                <BarChart3 className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Nenhuma simulação executada</h3>
-                <p className="text-muted-foreground mb-4">
-                  Configure sua carteira e execute uma simulação para ver os resultados
-                </p>
-                <Button onClick={() => {
-                  updateUrl('configure', (currentConfig as any)?.id);
-                  setActiveTab('configure');
-                }}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Ir para Configuração
-                </Button>
-              </CardContent>
-            </Card>
+            <EmptyState
+              title="Nenhuma simulação executada"
+              description="Configure a carteira e execute o backtest para ver os resultados."
+              action={<Button onClick={() => selectTab('configure')}>Ir para a configuração</Button>}
+            />
           )}
         </TabsContent>
 
-        {/* Execuções */}
         <TabsContent value="history">
-          {(() => {
-            const hasConfigId = currentConfig && (currentConfig as any).id;
+          {savedConfigId && currentConfig ? (
+            <BacktestConfigHistory configId={savedConfigId} configName={currentConfig.name} onShowResult={handleShowDetails} />
+          ) : (
+            <EmptyState
+              title="Selecione uma configuração"
+              description="Execute o backtest ou abra uma configuração salva para ver o histórico de execuções dela."
+              action={<Button onClick={() => selectTab('lista')}>Ver minhas configurações</Button>}
+            />
+          )}
+        </TabsContent>
 
-            return hasConfigId ? (
-              // Configuração específica selecionada: mostrar as execuções dela
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-lg border bg-muted/40">
-                  <p className="text-sm text-muted-foreground">
-                    Mostrando execuções de: <strong className="text-foreground">{currentConfig.name}</strong>
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      updateUrl('lista');
-                      setActiveTab('lista');
-                    }}
-                  >
-                    Ver todas as configurações
-                  </Button>
-                </div>
-                <BacktestConfigHistory
-                  configId={(currentConfig as any).id}
-                  configName={currentConfig.name}
-                  onShowResult={handleShowDetails}
-                />
-              </div>
-            ) : (
-              // Nenhuma configuração selecionada: orientar o usuário a escolher uma
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <History className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Selecione uma configuração</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Escolha uma configuração salva em &quot;Minhas Configurações&quot; para ver o histórico de execuções dela.
-                  </p>
-                  <Button
-                    onClick={() => {
-                      updateUrl('lista');
-                      setActiveTab('lista');
-                    }}
-                  >
-                    <TrendingUp className="w-4 h-4 mr-2" />
-                    Ver Minhas Configurações
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })()}
+        <TabsContent value="lista">
+          <BacktestHistory onShowDetails={handleShowDetails} />
         </TabsContent>
       </Tabs>
-    </div>
     </>
+  );
+}
+
+function EmptyState({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border px-4 py-12 text-center">
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{description}</p>
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
+    </div>
   );
 }

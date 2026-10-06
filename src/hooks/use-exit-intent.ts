@@ -1,148 +1,69 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 
 interface UseExitIntentOptions {
-  /**
-   * Tempo mínimo em segundos que o usuário deve estar na página antes de detectar exit intent
-   * @default 10
-   */
+  /** Segundos mínimos na página antes de considerar a intenção de saída. @default 10 */
   minTimeOnPage?: number
-  
-  /**
-   * Tempo mínimo em segundos desde a última interação antes de detectar exit intent
-   * @default 5
-   */
+  /** Segundos mínimos desde a última interação (clique, tecla, scroll, toque). @default 5 */
   minTimeSinceInteraction?: number
-  
-  /**
-   * Callback quando exit intent é detectado
-   */
+  /** Chamado uma única vez por ativação quando a intenção de saída é detectada. */
   onExitIntent: () => void
-  
-  /**
-   * Se deve ativar a detecção
-   * @default true
-   */
+  /** Liga/desliga a detecção. @default true */
   enabled?: boolean
-  
-  /**
-   * Modo debug para logs no console
-   * @default false
-   */
-  debug?: boolean
 }
 
 /**
- * Hook para detectar exit intent (quando usuário tenta fechar a aba)
- * Implementação manual sem bibliotecas externas para evitar falsos positivos
+ * Detecta intenção de saída no desktop: o mouse deixa a janela pela borda superior.
+ * Sem bibliotecas externas; ignora saídas logo após carregar ou interagir para evitar falsos positivos.
  */
 export function useExitIntent({
   minTimeOnPage = 10,
   minTimeSinceInteraction = 5,
   onExitIntent,
   enabled = true,
-  debug = false,
 }: UseExitIntentOptions) {
-  const [shouldShow, setShouldShow] = useState(false)
   const pageLoadTime = useRef<number>(Date.now())
   const lastInteractionTime = useRef<number>(Date.now())
-  const hasTriggered = useRef<boolean>(false)
+  const hasTriggered = useRef(false)
   const onExitIntentRef = useRef(onExitIntent)
 
-  // Atualizar ref do callback para evitar recriação do useEffect
   useEffect(() => {
     onExitIntentRef.current = onExitIntent
   }, [onExitIntent])
 
   useEffect(() => {
-    if (!enabled) {
-      if (debug) console.log('[ExitIntent] Desabilitado')
-      return
-    }
-
-    if (debug) {
-      console.log('[ExitIntent] Ativado', {
-        minTimeOnPage,
-        minTimeSinceInteraction,
-        pageLoadTime: new Date(pageLoadTime.current).toISOString(),
-      })
-    }
+    if (!enabled) return
+    // Recomeça a contagem sempre que a detecção é ligada (ex.: navegação client-side até a página)
+    pageLoadTime.current = Date.now()
+    lastInteractionTime.current = Date.now()
+    hasTriggered.current = false
 
     const handleMouseLeave = (e: MouseEvent) => {
-      // Só disparar se o mouse sair pela parte superior da janela
-      // relatedTarget === null indica que está saindo da janela completamente
-      const isLeavingTop = e.clientY <= 0 && (e.relatedTarget === null || (e.relatedTarget as Element)?.nodeName === 'HTML')
-      
-      if (isLeavingTop) {
-        const timeOnPage = (Date.now() - pageLoadTime.current) / 1000
-        const timeSinceInteraction = (Date.now() - lastInteractionTime.current) / 1000
+      const related = e.relatedTarget as Element | null
+      const isLeavingTop = e.clientY <= 0 && (related === null || related.nodeName === 'HTML')
+      if (!isLeavingTop || hasTriggered.current) return
 
-        if (debug) {
-          console.log('[ExitIntent] Mouse saindo pela parte superior', {
-            clientY: e.clientY,
-            relatedTarget: e.relatedTarget,
-            timeOnPage: timeOnPage.toFixed(2),
-            timeSinceInteraction: timeSinceInteraction.toFixed(2),
-            hasTriggered: hasTriggered.current,
-          })
-        }
-
-        // Verificar condições para evitar falsos positivos
-        if (
-          timeOnPage >= minTimeOnPage &&
-          timeSinceInteraction >= minTimeSinceInteraction &&
-          !hasTriggered.current
-        ) {
-          if (debug) {
-            console.log('[ExitIntent] ✅ Condições atendidas! Disparando modal')
-          }
-          hasTriggered.current = true
-          setShouldShow(true)
-          onExitIntentRef.current()
-        } else if (debug) {
-          console.log('[ExitIntent] ❌ Condições não atendidas', {
-            timeOnPageOk: timeOnPage >= minTimeOnPage,
-            timeSinceInteractionOk: timeSinceInteraction >= minTimeSinceInteraction,
-            notTriggered: !hasTriggered.current,
-          })
-        }
+      const now = Date.now()
+      const timeOnPage = (now - pageLoadTime.current) / 1000
+      const timeSinceInteraction = (now - lastInteractionTime.current) / 1000
+      if (timeOnPage >= minTimeOnPage && timeSinceInteraction >= minTimeSinceInteraction) {
+        hasTriggered.current = true
+        onExitIntentRef.current()
       }
     }
 
-    // Rastrear interações do usuário (sem mousemove para evitar reset constante)
     const handleInteraction = () => {
       lastInteractionTime.current = Date.now()
-      if (debug) {
-        console.log('[ExitIntent] Interação detectada, resetando timer')
-      }
     }
 
-    // Eventos de interação (removido mousemove para evitar falsos positivos)
-    const interactionEvents = ['mousedown', 'keypress', 'scroll', 'touchstart', 'click']
-    
-    interactionEvents.forEach((event) => {
-      document.addEventListener(event, handleInteraction, { passive: true })
-    })
-
-    // Evento de exit intent
+    const interactionEvents = ['mousedown', 'keypress', 'scroll', 'touchstart', 'click'] as const
+    interactionEvents.forEach((event) => document.addEventListener(event, handleInteraction, { passive: true }))
     document.addEventListener('mouseleave', handleMouseLeave)
 
     return () => {
-      interactionEvents.forEach((event) => {
-        document.removeEventListener(event, handleInteraction)
-      })
+      interactionEvents.forEach((event) => document.removeEventListener(event, handleInteraction))
       document.removeEventListener('mouseleave', handleMouseLeave)
     }
-  }, [enabled, minTimeOnPage, minTimeSinceInteraction, debug])
-
-  return {
-    shouldShow,
-    reset: () => {
-      hasTriggered.current = false
-      setShouldShow(false)
-      if (debug) console.log('[ExitIntent] Resetado')
-    },
-  }
+  }, [enabled, minTimeOnPage, minTimeSinceInteraction])
 }
-

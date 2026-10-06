@@ -11,6 +11,9 @@ import { BarsiStrategy } from './barsi-strategy';
 import { FiiScreeningStrategy } from './fii-screening-strategy';
 import { FiiDividendYieldStrategy } from './fii-dividend-yield-strategy';
 import { FiiRankingStrategy } from './fii-ranking-strategy';
+import { BazinStrategy } from './bazin-strategy';
+import { LynchStrategy } from './lynch-strategy';
+import { BankPvpStrategy } from './bank-pvp-strategy';
 import { 
   StrategyParams, 
   StrategyAnalysis, 
@@ -28,10 +31,13 @@ import {
   FiiScreeningParams,
   FiiDividendYieldParams,
   FiiRankingParams,
+  BazinParams,
+  LynchParams,
+  BankPvpParams,
 } from './types';
 import { FundamentalistParams } from './fundamentalist-strategy';
 
-type StrategyType =
+export type StrategyType =
   | 'graham'
   | 'fcd'
   | 'dividendYield'
@@ -44,7 +50,10 @@ type StrategyType =
   | 'barsi'
   | 'fiiScreening'
   | 'fiiDividendYield'
-  | 'fiiRanking';
+  | 'fiiRanking'
+  | 'bazin'
+  | 'lynch'
+  | 'bankPvp';
 
 export class StrategyFactory {
   static createStrategy(type: StrategyType) {
@@ -75,6 +84,12 @@ export class StrategyFactory {
         return new FiiDividendYieldStrategy();
       case 'fiiRanking':
         return new FiiRankingStrategy();
+      case 'bazin':
+        return new BazinStrategy();
+      case 'lynch':
+        return new LynchStrategy();
+      case 'bankPvp':
+        return new BankPvpStrategy();
       default:
         throw new Error(`Unknown strategy type: ${type}`);
     }
@@ -98,7 +113,10 @@ export class StrategyFactory {
         BarsiParams &
         FiiScreeningParams &
         FiiDividendYieldParams &
-        FiiRankingParams
+        FiiRankingParams &
+        BazinParams &
+        LynchParams &
+        BankPvpParams
     );
   }
 
@@ -120,7 +138,10 @@ export class StrategyFactory {
         BarsiParams &
         FiiScreeningParams &
         FiiDividendYieldParams &
-        FiiRankingParams
+        FiiRankingParams &
+        BazinParams &
+        LynchParams &
+        BankPvpParams
     );
   }
 
@@ -162,6 +183,18 @@ export class StrategyFactory {
     return this.runAnalysis('barsi', companyData, params) as Promise<StrategyAnalysis>;
   }
 
+  static runBazinAnalysis(companyData: CompanyData, params: BazinParams): StrategyAnalysis {
+    return new BazinStrategy().runAnalysis(companyData, params);
+  }
+
+  static runLynchAnalysis(companyData: CompanyData, params: LynchParams): StrategyAnalysis {
+    return new LynchStrategy().runAnalysis(companyData, params);
+  }
+
+  static runBankPvpAnalysis(companyData: CompanyData, params: BankPvpParams): StrategyAnalysis {
+    return new BankPvpStrategy().runAnalysis(companyData, params);
+  }
+
   static runGrahamRanking(companies: CompanyData[], params: GrahamParams): RankBuilderResult[] {
     return this.runRanking('graham', companies, params) as RankBuilderResult[];
   }
@@ -197,6 +230,18 @@ export class StrategyFactory {
   static async runBarsiRanking(companies: CompanyData[], params: BarsiParams): Promise<RankBuilderResult[]> {
     const strategy = new BarsiStrategy();
     return await strategy.runRanking(companies, params);
+  }
+
+  static runBazinRanking(companies: CompanyData[], params: BazinParams): RankBuilderResult[] {
+    return new BazinStrategy().runRanking(companies, params);
+  }
+
+  static runLynchRanking(companies: CompanyData[], params: LynchParams): RankBuilderResult[] {
+    return new LynchStrategy().runRanking(companies, params);
+  }
+
+  static runBankPvpRanking(companies: CompanyData[], params: BankPvpParams): RankBuilderResult[] {
+    return new BankPvpStrategy().runRanking(companies, params);
   }
 
   static runFiiScreeningRanking(
@@ -238,6 +283,9 @@ export class StrategyFactory {
       | FiiScreeningParams
       | FiiDividendYieldParams
       | FiiRankingParams
+      | BazinParams
+      | LynchParams
+      | BankPvpParams
   ): string {
     const strategy = this.createStrategy(type);
     return strategy.generateRational(
@@ -252,7 +300,10 @@ export class StrategyFactory {
         BarsiParams &
         FiiScreeningParams &
         FiiDividendYieldParams &
-        FiiRankingParams
+        FiiRankingParams &
+        BazinParams &
+        LynchParams &
+        BankPvpParams
     );
   }
 }

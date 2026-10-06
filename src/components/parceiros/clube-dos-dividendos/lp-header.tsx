@@ -16,15 +16,23 @@ export function LpHeader({ partnerCheckoutUrl }: LpHeaderProps) {
   })
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur-sm shadow-sm">
+    <header className="sticky top-0 z-50 border-b border-border bg-background">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
         {/* Logo */}
         <Image
           src="/logo-preco-justo.png"
           alt="Preço Justo AI"
-          width={160}
-          height={40}
-          className="h-8 w-auto sm:h-10"
+          width={553}
+          height={135}
+          className="h-7 w-auto dark:hidden sm:h-8"
+          priority
+        />
+        <Image
+          src="/logo-preco-justo-dark.png"
+          alt="Preço Justo AI"
+          width={553}
+          height={135}
+          className="hidden h-7 w-auto dark:block sm:h-8"
           priority
         />
 
@@ -34,14 +42,14 @@ export function LpHeader({ partnerCheckoutUrl }: LpHeaderProps) {
             href={checkoutUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex min-h-[40px] items-center rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-400"
+            className="flex min-h-11 items-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
           >
             Assinar com desconto
           </a>
         ) : (
           <a
             href="#planos"
-            className="flex min-h-[40px] items-center rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-400"
+            className="flex min-h-11 items-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
           >
             Ver planos
           </a>

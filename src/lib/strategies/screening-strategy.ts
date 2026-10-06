@@ -2,6 +2,7 @@ import { AbstractStrategy } from './base-strategy';
 import { ScreeningParams, CompanyData, StrategyAnalysis, RankBuilderResult, ScreeningFilter } from './types';
 import { toNumber } from './base-strategy';
 import { GrahamStrategy } from './graham-strategy';
+import { applyLiquidityRules } from '@/lib/ranking-models';
 
 /**
  * Estratégia de Screening Customizável
@@ -359,18 +360,18 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     const passedList = criteria.filter(c => c.value).map(c => c.label).join(', ');
     const failedList = criteria.filter(c => !c.value).map(c => c.label).join(', ');
     
-    let reasoning = `**Screening Customizado**: Aplicados ${totalCriteria} filtros.\n\n`;
+    let reasoning = `**Screening personalizado**: ${totalCriteria} filtros aplicados.\n\n`;
     
     if (isEligible) {
-      reasoning += `✅ **Empresa APROVADA**: Atende todos os ${totalCriteria} critérios configurados.\n\n`;
+      reasoning += `**Atende aos filtros**: todos os ${totalCriteria} critérios configurados.\n\n`;
       reasoning += `**Critérios atendidos**: ${passedList}`;
     } else {
-      reasoning += `❌ **Empresa NÃO aprovada**: Atende ${passedCriteria} de ${totalCriteria} critérios.\n\n`;
+      reasoning += `**Não atende a todos os filtros**: ${passedCriteria} de ${totalCriteria} critérios.\n\n`;
       if (passedCriteria > 0) {
-        reasoning += `✅ **Passou em**: ${passedList}\n\n`;
+        reasoning += `**Atendidos**: ${passedList}\n\n`;
       }
       if (failedList) {
-        reasoning += `❌ **Não passou em**: ${failedList}`;
+        reasoning += `**Não atendidos**: ${failedList}`;
       }
     }
 
@@ -402,8 +403,9 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
   runRanking(companies: CompanyData[], params: ScreeningParams): RankBuilderResult[] {
     const activeFiltersCount = this.countActiveFilters(params);
     
-    // Filtrar tickers que terminam em 5, 6, 7, 8 ou 9
-    const companiesFiltered = this.filterTickerEndingDigits(companies);
+    // Liquidez mínima padrão (ou `params.minLiquidity`) e uma classe por empresa, a mais líquida.
+    // Só age sobre empresas com liquidez calculada pelo carregador; `minLiquidity: null` inclui as ilíquidas.
+    const companiesFiltered = applyLiquidityRules(companies, params.minLiquidity);
     
     // Filtrar por tipo de ativo primeiro (b3, bdr, both)
     const filteredCompaniesForEmptyFilters = this.filterByAssetType(companiesFiltered, params.assetTypeFilter);
@@ -422,7 +424,7 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
             fairValue: null,
             upside: null,
             marginOfSafety: null,
-            rational: '⚠️ **Nenhum filtro ativo**: Configure ao menos um filtro para realizar o screening.',
+            rational: '**Nenhum filtro ativo**: configure ao menos um filtro para fazer o screening.',
             key_metrics: {
               marketCap: toNumber(company.financials.marketCap)
             }
@@ -566,7 +568,7 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
       valuationFilters.push(`• **PSR**: ${params.psrFilter.min !== undefined ? `≥ ${params.psrFilter.min}` : ''}${params.psrFilter.min !== undefined && params.psrFilter.max !== undefined ? ' e ' : ''}${params.psrFilter.max !== undefined ? `≤ ${params.psrFilter.max}` : ''}`);
     }
     if (valuationFilters.length > 0) {
-      sections.push({ title: '**📊 Valuation**', filters: valuationFilters });
+      sections.push({ title: '**Valuation**', filters: valuationFilters });
     }
 
     // Rentabilidade
@@ -587,7 +589,7 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
       rentabilidadeFilters.push(`• **Margem EBITDA**: ${params.margemEbitdaFilter.min !== undefined ? `≥ ${(params.margemEbitdaFilter.min * 100).toFixed(1)}%` : ''}${params.margemEbitdaFilter.min !== undefined && params.margemEbitdaFilter.max !== undefined ? ' e ' : ''}${params.margemEbitdaFilter.max !== undefined ? `≤ ${(params.margemEbitdaFilter.max * 100).toFixed(1)}%` : ''}`);
     }
     if (rentabilidadeFilters.length > 0) {
-      sections.push({ title: '**💰 Rentabilidade**', filters: rentabilidadeFilters });
+      sections.push({ title: '**Rentabilidade**', filters: rentabilidadeFilters });
     }
 
     // Crescimento
@@ -599,7 +601,7 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
       crescimentoFilters.push(`• **CAGR Receitas 5a**: ${params.cagrReceitas5aFilter.min !== undefined ? `≥ ${(params.cagrReceitas5aFilter.min * 100).toFixed(1)}%` : ''}${params.cagrReceitas5aFilter.min !== undefined && params.cagrReceitas5aFilter.max !== undefined ? ' e ' : ''}${params.cagrReceitas5aFilter.max !== undefined ? `≤ ${(params.cagrReceitas5aFilter.max * 100).toFixed(1)}%` : ''}`);
     }
     if (crescimentoFilters.length > 0) {
-      sections.push({ title: '**📈 Crescimento**', filters: crescimentoFilters });
+      sections.push({ title: '**Crescimento**', filters: crescimentoFilters });
     }
 
     // Dividendos
@@ -611,7 +613,7 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
       dividendosFilters.push(`• **Payout**: ${params.payoutFilter.min !== undefined ? `≥ ${(params.payoutFilter.min * 100).toFixed(1)}%` : ''}${params.payoutFilter.min !== undefined && params.payoutFilter.max !== undefined ? ' e ' : ''}${params.payoutFilter.max !== undefined ? `≤ ${(params.payoutFilter.max * 100).toFixed(1)}%` : ''}`);
     }
     if (dividendosFilters.length > 0) {
-      sections.push({ title: '**💵 Dividendos**', filters: dividendosFilters });
+      sections.push({ title: '**Dividendos**', filters: dividendosFilters });
     }
 
     // Endividamento & Liquidez
@@ -626,14 +628,14 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
       endividamentoFilters.push(`• **Dívida Líq./EBITDA**: ${params.dividaLiquidaEbitdaFilter.min !== undefined ? `≥ ${params.dividaLiquidaEbitdaFilter.min.toFixed(2)}x` : ''}${params.dividaLiquidaEbitdaFilter.min !== undefined && params.dividaLiquidaEbitdaFilter.max !== undefined ? ' e ' : ''}${params.dividaLiquidaEbitdaFilter.max !== undefined ? `≤ ${params.dividaLiquidaEbitdaFilter.max.toFixed(2)}x` : ''}`);
     }
     if (endividamentoFilters.length > 0) {
-      sections.push({ title: '**🏦 Endividamento & Liquidez**', filters: endividamentoFilters });
+      sections.push({ title: '**Endividamento & Liquidez**', filters: endividamentoFilters });
     }
 
     // Market Cap
     if (params.marketCapFilter?.enabled) {
       const marketCapFilters: string[] = [];
       marketCapFilters.push(`• **Market Cap**: ${params.marketCapFilter.min !== undefined ? `≥ R$ ${(params.marketCapFilter.min / 1_000_000_000).toFixed(2)}bi` : ''}${params.marketCapFilter.min !== undefined && params.marketCapFilter.max !== undefined ? ' e ' : ''}${params.marketCapFilter.max !== undefined ? `≤ R$ ${(params.marketCapFilter.max / 1_000_000_000).toFixed(2)}bi` : ''}`);
-      sections.push({ title: '**🏢 Tamanho**', filters: marketCapFilters });
+      sections.push({ title: '**Tamanho**', filters: marketCapFilters });
     }
     
     // Score Geral e Graham Upside
@@ -645,7 +647,7 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
       advancedFilters.push(`• **Graham Upside**: ${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}${params.grahamUpsideFilter.min !== undefined && params.grahamUpsideFilter.max !== undefined ? ' e ' : ''}${params.grahamUpsideFilter.max !== undefined ? `≤ ${params.grahamUpsideFilter.max.toFixed(0)}%` : ''}`);
     }
     if (advancedFilters.length > 0) {
-      sections.push({ title: '**🎯 Qualidade & Oportunidade**', filters: advancedFilters });
+      sections.push({ title: '**Qualidade & Oportunidade**', filters: advancedFilters });
     }
     
     // Setores e Indústrias
@@ -657,7 +659,7 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
       sectorFilters.push(`• **Indústrias**: ${params.selectedIndustries.join(', ')}`);
     }
     if (sectorFilters.length > 0) {
-      sections.push({ title: '**🏭 Filtro Setorial**', filters: sectorFilters });
+      sections.push({ title: '**Filtro Setorial**', filters: sectorFilters });
     }
 
     // Adicionar seções ao rational

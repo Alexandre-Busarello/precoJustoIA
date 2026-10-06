@@ -1,6 +1,8 @@
 // Sistema de Dicas Dinâmicas para Dashboard
 // Baseado no comportamento e experiência do usuário
 
+import { VALUATION_MODELS_SHORT_LABEL } from '@/lib/site-constants'
+
 export interface DashboardTip {
   id: string
   title: string
@@ -40,7 +42,7 @@ export const DASHBOARD_TIPS: DashboardTip[] = [
   {
     id: 'explore-metodologia',
     title: '📚 Entenda as metodologias',
-    description: 'Conheça os 8 modelos de análise disponíveis e escolha o que melhor se encaixa no seu perfil.',
+    description: `Conheça os ${VALUATION_MODELS_SHORT_LABEL} de ações e veja o que cada um mede.`,
     cta: 'Ver Metodologias',
     ctaLink: '/metodologia',
     icon: '🎓',
@@ -112,7 +114,7 @@ export const DASHBOARD_TIPS: DashboardTip[] = [
   {
     id: 'premium-upgrade',
     title: '💰 Desbloqueie todo potencial',
-    description: 'Acesse 8 modelos de análise, IA preditiva, alertas em tempo real e muito mais!',
+    description: `Acesse os ${VALUATION_MODELS_SHORT_LABEL}, os relatórios de IA, os alertas e o uso ilimitado.`,
     cta: 'Conhecer Premium',
     ctaLink: '/planos',
     icon: '✨',
@@ -176,7 +178,7 @@ export const DASHBOARD_TIPS: DashboardTip[] = [
   {
     id: 'ai-analysis',
     title: '✨ Análise com IA',
-    description: 'Use a inteligência artificial para análise preditiva e insights personalizados sobre ações.',
+    description: 'Gere um ranking em que a IA resume o que os modelos de valuation indicam para cada empresa.',
     cta: 'Testar IA',
     ctaLink: '/ranking',
     icon: '✨',

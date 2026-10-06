@@ -1,24 +1,84 @@
-import { AbstractStrategy, toNumber, formatCurrency, formatPercent } from './base-strategy';
+import {
+  AbstractStrategy,
+  averageOfLatest,
+  companySectorClass,
+  discountFraction,
+  formatCurrency,
+  formatPercent,
+  isImplausibleUpside,
+  notApplicableAnalysis,
+  toNumber,
+  upsidePercent,
+} from './base-strategy';
+import { formatBRLCompact, formatNumber, formatPct } from '../format';
 import { GrahamParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
+
+/** Rótulo do modelo: √(22,5 × LPA × VPA) é o preço máximo do investidor defensivo (P/L 15 × P/VP 1,5), não um valor justo. */
+export const GRAHAM_LABEL = 'Número de Graham (preço máximo defensivo)';
+
+/** Anos usados no LPA normalizado. */
+const NORMALIZED_EPS_YEARS = 5;
+/** Mínimo de anos para normalizar o LPA: 3 em geral; 2 para commodities cíclicas, que sempre usam a média. */
+const MIN_YEARS_GENERAL = 3;
+const MIN_YEARS_CYCLICAL = 2;
+
+export interface GrahamEps {
+  /** LPA usado na fórmula. */
+  value: number | null;
+  current: number | null;
+  /** Anos na média (1 = LPA atual, sem normalização). */
+  years: number;
+  normalized: boolean;
+  cyclical: boolean;
+}
+
+/**
+ * LPA da fórmula: média dos últimos 5 anos (atual + histórico) quando há pelo menos 3 anos, e sempre para commodities
+ * cíclicas (com 2 anos ou mais), que parecem baratíssimas no pico de lucro. Sem histórico suficiente, o LPA atual.
+ */
+export function grahamEps(companyData: CompanyData): GrahamEps {
+  const current = toNumber(companyData.financials.lpa);
+  const cyclical = companySectorClass(companyData) === 'cyclicalCommodity';
+  // Um ano por linha, sem repetir o ano corrente (se o histórico trouxer a linha do ano de `financials`, o LPA atual
+  // contaria duas vezes na média).
+  const currentYear = toNumber((companyData.financials as { year?: unknown }).year);
+  const seenYears = new Set<number>(currentYear !== null ? [currentYear] : []);
+  const history = [...(companyData.historicalFinancials ?? [])]
+    .sort((a, b) => (b.year || 0) - (a.year || 0))
+    .filter((row) => {
+      if (!row.year) return true;
+      if (seenYears.has(row.year)) return false;
+      seenYears.add(row.year);
+      return true;
+    })
+    .map((row) => toNumber(row.lpa));
+  const average = averageOfLatest([current, ...history], NORMALIZED_EPS_YEARS);
+  const minYears = cyclical ? MIN_YEARS_CYCLICAL : MIN_YEARS_GENERAL;
+  if (average && average.count >= minYears) {
+    return { value: average.average, current, years: average.count, normalized: true, cyclical };
+  }
+  return { value: current, current, years: 1, normalized: false, cyclical };
+}
 
 export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
   readonly name = 'graham';
 
   validateCompanyData(companyData: CompanyData): boolean {
-    const { financials } = companyData;
-    // Dar benefício da dúvida - só requer dados essenciais para cálculo do valor justo
-    return !!(
-      financials.lpa && toNumber(financials.lpa)! > 0 &&
-      financials.vpa && toNumber(financials.vpa)! > 0
-    );
+    const eps = grahamEps(companyData).value;
+    const vpa = toNumber(companyData.financials.vpa);
+    return !!eps && eps > 0 && !!vpa && vpa > 0;
   }
 
   runAnalysis(companyData: CompanyData, params: GrahamParams = {}): StrategyAnalysis {
     const { financials, currentPrice, historicalFinancials, ticker } = companyData;
+    const bdrReason = this.bdrNotApplicableReason(companyData);
+    if (bdrReason) return notApplicableAnalysis(bdrReason);
+
     const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
     const isBDR = this.isBDRTicker(ticker);
-    
-    const lpa = toNumber(financials.lpa);
+    const isFinancialCompany = companySectorClass(companyData) === 'financial';
+
+    const eps = grahamEps(companyData);
     const vpa = toNumber(financials.vpa);
     const roe = this.getROE(financials, use7YearAverages, historicalFinancials);
     const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials);
@@ -27,86 +87,71 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
     const crescimentoLucros = toNumber(financials.crescimentoLucros);
     const cagrLucros5a = toNumber(financials.cagrLucros5a);
     const marketCap = toNumber(financials.marketCap);
-    
-    const fairValue = this.calculateGrahamFairValue(lpa, vpa);
-    const upside = fairValue && currentPrice > 0 ? ((fairValue - currentPrice) / currentPrice) * 100 : null;
-    
-    // Ajustar critérios para BDRs (mercado internacional mais tolerante)
-    const minROE = isBDR ? 0.12 : 0.10; // ROE mínimo mais alto para BDRs (12% vs 10%)
-    const minLiquidez = isBDR ? 1.0 : 1.0; // Mesmo padrão
-    const maxDividaLiquidaPl = isBDR ? 2.0 : 1.5; // Mais tolerante com dívida (200% vs 150%)
-    const minMarketCap = isBDR ? 5000000000 : 2000000000; // Market Cap maior para BDRs (R$ 5B vs R$ 2B)
-    
+
+    let fairValue = this.calculateGrahamFairValue(eps.value, vpa);
+    if (fairValue !== null) fairValue *= this.perReceiptFactor(companyData);
+    let implausible = false;
+    if (fairValue !== null && isImplausibleUpside(currentPrice, fairValue)) {
+      fairValue = null;
+      implausible = true;
+    }
+    const upside = upsidePercent(currentPrice, fairValue);
+    const discount = discountFraction(currentPrice, fairValue);
+
+    const minROE = isBDR ? 0.12 : 0.1;
+    const minLiquidez = 1.0;
+    const maxDividaLiquidaPl = isBDR ? 2.0 : 1.5;
+    const minMarketCap = isBDR ? 5_000_000_000 : 2_000_000_000;
+    const epsLabel = eps.normalized ? `LPA médio de ${eps.years} anos` : 'LPA';
+
     const criteria = [
-      { label: 'Upside ≥ 10', value: !!(upside && upside >= 10), description: `Upside: ${formatPercent(upside! / 100)}` },
-      { label: 'LPA positivo', value: !!(lpa && lpa > 0), description: `LPA: ${formatCurrency(lpa)}` },
+      { label: 'Potencial ≥ 10%', value: upside !== null && upside >= 10, description: `Potencial: ${upside === null ? 'N/A' : formatPercent(upside / 100)}` },
+      { label: `${epsLabel} positivo`, value: !!(eps.value && eps.value > 0), description: `${epsLabel}: ${formatCurrency(eps.value)}` },
       { label: 'VPA positivo', value: !!(vpa && vpa > 0), description: `VPA: ${formatCurrency(vpa)}` },
-      { label: `ROE ≥ ${(minROE * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe) || 'N/A - Benefício da dúvida'}` },
-      { label: `Liquidez Corrente ≥ ${minLiquidez.toFixed(1)}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${liquidezCorrente?.toFixed(2) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Margem Líquida positiva', value: !margemLiquida || margemLiquida > 0, description: `Margem: ${formatPercent(margemLiquida) || 'N/A - Benefício da dúvida'}` },
-      { label: `Dív. Líq./PL ≤ ${(maxDividaLiquidaPl * 100).toFixed(0)}%${isBDR ? ' (BDR)' : ''}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${dividaLiquidaPl?.toFixed(1) || 'N/A - Benefício da dúvida'}` },
-      { label: 'Crescimento Lucros ≥ -15%', value: !crescimentoLucros || crescimentoLucros >= -0.15 || !!(cagrLucros5a && cagrLucros5a > 0), description: `Crescimento: ${crescimentoLucros ? formatPercent(crescimentoLucros) : 'N/A - Benefício da dúvida'}${cagrLucros5a && cagrLucros5a > 0 ? ` (CAGR 5a: ${formatPercent(cagrLucros5a)})` : ''}` },
-      { label: `Market Cap ≥ ${isBDR ? 'R$ 5B' : 'R$ 2B'}${isBDR ? ' (BDR)' : ''}`, value: !marketCap || marketCap >= minMarketCap, description: `Market Cap: ${formatCurrency(marketCap) || 'N/A - Benefício da dúvida'}` }
+      { label: `ROE ≥ ${formatPct(minROE, { digits: 0 })}${isBDR ? ' (BDR)' : ''}`, value: !roe || roe >= minROE, description: `ROE: ${formatPercent(roe)}` },
+      ...(isFinancialCompany
+        ? []
+        : [{ label: `Liquidez corrente ≥ ${formatNumber(minLiquidez, { digits: 1 })}`, value: !liquidezCorrente || liquidezCorrente >= minLiquidez, description: `LC: ${formatNumber(liquidezCorrente, { digits: 2 })}` }]),
+      { label: 'Margem líquida positiva', value: !margemLiquida || margemLiquida > 0, description: `Margem: ${formatPercent(margemLiquida)}` },
+      ...(isFinancialCompany
+        ? []
+        : [{ label: `Dív. líq./PL ≤ ${formatPct(maxDividaLiquidaPl, { digits: 0 })}`, value: !dividaLiquidaPl || dividaLiquidaPl <= maxDividaLiquidaPl, description: `Dív/PL: ${formatNumber(dividaLiquidaPl, { digits: 2 })}` }]),
+      {
+        label: 'Crescimento dos lucros ≥ −15%',
+        value: !crescimentoLucros || crescimentoLucros >= -0.15 || !!(cagrLucros5a && cagrLucros5a > 0),
+        description: `Crescimento: ${formatPercent(crescimentoLucros)}${cagrLucros5a && cagrLucros5a > 0 ? ` (CAGR 5a: ${formatPercent(cagrLucros5a)})` : ''}`,
+      },
+      { label: `Market cap ≥ ${isBDR ? 'R$ 5 bi' : 'R$ 2 bi'}`, value: !marketCap || marketCap >= minMarketCap, description: `Market cap: ${formatBRLCompact(marketCap)}` },
     ];
 
-    const passedCriteria = criteria.filter(c => c.value).length;
-    const hasMinimumCriteria = passedCriteria >= 7; // Reduzido para dar benefício da dúvida
-    const hasValidFairValue = !!fairValue;
-    const hasValidUpside = !!upside;
-    const hasMinimumUpside = !!(upside && upside >= 10);
-    
-    const isEligible = hasMinimumCriteria && hasValidFairValue && hasValidUpside && hasMinimumUpside;
+    const passedCriteria = criteria.filter((c) => c.value).length;
+    const hasMinimumCriteria = passedCriteria >= criteria.length - 2;
+    const hasMinimumUpside = upside !== null && upside >= 10;
+    const isEligible = hasMinimumCriteria && fairValue !== null && hasMinimumUpside;
     const score = (passedCriteria / criteria.length) * 100;
-    
-    // Calcular quality score com foco na margem de segurança (conceito central do Graham)
-    let qualityScore = 0;
-    
-    // 1. Margem de Segurança (60% do score) - Peso principal
-    if (upside && upside > 0) {
-      // Normalizar upside: 10% = 20 pontos, 50%+ = 60 pontos (máximo)
-      const marginScore = Math.min(upside / 50 * 60, 60);
-      qualityScore += marginScore;
-    }
-    
-    // 2. Indicadores Fundamentais (40% do score) - Peso secundário
-    // Considerar crescimento apenas se CAGR 5 anos for positivo
-    const shouldConsiderGrowth = cagrLucros5a && cagrLucros5a > 0;
-    const growthScore = shouldConsiderGrowth && crescimentoLucros ? 
-      Math.min(Math.max(0, crescimentoLucros + 0.15), 0.50) * 20 : 0; // Até 10 pontos se CAGR positivo
-    
-    const fundamentalsScore = (
-      Math.min(roe || 0, 0.25) * 60 +        // ROE: até 15 pontos
-      Math.min(liquidezCorrente || 0, 2.5) * 6 +     // Liquidez: até 15 pontos  
-      Math.min(margemLiquida || 0, 0.15) * 67 +      // Margem: até 10 pontos
-      growthScore                                      // Crescimento: até 10 pontos (só se CAGR > 0)
-    ) * 0.4; // 40% do peso total
-    
-    qualityScore += fundamentalsScore;
 
-    if (qualityScore > 100) qualityScore = 100;
+    // Score de qualidade: 60% pela margem de segurança (33% de desconto = 50% de potencial = nota máxima), 40% fundamentos.
+    const marginScore = discount !== null && discount > 0 ? Math.min(discount * 180, 60) : 0;
+    const growthScore =
+      cagrLucros5a && cagrLucros5a > 0 && crescimentoLucros ? Math.min(Math.max(0, crescimentoLucros + 0.15), 0.5) * 20 : 0;
+    const fundamentalsScore =
+      (Math.min(roe || 0, 0.25) * 60 + Math.min(liquidezCorrente || 0, 2.5) * 6 + Math.min(margemLiquida || 0, 0.15) * 67 + growthScore) * 0.4;
+    const qualityScore = Math.min(100, marginScore + fundamentalsScore);
 
-    // Determinar o motivo da reprovação
+    const epsNote = eps.normalized
+      ? `Usa o LPA normalizado (média de ${eps.years} anos: ${formatCurrency(eps.value)}; LPA atual ${formatCurrency(eps.current)})${eps.cyclical ? ', porque o lucro de commodities cíclicas oscila com o preço da commodity' : ''}.`
+      : `Usa o LPA atual (${formatCurrency(eps.current)})${eps.cyclical ? '; o histórico é curto para normalizar o lucro desta commodity cíclica' : ''}.`;
+
     let reasoning: string;
     if (isEligible) {
-      reasoning = `✅ Empresa aprovada no modelo Graham com ${upside?.toFixed(1)}% de margem de segurança. Score de qualidade: ${qualityScore.toFixed(1)}/100.`;
+      reasoning = `${GRAHAM_LABEL}: ${formatCurrency(fairValue)}, margem de segurança de ${formatPercent(discount)} (potencial de ${formatPercent((upside ?? 0) / 100)}). ${epsNote} Score de qualidade: ${formatNumber(qualityScore, { digits: 1 })}/100.`;
     } else {
       const reasons: string[] = [];
-      
-      if (!hasMinimumCriteria) {
-        reasons.push(`critérios fundamentais insuficientes (${passedCriteria}/${criteria.length} aprovados)`);
-      }
-      
-      if (!hasValidFairValue) {
-        reasons.push('não foi possível calcular o valor justo');
-      }
-      
-      if (hasValidUpside && !hasMinimumUpside) {
-        reasons.push(`upside insuficiente (${upside?.toFixed(1)}%, mínimo 10%)`);
-      } else if (!hasValidUpside) {
-        reasons.push('não foi possível calcular o upside');
-      }
-      
-      reasoning = `❌ Empresa não atende aos critérios Graham: ${reasons.join(', ')}.`;
+      if (!hasMinimumCriteria) reasons.push(`critérios fundamentais insuficientes (${passedCriteria} de ${criteria.length})`);
+      if (implausible) reasons.push('estimativa fora da faixa plausível (potencial acima de 500%)');
+      else if (fairValue === null) reasons.push('não foi possível calcular o número de Graham (LPA ou VPA não positivos)');
+      if (fairValue !== null && !hasMinimumUpside) reasons.push(`potencial de ${formatPercent((upside ?? 0) / 100)}, abaixo de 10%`);
+      reasoning = `${GRAHAM_LABEL}${fairValue !== null ? `: ${formatCurrency(fairValue)}` : ''}. Não atende ao modelo: ${reasons.join('; ')}. ${epsNote}`;
     }
 
     return {
@@ -114,152 +159,69 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       score,
       fairValue,
       upside,
+      discount,
       reasoning,
       criteria,
       key_metrics: {
-        lpa: lpa,
-        vpa: vpa,
+        lpa: eps.current,
+        lpaNormalizado: eps.normalized ? eps.value : null,
+        lpaAnos: eps.years,
+        vpa,
         qualityScore: Number(qualityScore.toFixed(1)),
         pl: toNumber(financials.pl),
         pvp: toNumber(financials.pvp),
-        roe: roe
-      }
+        roe,
+        liquidezCorrente,
+        margemLiquida,
+        crescimentoLucros,
+      },
     };
   }
 
   runRanking(companies: CompanyData[], params: GrahamParams): RankBuilderResult[] {
-    const marginOfSafety = params.marginOfSafety || 0.20;
+    // Desconto mínimo (1 − preço ÷ preço justo); ver strategy-config para a conversão do antigo "upside mínimo".
+    const minDiscount = params.marginOfSafety ?? 0.1667;
     const results: RankBuilderResult[] = [];
 
-    // Filtrar empresas por overall_score > 50 (remover empresas ruins)
     let filteredCompanies = this.filterCompaniesByOverallScore(companies, 50);
-    
-    // Filtrar tickers que terminam em 5, 6, 7, 8 ou 9
     filteredCompanies = this.filterTickerEndingDigits(filteredCompanies);
-    
-    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
     filteredCompanies = this.filterByAssetType(filteredCompanies, params.assetTypeFilter);
-    
-    // Filtrar empresas por tamanho se especificado
     filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize || 'all');
 
     for (const company of filteredCompanies) {
       if (!this.validateCompanyData(company)) continue;
-      
-      // EXCLUSÃO AUTOMÁTICA: Verificar critérios de exclusão
+      const analysis = this.runAnalysis(company, params);
+      const marketCap = toNumber(company.financials.marketCap);
+      const minMarketCap = this.isBDRTicker(company.ticker) ? 5_000_000_000 : 2_000_000_000;
+      if (analysis.fairValue === null || analysis.discount === null || analysis.discount === undefined) continue;
+      if (analysis.discount < minDiscount || !marketCap || marketCap < minMarketCap) continue;
       if (this.shouldExcludeCompany(company)) continue;
-
-      const { financials, currentPrice, historicalFinancials, ticker } = company;
-      const use7YearAverages = params.use7YearAverages !== undefined ? params.use7YearAverages : true;
-      const isBDR = this.isBDRTicker(ticker);
-      const lpa = toNumber(financials.lpa)!;
-      const vpa = toNumber(financials.vpa)!;
-      const roe = this.getROE(financials, use7YearAverages, historicalFinancials) || 0;
-      const liquidezCorrente = this.getLiquidezCorrente(financials, false, historicalFinancials) || 0;
-      const margemLiquida = this.getMargemLiquida(financials, use7YearAverages, historicalFinancials) || 0;
-      const crescimentoLucros = toNumber(financials.crescimentoLucros) || 0;
-      const cagrLucros5a = toNumber(financials.cagrLucros5a);
-      const marketCap = toNumber(financials.marketCap);
-
-      // Fórmula de Graham: Preço Justo = √(22.5 × LPA × VPA)
-      const fairValue = Math.sqrt(22.5 * lpa * vpa);
-      const marginOfSafetyActual = (fairValue / currentPrice) - 1;
-
-      // Ajustar critérios para BDRs
-      const minMarketCap = isBDR ? 5000000000 : 2000000000; // R$ 5B para BDRs, R$ 2B para Brasil
-
-      // Filtrar apenas empresas com margem de segurança >= parâmetro
-      if (marginOfSafetyActual >= marginOfSafety && (marketCap && marketCap >= minMarketCap)) {
-        const upside = ((fairValue / currentPrice) - 1) * 100;
-
-        // Score de qualidade com foco na margem de segurança (conceito central do Graham)
-        let qualityScore = 0;
-        
-        // 1. Margem de Segurança (60% do score) - Peso principal
-        const marginOfSafetyPercent = marginOfSafetyActual * 100;
-        if (marginOfSafetyPercent > 0) {
-          // Normalizar margem: 10% = 20 pontos, 50%+ = 60 pontos (máximo)
-          const marginScore = Math.min(marginOfSafetyPercent / 50 * 60, 60);
-          qualityScore += marginScore;
-        }
-        
-        // 2. Indicadores Fundamentais (40% do score) - Peso secundário
-        // Considerar crescimento apenas se CAGR 5 anos for positivo
-        const shouldConsiderGrowth = cagrLucros5a && cagrLucros5a > 0;
-        const growthScore = shouldConsiderGrowth && crescimentoLucros ? 
-          Math.min(Math.max(0, crescimentoLucros + 0.15), 0.50) * 20 : 0; // Até 10 pontos se CAGR positivo
-        
-        const fundamentalsScore = (
-          Math.min(roe, 0.25) * 60 +        // ROE: até 15 pontos
-          Math.min(liquidezCorrente, 2.5) * 6 +     // Liquidez: até 15 pontos
-          Math.min(margemLiquida, 0.15) * 67 +      // Margem: até 10 pontos
-          growthScore                                // Crescimento: até 10 pontos (só se CAGR > 0)
-        ) * 0.4; // 40% do peso total
-        
-        qualityScore += fundamentalsScore;
-
-        if (qualityScore > 100) qualityScore = 100;
-
-        results.push({
-          ticker: company.ticker,
-          name: company.name,
-          sector: company.sector,
-          currentPrice,
-          logoUrl: company.logoUrl,
-          fairValue: Number(fairValue.toFixed(2)),
-          upside: Number(upside.toFixed(2)),
-          marginOfSafety: Number((marginOfSafetyActual * 100).toFixed(2)),
-          rational: `Aprovada no Graham Quality Model com ${Number((marginOfSafetyActual * 100).toFixed(1))}% de margem de segurança (peso 60% do score). Fundamentos sólidos: ROE ${Number((roe * 100)).toFixed(1)}%, LC ${Number(liquidezCorrente).toFixed(2)}, Margem Líquida ${Number((margemLiquida * 100)).toFixed(1)}%${shouldConsiderGrowth ? `, CAGR 5a ${Number((cagrLucros5a! * 100)).toFixed(1)}%` : ''}. Score de qualidade: ${Number(qualityScore.toFixed(1))}/100.`,
-          key_metrics: {
-            lpa: lpa,
-            vpa: vpa,
-            qualityScore: Number(qualityScore.toFixed(1)),
-            pl: toNumber(financials.pl),
-            pvp: toNumber(financials.pvp),
-            roe: roe,
-            liquidezCorrente: liquidezCorrente,
-            margemLiquida: margemLiquida,
-            crescimentoLucros: crescimentoLucros,
-          }
-        });
-      }
+      results.push(this.convertToRankingResult(company, analysis));
     }
 
-    // Ordenar por qualidade (empresas sólidas primeiro)
-    const sortedResults = results
-      .sort((a, b) => (b.key_metrics?.qualityScore || 0) - (a.key_metrics?.qualityScore || 0));
-
-    // Remover empresas duplicadas (manter apenas o primeiro ticker de cada empresa)
+    const sortedResults = results.sort((a, b) => (b.key_metrics?.qualityScore || 0) - (a.key_metrics?.qualityScore || 0));
     const uniqueResults = this.removeDuplicateCompanies(sortedResults);
-    
-    // Aplicar limite
-    const limitedResults = uniqueResults.slice(0, 50);
-
-    // Aplicar priorização técnica se habilitada
-    return this.applyTechnicalPrioritization(limitedResults, companies, params.useTechnicalAnalysis);
+    return this.applyTechnicalPrioritization(uniqueResults.slice(0, 50), companies, params.useTechnicalAnalysis);
   }
 
   generateRational(params: GrahamParams): string {
-    return `# MODELO GRAHAM APRIMORADO
+    return `# ${GRAHAM_LABEL}
 
-**Filosofia**: Baseado na fórmula clássica de Benjamin Graham para encontrar ações baratas de empresas sólidas.
+**Ideia**: √(22,5 × LPA × VPA) é o preço máximo que o investidor defensivo de Benjamin Graham pagaria (P/L 15 × P/VP 1,5). É um teto conservador, não uma estimativa de valor justo, e foi calibrado para os juros dos EUA dos anos 1970.
 
-**Estratégia**: Preço Justo = √(22.5 × LPA × VPA), buscando margem de segurança de ${((params.marginOfSafety || 0.20) * 100).toFixed(0)}%.
+**LPA normalizado**: média dos últimos 5 anos quando há histórico (sempre para commodities cíclicas, como petróleo, mineração, siderurgia e celulose), para não superestimar empresas no pico do lucro.
 
-## Filtros de Qualidade Aplicados
+**Margem de segurança mínima**: ${formatPercent(params.marginOfSafety ?? 0.1667)} de desconto (1 − preço ÷ número de Graham).
 
-- ROE ≥ 10% (rentabilidade consistente)
-- Liquidez Corrente ≥ 1.0 (capacidade de honrar compromissos)
-- Margem Líquida > 0% (empresa lucrativa)
-- Crescimento Lucros ≥ -15% (não em declínio severo)
-- Dívida Líquida/PL ≤ 150% (endividamento controlado)
+## Filtros de qualidade
 
-**Score de Qualidade**:
-- 60% Margem de Segurança (conceito central do Graham)
-- 40% Indicadores Fundamentais (ROE, Liquidez, Margem Líquida)
+- ROE ≥ 10%
+- Liquidez corrente ≥ 1,0 e dívida líquida/PL ≤ 150% (não se aplicam a bancos e seguradoras)
+- Margem líquida positiva
+- Crescimento dos lucros ≥ −15%
 
-**Ordenação**: Por Score de Qualidade priorizando maior margem de segurança${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica (ativos em sobrevenda primeiro)' : ''}.
+**Score de qualidade**: 60% margem de segurança, 40% fundamentos (ROE, liquidez, margem líquida).
 
-**Objetivo**: Encontrar empresas subvalorizadas MAS financeiramente saudáveis, evitando "value traps"${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
+**Ordenação**: por score de qualidade${params.useTechnicalAnalysis ? ', com priorização técnica (sobrevenda) dentro de faixas de resultados semelhantes' : ''}.`;
   }
 }

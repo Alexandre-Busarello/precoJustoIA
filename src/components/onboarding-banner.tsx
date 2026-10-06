@@ -1,9 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { X, HelpCircle } from "lucide-react"
-import { cn } from "@/lib/utils"
 
 interface OnboardingBannerProps {
   missingQuestions: string[]
@@ -11,71 +9,35 @@ interface OnboardingBannerProps {
   onDismiss: () => void
 }
 
-const QUESTION_LABELS: Record<string, string> = {
-  acquisition: "Como você chegou até aqui?",
-  experience: "Seu nível de experiência",
-  focus: "Seu foco de investimento",
-}
-
+/**
+ * Aviso inline (no fluxo da página, acima do cabeçalho) quando o usuário pulou perguntas do perfil.
+ * Não flutua nem cobre conteúdo; "Dispensar" é lembrado pelo provider.
+ */
 export function OnboardingBanner({ missingQuestions, onComplete, onDismiss }: OnboardingBannerProps) {
-  const [isDismissed, setIsDismissed] = useState(false)
-
-  if (isDismissed || missingQuestions.length === 0) {
-    return null
-  }
-
-  const questionCount = missingQuestions.length
-  const questionLabels = missingQuestions.map(q => QUESTION_LABELS[q] || q).join(", ")
-
-  const handleDismiss = () => {
-    setIsDismissed(true)
-    onDismiss()
-  }
+  const count = missingQuestions.length
+  if (count === 0) return null
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-40 md:left-auto md:right-4 md:w-96 animate-in slide-in-from-bottom-5 duration-300">
-      <div className="bg-background border border-border rounded-lg shadow-lg p-4 space-y-3">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <HelpCircle className="w-4 h-4 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              Quer nos ajudar a melhorar?
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Notei que você pulou {questionCount === 1 ? "uma pergunta" : `${questionCount} perguntas`}. 
-              Quer completar o onboarding? Isso nos ajuda a personalizar sua experiência.
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 flex-shrink-0"
-            onClick={handleDismiss}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={onComplete}
-            size="sm"
-            className="flex-1 text-xs h-8"
-          >
-            Completar agora
-          </Button>
-          <Button
-            onClick={handleDismiss}
-            variant="outline"
-            size="sm"
-            className="flex-1 text-xs h-8"
-          >
-            Agora não
-          </Button>
-        </div>
+    <div role="status" data-notice="onboarding" className="border-b border-border bg-surface">
+      <div className="mx-auto flex w-full max-w-6xl items-center gap-2 py-1.5 pr-1 pl-4 text-sm sm:gap-4">
+        <p className="min-w-0 flex-1 text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {count === 1 ? "Falta 1 pergunta" : `Faltam ${count} perguntas`} do seu perfil.
+          </span>{" "}
+          <span className="hidden sm:inline">Com elas ajustamos as explicações e os rankings sugeridos.</span>
+        </p>
+        <Button variant="outline" size="sm" onClick={onComplete} className="shrink-0">
+          Responder
+        </Button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dispensar aviso"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <X className="size-4" strokeWidth={1.75} aria-hidden="true" />
+        </button>
       </div>
     </div>
   )
 }
-

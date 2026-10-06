@@ -20,18 +20,33 @@ export interface PillarScore {
   score: number;
   weight: number;
   reasons: string[];
+  /** Nome exibido do pilar (ver `FII_PILLAR_LABELS`). */
+  label: string;
 }
+
+export type FiiPillarKey = 'dividendos' | 'valuation' | 'qualidadePortfolio' | 'liquidez' | 'gestao';
+
+/**
+ * Nomes exibidos dos pilares. A chave `gestao` foi mantida por compatibilidade, mas o pilar mede segmento e
+ * resiliência do fundo, não a qualidade da gestão.
+ */
+export const FII_PILLAR_LABELS: Record<FiiPillarKey, string> = {
+  dividendos: 'Dividendos',
+  valuation: 'Valuation',
+  qualidadePortfolio: 'Qualidade do portfólio',
+  liquidez: 'Liquidez',
+  gestao: 'Segmento e resiliência',
+};
+
+export type FiiQualityLabel = 'Qualidade alta' | 'Qualidade boa' | 'Qualidade moderada' | 'Qualidade baixa';
 
 export interface FiiOverallScore {
   score: number;
   grade: FiiGrade;
   classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Péssimo';
-  recommendation:
-    | 'FII Excelente'
-    | 'FII Bom'
-    | 'FII Regular'
-    | 'FII Fraco'
-    | 'FII Péssimo';
+  /** Mantido por compatibilidade: mesmo valor de `qualityLabel` (nota de qualidade, não recomendação). */
+  recommendation: FiiQualityLabel;
+  qualityLabel: FiiQualityLabel;
   strengths: string[];
   weaknesses: string[];
   breakdown: {
@@ -68,14 +83,25 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-function scoreDY(dy: number | null): number {
+/**
+ * Faixas de DY (em % a.a.) com nota máxima. Papel distribui a correção dos CRIs (IPCA/CDI + spread), então
+ * 13–15% é normal com a Selic alta; tijolo distribui aluguel e fica tipicamente entre 8% e 12%.
+ */
+const DY_BANDS = {
+  tijolo: { floor: 4, full: 8, ceiling: 12 },
+  papel: { floor: 5, full: 10, ceiling: 15 },
+} as const;
+
+function scoreDY(dy: number | null, isPapel: boolean): number {
   if (dy === null || dy <= 0) return 0;
+  const { floor, full, ceiling } = DY_BANDS[isPapel ? 'papel' : 'tijolo'];
   const pct = dy * 100;
-  if (pct <= 4) return 25 + (pct / 4) * 25;
-  if (pct <= 8) return 50 + ((pct - 4) / 4) * 50;
-  if (pct <= 12) return 100;
-  if (pct <= 16) return 100 - ((pct - 12) / 4) * 30;
-  return clamp(70 - (pct - 16) * 5, 10, 70);
+  if (pct <= floor) return 25 + (pct / floor) * 25;
+  if (pct <= full) return 50 + ((pct - floor) / (full - floor)) * 50;
+  if (pct <= ceiling) return 100;
+  // DY muito acima da faixa sugere risco (cota descontada por crédito ou vacância): perde nota gradualmente.
+  if (pct <= ceiling + 4) return 100 - ((pct - ceiling) / 4) * 30;
+  return clamp(70 - (pct - ceiling - 4) * 5, 10, 70);
 }
 
 function dividendConsistencyScore(monthsWithPayments: number): number {
@@ -133,7 +159,8 @@ function scoreGapCotacaoVp(
   return 40;
 }
 
-function segmentGestaoScore(segment: string | null | undefined): number {
+/** Resiliência do segmento (chave `gestao`): logística, shopping e lajes corporativas pontuam mais. */
+function segmentResilienceScore(segment: string | null | undefined): number {
   const s = (segment || '').toLowerCase();
   if (/shopping|log[ií]stica|lajes|escrit[oó]rio aaa|multi/i.test(s)) return 95;
   if (/hospital|varejo/i.test(s)) return 75;
@@ -170,22 +197,20 @@ function scoreValorMercado(vm: number | null): number {
 function gradeFromScore(score: number): {
   grade: FiiGrade;
   classification: FiiOverallScore['classification'];
-  recommendation: FiiOverallScore['recommendation'];
+  qualityLabel: FiiQualityLabel;
 } {
-  if (score >= 85)
-    return { grade: 'A+', classification: 'Excelente', recommendation: 'FII Excelente' };
-  if (score >= 75)
-    return { grade: 'A', classification: 'Muito Bom', recommendation: 'FII Excelente' };
-  if (score >= 70)
-    return { grade: 'A-', classification: 'Muito Bom', recommendation: 'FII Bom' };
-  if (score >= 65)
-    return { grade: 'B+', classification: 'Bom', recommendation: 'FII Bom' };
-  if (score >= 55)
-    return { grade: 'B', classification: 'Regular', recommendation: 'FII Regular' };
-  if (score >= 45)
-    return { grade: 'C', classification: 'Fraco', recommendation: 'FII Fraco' };
-  if (score >= 35) return { grade: 'D', classification: 'Péssimo', recommendation: 'FII Péssimo' };
-  return { grade: 'F', classification: 'Péssimo', recommendation: 'FII Péssimo' };
+  if (score >= 85) return { grade: 'A+', classification: 'Excelente', qualityLabel: 'Qualidade alta' };
+  if (score >= 75) return { grade: 'A', classification: 'Muito Bom', qualityLabel: 'Qualidade alta' };
+  if (score >= 70) return { grade: 'A-', classification: 'Muito Bom', qualityLabel: 'Qualidade boa' };
+  if (score >= 65) return { grade: 'B+', classification: 'Bom', qualityLabel: 'Qualidade boa' };
+  if (score >= 55) return { grade: 'B', classification: 'Regular', qualityLabel: 'Qualidade moderada' };
+  if (score >= 45) return { grade: 'C', classification: 'Fraco', qualityLabel: 'Qualidade baixa' };
+  if (score >= 35) return { grade: 'D', classification: 'Péssimo', qualityLabel: 'Qualidade baixa' };
+  return { grade: 'F', classification: 'Péssimo', qualityLabel: 'Qualidade baixa' };
+}
+
+function pillar(key: FiiPillarKey, score: number, weight: number, reasons: string[] = []): PillarScore {
+  return { score, weight, reasons, label: FII_PILLAR_LABELS[key] };
 }
 
 export function calculateFiiOverallScore(
@@ -214,15 +239,16 @@ export function calculateFiiOverallScore(
       score: 0,
       grade: 'F',
       classification: 'Péssimo',
-      recommendation: 'FII Péssimo',
+      recommendation: 'Qualidade baixa',
+      qualityLabel: 'Qualidade baixa',
       strengths: [],
       weaknesses: ['Sem cotação válida ou fundo deslistado.'],
       breakdown: {
-        dividendos: { score: 0, weight: 0.3, reasons: [] },
-        valuation: { score: 0, weight: 0.25, reasons: [] },
-        qualidadePortfolio: { score: 0, weight: 0.2, reasons: [] },
-        liquidez: { score: 0, weight: 0.15, reasons: [] },
-        gestao: { score: 0, weight: 0.1, reasons: [] },
+        dividendos: pillar('dividendos', 0, 0.3),
+        valuation: pillar('valuation', 0, 0.25),
+        qualidadePortfolio: pillar('qualidadePortfolio', 0, 0.2),
+        liquidez: pillar('liquidez', 0, 0.15),
+        gestao: pillar('gestao', 0, 0.1),
       },
       flags: ['Sem cotação'],
     };
@@ -235,7 +261,7 @@ export function calculateFiiOverallScore(
   const wGest = 0.1;
 
   // --- Dividendos ---
-  const dyPart = scoreDY(dy);
+  const dyPart = scoreDY(dy, isPapel);
   const payments = dividendPayments || [];
   const last12 = new Set(
     payments.slice(0, 24).map((p) => {
@@ -270,21 +296,13 @@ export function calculateFiiOverallScore(
     divSub *= 0.8;
     divReasons.push('Alerta: possível armadilha de dividendo (DY alto + P/VP baixo + vacância).');
   }
-  const dividendos: PillarScore = {
-    score: clamp(divSub, 0, 100),
-    weight: wDiv,
-    reasons: divReasons,
-  };
+  const dividendos = pillar('dividendos', clamp(divSub, 0, 100), wDiv, divReasons);
 
   // --- Valuation ---
   const valPvp = scorePvpBands(pvp);
   const valFlow = scoreCapOrFfo(isPapel ? ffoYield : capRate);
   const valGap = scoreGapCotacaoVp(cotacao, vp);
-  const valuation: PillarScore = {
-    score: clamp(valPvp * 0.5 + valFlow * 0.3 + valGap * 0.2, 0, 100),
-    weight: wVal,
-    reasons: [],
-  };
+  const valuation = pillar('valuation', clamp(valPvp * 0.5 + valFlow * 0.3 + valGap * 0.2, 0, 100), wVal);
 
   // --- Qualidade portfólio ---
   let qualScore = 50;
@@ -319,31 +337,19 @@ export function calculateFiiOverallScore(
     qualScore = seg * 0.5 + cons * 0.3 + gapPapel * 0.2;
     qualReasons.push('Portfólio papel: peso em segmento e consistência.');
   }
-  const qualidadePortfolio: PillarScore = {
-    score: clamp(qualScore, 0, 100),
-    weight: wQual,
-    reasons: qualReasons,
-  };
+  const qualidadePortfolio = pillar('qualidadePortfolio', clamp(qualScore, 0, 100), wQual, qualReasons);
 
   // --- Liquidez ---
   const liqPart = scoreLiquidityBucket(liq);
   const vmPart = scoreValorMercado(vm);
   const porteRel = 60;
-  const liquidez: PillarScore = {
-    score: clamp(liqPart * 0.6 + vmPart * 0.3 + porteRel * 0.1, 0, 100),
-    weight: wLiq,
-    reasons: [],
-  };
+  const liquidez = pillar('liquidez', clamp(liqPart * 0.6 + vmPart * 0.3 + porteRel * 0.1, 0, 100), wLiq);
 
-  // --- Gestão ---
-  const segG = segmentGestaoScore(fii.segment);
+  // --- Segmento e resiliência (chave `gestao`) ---
+  const segG = segmentResilienceScore(fii.segment);
   const plHist = 70;
   const idade = fii.lastFetchedAt ? 80 : 60;
-  const gestao: PillarScore = {
-    score: clamp(segG * 0.5 + plHist * 0.3 + idade * 0.2, 0, 100),
-    weight: wGest,
-    reasons: [],
-  };
+  const gestao = pillar('gestao', clamp(segG * 0.5 + plHist * 0.3 + idade * 0.2, 0, 100), wGest);
 
   let total =
     dividendos.score * wDiv +
@@ -363,7 +369,7 @@ export function calculateFiiOverallScore(
   }
 
   total = clamp(total, 0, 100);
-  const { grade, classification, recommendation } = gradeFromScore(total);
+  const { grade, classification, qualityLabel } = gradeFromScore(total);
 
   const strengths: string[] = [];
   const weaknesses: string[] = [];
@@ -377,7 +383,8 @@ export function calculateFiiOverallScore(
     score: Math.round(total * 10) / 10,
     grade,
     classification,
-    recommendation,
+    recommendation: qualityLabel,
+    qualityLabel,
     strengths,
     weaknesses,
     breakdown: {

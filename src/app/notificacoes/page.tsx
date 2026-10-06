@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { NotificationsPageClient } from '@/components/notifications-page-client'
 
 export const metadata: Metadata = {
-  title: 'Notificações | Preço Justo AI',
+  title: 'Notificações',
   description: 'Visualize todas as suas notificações',
 }
 

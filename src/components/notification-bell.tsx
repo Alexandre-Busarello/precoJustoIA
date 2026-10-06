@@ -150,26 +150,27 @@ export function NotificationBell({ className }: NotificationBellProps) {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
           className={`relative ${className || ''}`}
+          aria-label={unreadCount > 0 ? `Notificações (${unreadCount} não lidas)` : 'Notificações'}
         >
-          <Bell className="h-5 w-5" />
+          <Bell className="size-5 text-muted-foreground" strokeWidth={1.75} />
           {unreadCount > 0 && (
-            <Badge
-              variant="destructive"
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+            <span
+              data-num
+              className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-medium leading-none text-primary-foreground"
             >
               {unreadCount > 99 ? '99+' : unreadCount}
-            </Badge>
+            </span>
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 sm:w-96">
+      <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] max-w-96">
         <div className="p-2">
           <div className="flex items-center justify-between mb-0.5">
             <h3 className="font-semibold text-sm">Notificações</h3>
             {unreadCount > 0 && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="neutral">
                 {unreadCount} não lida{unreadCount !== 1 ? 's' : ''}
               </Badge>
             )}
@@ -179,7 +180,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
           </p>
         </div>
         <DropdownMenuSeparator />
-        <ScrollArea className="h-[400px]">
+        <ScrollArea className="h-[min(400px,60vh)]">
           {isLoadingNotifications ? (
             <div className="p-4 space-y-3">
               {[1, 2, 3].map((i) => (
@@ -192,7 +193,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
             </div>
           ) : notifications.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">
-              <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <Bell className="mx-auto mb-2 size-6 text-muted-foreground" strokeWidth={1.75} />
               <p>Nenhuma notificação</p>
             </div>
           ) : (
@@ -200,27 +201,25 @@ export function NotificationBell({ className }: NotificationBellProps) {
               {notifications.map((notification: Notification) => (
                 <div
                   key={notification.id}
-                  className={`flex flex-col items-start p-3 mb-1 cursor-pointer rounded-md hover:bg-accent ${
-                    !notification.isRead ? 'bg-blue-50 dark:bg-blue-950/20' : ''
-                  }`}
+                  className="mb-1 flex cursor-pointer flex-col items-start rounded-md p-3 hover:bg-accent"
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <div className="flex items-start justify-between w-full mb-1">
-                    <h4 className="font-semibold text-sm flex-1">
+                    <h4 className={`flex-1 text-sm ${notification.isRead ? 'font-medium text-muted-foreground' : 'font-semibold text-foreground'}`}>
                       <NotificationMarkdown content={notification.title} inline />
                       {notification.type === 'QUIZ' && (
-                        <Badge variant="outline" className="ml-2 text-xs">
+                        <Badge variant="neutral" className="ml-2">
                           Quiz
                         </Badge>
                       )}
                       {notification.type === 'MODAL' && (
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          Modal
+                        <Badge variant="neutral" className="ml-2">
+                          Aviso
                         </Badge>
                       )}
                     </h4>
                     {!notification.isRead && (
-                      <div className="h-2 w-2 bg-blue-600 rounded-full ml-2 flex-shrink-0 mt-1" />
+                      <span className="mt-1.5 ml-2 size-2 shrink-0 rounded-full bg-brand" aria-label="Não lida" />
                     )}
                   </div>
                   <div className="text-xs text-muted-foreground line-clamp-2 mb-1">
@@ -234,10 +233,10 @@ export function NotificationBell({ className }: NotificationBellProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 px-2 text-xs cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors duration-200 font-medium"
+                        className="h-8 px-2 text-xs md:h-7"
                         onClick={(e) => handleViewModalDetails(e, notification)}
                       >
-                        <Eye className="h-3 w-3 mr-1" />
+                        <Eye className="size-3.5" strokeWidth={1.75} />
                         Ver detalhes
                       </Button>
                     )}
@@ -251,7 +250,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
         <DropdownMenuItem asChild>
           <Link
             href="/notificacoes"
-            className="w-full text-center justify-center"
+            className="w-full cursor-pointer justify-center text-center text-brand"
             onClick={() => setIsOpen(false)}
           >
             Ver todas as notificações

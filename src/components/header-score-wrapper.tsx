@@ -1,10 +1,10 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { Card, CardContent } from '@/components/ui/card';
 import CompactScore from '@/components/compact-score';
+import { Skeleton } from '@/components/ui/skeleton';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
-import { useCompanyAnalysis } from '@/hooks/use-company-data';
+import { useHydratedCompanyAnalysis } from '@/components/strategic-analysis-client';
 
 interface HeaderScoreWrapperProps {
   ticker: string;
@@ -12,55 +12,32 @@ interface HeaderScoreWrapperProps {
   canViewFullContent?: boolean;
 }
 
-interface OverallScore {
-  score: number;
-  grade: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
-  classification: 'Excelente' | 'Muito Bom' | 'Bom' | 'Regular' | 'Fraco' | 'Péssimo';
-  strengths: string[];
-  weaknesses: string[];
-  recommendation: 'Empresa Excelente' | 'Empresa Boa' | 'Empresa Regular' | 'Empresa Fraca' | 'Empresa Péssima';
-}
+type CompactScoreProps = Parameters<typeof CompactScore>[0];
 
-interface CompanyAnalysisResponse {
-  ticker: string;
-  name: string;
-  sector: string | null;
-  currentPrice: number;
-  overallScore: OverallScore | null;
-  strategies: unknown;
-}
-
+/** Painel do score geral usado nos cabeçalhos de ativo (ScoreCard compacto dentro de uma borda fina). */
 export default function HeaderScoreWrapper({ ticker, canViewFullContent }: HeaderScoreWrapperProps) {
   const { data: session } = useSession();
   const { isPremium } = usePremiumStatus();
   const effectiveIsPremium = canViewFullContent ?? isPremium ?? false;
-  const { data: analysisData, isLoading } = useCompanyAnalysis(ticker, effectiveIsPremium);
-  
-  const isLoggedIn = !!session?.user;
-  const overallScore = (analysisData as CompanyAnalysisResponse | undefined)?.overallScore ?? null;
-
-  if (isLoading) {
-    return (
-      <Card className="w-full lg:w-80">
-        <CardContent className="p-4 lg:p-4 text-center">
-          <p className="text-sm text-muted-foreground mb-3">Score Geral</p>
-          <div className="w-20 h-20 mx-auto bg-muted/50 rounded-full animate-pulse mb-2" />
-          <p className="text-xs text-muted-foreground">Carregando...</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const { data: analysisData, isLoading } = useHydratedCompanyAnalysis(ticker, effectiveIsPremium);
+  const overallScore = ((analysisData as { overallScore?: CompactScoreProps['overallScore'] } | undefined)?.overallScore) ?? null;
 
   return (
-    <Card className="w-full lg:w-80">
-      <CardContent className="p-4 lg:p-4">
-        <CompactScore 
+    <div className="w-full rounded-lg border border-border bg-card p-4 lg:w-80">
+      <p className="mb-2 text-sm font-medium text-foreground">Score</p>
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-1.5 w-full" />
+        </div>
+      ) : (
+        <CompactScore
           overallScore={overallScore}
           isPremium={effectiveIsPremium}
-          isLoggedIn={isLoggedIn}
+          isLoggedIn={!!session?.user}
           ticker={ticker}
         />
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }

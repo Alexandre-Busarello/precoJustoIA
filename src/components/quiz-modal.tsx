@@ -1,25 +1,40 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { AlertCircle } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
-import { Card, CardContent } from '@/components/ui/card'
-import { X, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useQuiz } from '@/hooks/use-quiz'
-import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import Image from 'next/image'
+import { cn } from '@/lib/utils'
 
 interface QuizModalProps {
   campaignId?: string
   onClose?: () => void
-  isPageMode?: boolean // Se true, renderiza como página ao invés de modal
+  /** Renderiza como conteúdo de página (rota /quiz/[campaignId]) em vez de Dialog. */
+  isPageMode?: boolean
 }
 
+type Quiz = NonNullable<ReturnType<typeof useQuiz>['quiz']>
+type QuizQuestion = Quiz['quizConfig']['questions'][number]
+type ResponseValue = string | number | undefined
+
+/** Teclas que mudam o valor do slider (Shift, Tab etc. não contam como resposta) */
+const SLIDER_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'])
+
+function isAnswered(value: unknown) {
+  return value !== undefined && value !== null && value !== ''
+}
+
+function isUnoptimizedImage(url: string) {
+  return url.startsWith('/files/') || url.includes('precojusto.ai/files/')
+}
+
+/** Pesquisa (quiz) de campanha: perguntas de múltipla escolha, texto livre e escala. */
 export function QuizModal({ campaignId, onClose, isPageMode = false }: QuizModalProps) {
   const { quiz, isLoading, isCompleted, responses, updateResponse, submit, isSubmitting, submitError } = useQuiz(campaignId)
   const { toast } = useToast()
@@ -29,411 +44,281 @@ export function QuizModal({ campaignId, onClose, isPageMode = false }: QuizModal
   useEffect(() => {
     if (submitError) {
       toast({
-        title: 'Erro',
-        description: submitError instanceof Error ? submitError.message : 'Erro ao submeter quiz',
+        title: 'Não foi possível enviar',
+        description: submitError instanceof Error ? submitError.message : 'Tente novamente em instantes.',
         variant: 'destructive'
       })
     }
   }, [submitError, toast])
 
-  // No modo modal, retornar null se não houver quiz ou se já foi respondido
-  // No modo página, o componente pai (QuizPageClient) já trata isso
-  if (!isPageMode && (isLoading || !quiz || isCompleted)) return null
+  // No modo modal nada aparece enquanto carrega, sem quiz ou já respondido (a página trata esses estados)
+  if (!quiz || (!isPageMode && (isLoading || isCompleted))) return null
 
-  const handleSubmit = async () => {
-    try {
-      const validation = validateResponses()
-      if (!validation.valid) {
-        setErrors(validation.errors)
-        toast({
-          title: 'Campos obrigatórios',
-          description: Object.values(validation.errors).join(', '),
-          variant: 'destructive'
-        })
-        return
+  const questions = quiz.quizConfig.questions
+  const locked = Boolean(isCompleted || quiz.isCompleted)
+
+  const validate = (): Record<string, string> => {
+    const found: Record<string, string> = {}
+    for (const question of questions) {
+      const response = responses[question.id]
+      if (question.required && !isAnswered(response)) {
+        found[question.id] = 'Responda esta pergunta.'
+        continue
       }
-      setErrors({})
-      
-      // Aguardar o submit completar antes de fazer qualquer redirecionamento
+      if (question.type === 'SCALE' && isAnswered(response)) {
+        const value = Number(response)
+        if (question.min !== undefined && value < question.min) found[question.id] = `O valor mínimo é ${question.min}.`
+        if (question.max !== undefined && value > question.max) found[question.id] = `O valor máximo é ${question.max}.`
+      }
+    }
+    return found
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    const found = validate()
+    setErrors(found)
+    if (Object.keys(found).length > 0) {
+      document.getElementById(`quiz-q-${Object.keys(found)[0]}`)?.focus()
+      return
+    }
+    try {
       await submit()
-      
-      toast({
-        title: 'Quiz enviado!',
-        description: 'Obrigado por responder!',
-      })
-      
-      // Aguardar um pouco antes de redirecionar para o usuário ver o toast
+      toast({ title: 'Respostas enviadas', description: 'Obrigado por participar.' })
       setTimeout(() => {
-        if (onClose) {
-          onClose()
-        } else if (isPageMode) {
-          // Usar router.push ao invés de window.location.href para evitar reload completo
-          router.push('/notificacoes')
-        }
-      }, 1500)
-    } catch (error: any) {
+        if (onClose) onClose()
+        else if (isPageMode) router.push('/notificacoes')
+      }, 1200)
+    } catch (error) {
       toast({
-        title: 'Erro',
-        description: error.message || 'Erro ao submeter quiz',
+        title: 'Não foi possível enviar',
+        description: error instanceof Error ? error.message : 'Tente novamente em instantes.',
         variant: 'destructive'
       })
     }
   }
 
-  const validateResponses = (): { valid: boolean; errors: Record<string, string> } => {
-    const validationErrors: Record<string, string> = {}
-    
-    if (!quiz) {
-      return { valid: false, errors: { general: 'Quiz não encontrado' } }
-    }
-    
-    for (const question of quiz.quizConfig.questions) {
-      const response = responses[question.id]
-      
-      if (question.required && (response === undefined || response === null || response === '')) {
-        validationErrors[question.id] = 'Esta pergunta é obrigatória'
-        continue
-      }
+  const answeredCount = questions.filter((q) => isAnswered(responses[q.id])).length
 
-      if (question.type === 'SCALE' && response !== undefined && response !== null && response !== '') {
-        const numValue = Number(response)
-        if (question.min !== undefined && numValue < question.min) {
-          validationErrors[question.id] = `Valor mínimo é ${question.min}`
-        }
-        if (question.max !== undefined && numValue > question.max) {
-          validationErrors[question.id] = `Valor máximo é ${question.max}`
-        }
-      }
-    }
+  const form = (
+    <form id="quiz-form" onSubmit={handleSubmit} className="grid gap-6" noValidate>
+      {questions.map((question) => (
+        <QuestionField
+          key={question.id}
+          question={question}
+          value={responses[question.id] as ResponseValue}
+          error={errors[question.id]}
+          disabled={locked}
+          onChange={(value) => updateResponse(question.id, value)}
+        />
+      ))}
+    </form>
+  )
 
-    return {
-      valid: Object.keys(validationErrors).length === 0,
-      errors: validationErrors
-    }
-  }
+  const submitLabel = isSubmitting ? 'Enviando…' : locked ? 'Já respondido' : 'Enviar respostas'
 
-  if (!quiz) return null
-
-  const template = quiz.modalTemplate || 'GRADIENT'
-
-  const renderQuestion = (question: any) => {
-    const response = responses[question.id]
-    const error = errors[question.id]
-    const isDisabled = isCompleted || quiz?.isCompleted
-
+  if (isPageMode) {
     return (
-      <div key={question.id} className="space-y-2">
-        <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
-          {question.question}
-          {question.required && <span className="text-red-500 ml-1">*</span>}
-        </label>
-        
-        {question.type === 'MULTIPLE_CHOICE' && question.options && (
-          <div className="space-y-2">
-            {question.options.map((option: string, idx: number) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => !isDisabled && updateResponse(question.id, option)}
-                disabled={isDisabled}
-                className={cn(
-                  "w-full text-left p-3 rounded-lg border-2 transition-all",
-                  isDisabled && "opacity-50 cursor-not-allowed",
-                  response === option
-                    ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
-                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <div className={cn(
-                    "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                    response === option
-                      ? "border-indigo-500 bg-indigo-500"
-                      : "border-slate-300 dark:border-slate-600"
-                  )}>
-                    {response === option && (
-                      <div className="w-2 h-2 rounded-full bg-white" />
-                    )}
-                  </div>
-                  <span className="text-sm text-slate-700 dark:text-slate-300">{option}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {question.type === 'TEXT' && (
-          <Textarea
-            value={response || ''}
-            onChange={(e) => !isDisabled && updateResponse(question.id, e.target.value)}
-            placeholder="Digite sua resposta..."
-            className={cn(error && "border-red-500", isDisabled && "opacity-50 cursor-not-allowed")}
-            rows={3}
-            disabled={isDisabled}
-          />
-        )}
-
-        {question.type === 'SCALE' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-              <span>{question.min || 0}</span>
-              <span className="font-medium">{response || question.min || 0}</span>
-              <span>{question.max || 10}</span>
-            </div>
-            <Slider
-              value={[Number(response) || question.min || 0]}
-              onValueChange={(value) => !isDisabled && updateResponse(question.id, value[0])}
-              min={question.min || 0}
-              max={question.max || 10}
-              step={1}
-              className={cn("w-full", isDisabled && "opacity-50")}
-              disabled={isDisabled}
-            />
-          </div>
-        )}
-
-        {error && (
-          <p className="text-xs text-red-500 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" />
-            {error}
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  // Template GRADIENT
-  const gradientContent = (
-    <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-950/30 dark:via-purple-950/30 dark:to-pink-950/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-800">
-      <div className="space-y-6">
-        <div className="flex items-start gap-4">
-          {quiz.illustrationUrl && (
-            <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border-2 border-white dark:border-slate-800">
-              <Image
-                src={quiz.illustrationUrl}
-                alt=""
-                width={64}
-                height={64}
-                className="object-cover w-full h-full"
-              />
-            </div>
-          )}
-          <div className="flex-1">
-            <h3 className="font-bold text-xl text-slate-900 dark:text-slate-100 mb-2">
-              {quiz.title}
-            </h3>
-            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-              {quiz.message}
-            </p>
-          </div>
-        </div>
-        <div className="space-y-4">
-          {quiz.quizConfig.questions.map(renderQuestion)}
-        </div>
-        <Button
-          onClick={handleSubmit}
-          disabled={isSubmitting || isCompleted || quiz?.isCompleted}
-          className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? 'Enviando...' : (isCompleted || quiz?.isCompleted) ? 'Quiz já respondido' : 'Enviar Respostas'}
-          <CheckCircle2 className="w-4 h-4 ml-2" />
-        </Button>
-      </div>
-    </div>
-  )
-
-  // Template SOLID
-  const solidContent = (
-    <div className="bg-slate-900 dark:bg-slate-800 rounded-lg p-6 border-2 border-slate-700 dark:border-slate-600">
-      <div className="space-y-6">
-        <div className="flex items-start gap-4">
-          {quiz.illustrationUrl && (
-            <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border-2 border-slate-700">
-              <Image
-                src={quiz.illustrationUrl}
-                alt=""
-                width={64}
-                height={64}
-                className="object-cover w-full h-full"
-              />
-            </div>
-          )}
-          <div className="flex-1">
-            <h3 className="font-bold text-xl text-white mb-2">
-              {quiz.title}
-            </h3>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              {quiz.message}
-            </p>
-          </div>
-        </div>
-        <div className="space-y-4">
-          {quiz.quizConfig.questions.map(renderQuestion)}
-        </div>
-        <Button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className="w-full bg-white text-slate-900 hover:bg-slate-100 font-medium"
-        >
-          {isSubmitting ? 'Enviando...' : 'Enviar Respostas'}
-          <CheckCircle2 className="w-4 h-4 ml-2" />
-        </Button>
-      </div>
-    </div>
-  )
-
-  // Template MINIMAL
-  const minimalContent = (
-    <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-slate-200 dark:border-slate-800">
-      <div className="space-y-6">
-        <div>
-          <h3 className="font-semibold text-lg text-slate-900 dark:text-slate-100 mb-2">
-            {quiz.title}
-          </h3>
-          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-            {quiz.message}
-          </p>
-        </div>
-        <div className="space-y-4">
-          {quiz.quizConfig.questions.map(renderQuestion)}
-        </div>
-        <Button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          variant="default"
-          className="w-full"
-        >
-          {isSubmitting ? 'Enviando...' : 'Enviar Respostas'}
-          <CheckCircle2 className="w-4 h-4 ml-2" />
-        </Button>
-      </div>
-    </div>
-  )
-
-  // Template ILLUSTRATED
-  const illustratedContent = (
-    <div className="bg-white dark:bg-slate-900 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl">
-      {quiz.illustrationUrl && (
-        <div className="relative w-full h-64 overflow-hidden">
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        {quiz.illustrationUrl && (
           <Image
             src={quiz.illustrationUrl}
-            alt={quiz.title}
-            width={600}
+            alt=""
+            width={768}
             height={256}
-            className="object-cover w-full h-full"
-            priority
-            unoptimized={quiz.illustrationUrl.startsWith('/files/') || quiz.illustrationUrl.includes('precojusto.ai/files/')}
+            className="h-40 w-full border-b border-border object-cover sm:h-56"
+            unoptimized={isUnoptimizedImage(quiz.illustrationUrl)}
           />
-          {/* Overlay sutil no topo para melhor contraste do texto */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-transparent" />
-        </div>
-      )}
-      <div className="p-6 space-y-6">
-        <div className="space-y-2">
-          <h3 className="font-bold text-2xl text-slate-900 dark:text-slate-100 leading-tight">
-            {quiz.title}
-          </h3>
-          <p className="text-base text-slate-600 dark:text-slate-400 leading-relaxed">
-            {quiz.message}
-          </p>
-        </div>
-        <div className="space-y-4">
-          {quiz.quizConfig.questions.map(renderQuestion)}
-        </div>
-        <Button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          size="lg"
-          className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
-        >
-          {isSubmitting ? 'Enviando...' : 'Enviar Respostas'}
-          <CheckCircle2 className="w-5 h-5 ml-2" />
-        </Button>
-      </div>
-    </div>
-  )
-
-  const getTemplateContent = () => {
-    switch (template) {
-      case 'SOLID':
-        return solidContent
-      case 'MINIMAL':
-        return minimalContent
-      case 'ILLUSTRATED':
-        return illustratedContent
-      case 'GRADIENT':
-      default:
-        return gradientContent
-    }
-  }
-
-  // Se for modo página, renderizar sem Dialog
-  if (isPageMode) {
-    const totalQuestions = quiz?.quizConfig.questions.length ?? 0
-    const answeredQuestions = quiz?.quizConfig.questions.filter((question) => {
-      const response = responses[question.id]
-      return response !== undefined && response !== null && response !== ''
-    }).length ?? 0
-
-    return (
-      <Card className={cn(
-        "max-w-2xl mx-auto",
-        template === 'ILLUSTRATED' && "max-w-3xl"
-      )}>
-        <CardContent className="p-6 relative">
-          {totalQuestions > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
-                <span>Pergunta {Math.min(answeredQuestions + 1, totalQuestions)} de {totalQuestions}</span>
-                <span>{answeredQuestions} respondida{answeredQuestions === 1 ? '' : 's'}</span>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+        )}
+        <div className="grid gap-6 p-4 sm:p-6">
+          <header className="space-y-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">{quiz.title}</h1>
+            {quiz.message && <p className="text-sm leading-6 text-muted-foreground">{quiz.message}</p>}
+            {questions.length > 0 && (
+              <div className="space-y-1.5 pt-2">
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {answeredCount} de {questions.length} respondida{questions.length === 1 ? '' : 's'}
+                </p>
                 <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${(answeredQuestions / totalQuestions) * 100}%` }}
-                />
+                  className="h-1 w-full overflow-hidden rounded-full bg-muted"
+                  role="progressbar"
+                  aria-label="Progresso do quiz"
+                  aria-valuemin={0}
+                  aria-valuemax={questions.length}
+                  aria-valuenow={answeredCount}
+                >
+                  <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${(answeredCount / questions.length) * 100}%` }} />
+                </div>
               </div>
-            </div>
-          )}
-          {getTemplateContent()}
-          {onClose && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onClose()}
-              className="absolute top-4 right-4"
-              disabled={isSubmitting}
-            >
-              <X className="w-4 h-4" />
+            )}
+          </header>
+          {form}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {onClose && (
+              <Button type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>
+                Voltar
+              </Button>
+            )}
+            <Button type="submit" form="quiz-form" disabled={isSubmitting || locked}>
+              {submitLabel}
             </Button>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+      </section>
     )
   }
 
-  // Modo modal (padrão)
   return (
-    <Dialog open={!!quiz} onOpenChange={(open) => !open && onClose?.()}>
-      <DialogContent className={cn(
-        "max-w-2xl max-h-[90vh] overflow-y-auto",
-        template === 'ILLUSTRATED' && "max-w-3xl"
-      )} showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle className="sr-only">{quiz.title}</DialogTitle>
-        </DialogHeader>
-        {getTemplateContent()}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onClose?.()}
-          className="absolute top-4 right-4"
-          disabled={isSubmitting}
-        >
-          <X className="w-4 h-4" />
-        </Button>
+    <Dialog open onOpenChange={(open) => !open && onClose?.()}>
+      <DialogContent className="gap-0 p-0 sm:max-w-xl sm:p-0 [&>[data-slot=dialog-close]]:bg-popover">
+        {quiz.illustrationUrl && (
+          <Image
+            src={quiz.illustrationUrl}
+            alt=""
+            width={640}
+            height={256}
+            className="h-40 w-full border-b border-border object-cover sm:h-52"
+            unoptimized={isUnoptimizedImage(quiz.illustrationUrl)}
+          />
+        )}
+        <div className="grid gap-5 p-5 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg leading-snug">{quiz.title}</DialogTitle>
+            {quiz.message ? (
+              <DialogDescription className="leading-6">{quiz.message}</DialogDescription>
+            ) : (
+              <DialogDescription className="sr-only">Pesquisa da equipe Preço Justo AI</DialogDescription>
+            )}
+          </DialogHeader>
+          {form}
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onClose?.()} disabled={isSubmitting}>
+              Agora não
+            </Button>
+            <Button type="submit" form="quiz-form" disabled={isSubmitting || locked}>
+              {submitLabel}
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
 }
 
+function QuestionField({
+  question,
+  value,
+  error,
+  disabled,
+  onChange,
+}: {
+  question: QuizQuestion
+  value: ResponseValue
+  error?: string
+  disabled: boolean
+  onChange: (value: string | number) => void
+}) {
+  const fieldId = `quiz-q-${question.id}`
+  const errorId = `${fieldId}-error`
+  const min = question.min ?? 0
+  const max = question.max ?? 10
+
+  const label = (
+    <>
+      {question.question}
+      {question.required ? (
+        <span className="text-muted-foreground font-normal"> · obrigatória</span>
+      ) : null}
+    </>
+  )
+
+  return (
+    <div className="grid gap-2">
+      {question.type === 'MULTIPLE_CHOICE' && question.options ? (
+        <fieldset
+          className="grid gap-2"
+          aria-invalid={Boolean(error) || undefined}
+          aria-describedby={error ? errorId : undefined}
+          disabled={disabled}
+        >
+          <legend className="mb-2 text-sm font-medium text-foreground">{label}</legend>
+          {question.options.map((option, index) => {
+            const checked = value === option
+            return (
+              <label
+                key={option}
+                className={cn(
+                  'flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-accent has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60',
+                  checked ? 'border-brand bg-brand-subtle' : 'border-border'
+                )}
+              >
+                <input
+                  id={index === 0 ? fieldId : undefined}
+                  type="radio"
+                  name={fieldId}
+                  value={option}
+                  checked={checked}
+                  onChange={() => onChange(option)}
+                  className="size-4 shrink-0 accent-[var(--brand)] outline-none"
+                />
+                {option}
+              </label>
+            )
+          })}
+        </fieldset>
+      ) : (
+        <label htmlFor={fieldId} className="text-sm font-medium text-foreground">
+          {label}
+        </label>
+      )}
+
+      {question.type === 'TEXT' && (
+        <Textarea
+          id={fieldId}
+          value={typeof value === 'string' ? value : ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Sua resposta"
+          rows={3}
+          disabled={disabled}
+          aria-invalid={Boolean(error) || undefined}
+          aria-describedby={error ? errorId : undefined}
+        />
+      )}
+
+      {question.type === 'SCALE' && (
+        <div className="grid gap-2">
+          <Slider
+            id={fieldId}
+            value={[isAnswered(value) ? Number(value) : min]}
+            onValueChange={(next) => onChange(next[0])}
+            // Sem resposta, o polegar fica no mínimo e o Radix não dispara mudança ao tocar nele: registra o mínimo
+            onPointerDown={() => {
+              if (!isAnswered(value)) onChange(min)
+            }}
+            onKeyDown={(e) => {
+              if (!isAnswered(value) && SLIDER_KEYS.has(e.key)) onChange(min)
+            }}
+            min={min}
+            max={max}
+            step={1}
+            disabled={disabled}
+            aria-label={question.question}
+            aria-describedby={error ? errorId : undefined}
+          />
+          <div className="flex items-center justify-between text-xs text-muted-foreground tabular-nums">
+            <span>{min}</span>
+            <span className="font-medium text-foreground">{isAnswered(value) ? value : '—'}</span>
+            <span>{max}</span>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p id={errorId} className="flex items-center gap-1.5 text-xs text-negative">
+          <AlertCircle className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}

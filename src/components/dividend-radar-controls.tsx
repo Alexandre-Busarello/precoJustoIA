@@ -1,15 +1,10 @@
 'use client'
 
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Label } from '@/components/ui/label'
 import { Search } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
 interface DividendRadarControlsProps {
@@ -21,7 +16,6 @@ interface DividendRadarControlsProps {
   onPeriodChange: (value: string) => void
   myAssets: boolean
   onMyAssetsChange: (value: boolean) => void
-  dateType: 'exDate' | 'paymentDate' // Sempre 'exDate' (paymentDate não disponível no banco)
   oneTickerPerStock: boolean
   onOneTickerPerStockChange: (value: boolean) => void
   sectors: string[]
@@ -29,6 +23,28 @@ interface DividendRadarControlsProps {
   className?: string
 }
 
+function SwitchField({
+  id,
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  id: string
+  label: string
+  checked: boolean
+  onCheckedChange: (value: boolean) => void
+}) {
+  return (
+    <div className="col-span-2 flex min-h-11 items-center gap-2.5 sm:col-span-1 md:min-h-9">
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+      <Label htmlFor={id} className="cursor-pointer text-sm font-normal text-foreground">
+        {label}
+      </Label>
+    </div>
+  )
+}
+
+/** Filtros do radar de dividendos: busca, período, setor e alternâncias. */
 export function DividendRadarControls({
   search,
   onSearchChange,
@@ -38,7 +54,6 @@ export function DividendRadarControls({
   onPeriodChange,
   myAssets,
   onMyAssetsChange,
-  dateType,
   oneTickerPerStock,
   onOneTickerPerStockChange,
   sectors,
@@ -46,69 +61,43 @@ export function DividendRadarControls({
   className,
 }: DividendRadarControlsProps) {
   return (
-    <div className={cn('space-y-4', className)}>
-      {/* Linha 1: Toggle e Dropdowns */}
-      <div className="flex flex-wrap items-center gap-4">
-        {/* Toggle "Um ticker por ação" */}
-        <div className="flex items-center gap-2">
-          <Label htmlFor="one-ticker-toggle" className="text-sm whitespace-nowrap">
-            Um ticker por ação
-          </Label>
-          <button
-            id="one-ticker-toggle"
-            type="button"
-            onClick={() => onOneTickerPerStockChange(!oneTickerPerStock)}
-            className={cn(
-              'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-              oneTickerPerStock ? 'bg-primary' : 'bg-muted'
-            )}
-          >
-            <span
-              className={cn(
-                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                oneTickerPerStock ? 'translate-x-6' : 'translate-x-1'
-              )}
-            />
-          </button>
-        </div>
+    <div className={cn('space-y-3', className)}>
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          placeholder="Buscar empresa ou ticker"
+          aria-label="Buscar empresa ou ticker"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="pl-9"
+        />
+      </div>
 
-        {/* Dropdown Meus ativos */}
-        {isLoggedIn && (
-          <Select
-            value={myAssets ? 'true' : 'false'}
-            onValueChange={(value) => onMyAssetsChange(value === 'true')}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Meus ativos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="false">Todos</SelectItem>
-              <SelectItem value="true">Meus ativos</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-
-        {/* Dropdown Período */}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
         <Select value={period} onValueChange={onPeriodChange}>
-          <SelectTrigger className="w-[120px]">
+          <SelectTrigger className="w-full sm:w-44" aria-label="Período do calendário">
             <SelectValue placeholder="Período" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="3">3 meses</SelectItem>
-            <SelectItem value="6">6 meses</SelectItem>
+            <SelectItem value="3">Próximos 3 meses</SelectItem>
+            <SelectItem value="6">Próximos 6 meses</SelectItem>
             <SelectItem value="12">12 meses</SelectItem>
           </SelectContent>
         </Select>
 
-        {/* Dropdown Setores */}
         <Select value={sector || 'all'} onValueChange={(value) => onSectorChange(value === 'all' ? '' : value)}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Setores" />
+          <SelectTrigger className="w-full sm:w-52" aria-label="Setor">
+            <SelectValue placeholder="Setor" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="all">Setores</SelectItem>
             {sectors
-              .filter((s) => s && s.trim() !== '') // Filtrar valores vazios ou nulos
+              .filter((s) => s && s.trim() !== '')
               .map((s) => (
                 <SelectItem key={s} value={s}>
                   {s}
@@ -117,24 +106,17 @@ export function DividendRadarControls({
           </SelectContent>
         </Select>
 
-        {/* Tab Data Com (apenas ExDate disponível, paymentDate sempre NULL no banco) */}
-        <div className="px-3 py-2 text-sm font-medium text-muted-foreground border rounded-md bg-muted/50">
-          Data Com (Ex-Dividendo)
-        </div>
-      </div>
-
-      {/* Linha 2: Busca */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          type="text"
-          placeholder="Buscar empresas ou ativos"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-9"
+        <SwitchField
+          id="one-ticker-toggle"
+          label="Um ticker por empresa"
+          checked={oneTickerPerStock}
+          onCheckedChange={onOneTickerPerStockChange}
         />
+
+        {isLoggedIn && (
+          <SwitchField id="my-assets-toggle" label="Só meus ativos" checked={myAssets} onCheckedChange={onMyAssetsChange} />
+        )}
       </div>
     </div>
   )
 }
-

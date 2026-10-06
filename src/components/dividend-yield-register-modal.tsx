@@ -1,5 +1,7 @@
 "use client"
 
+/** Cadastro rápido para abrir o relatório de dividend yield. Abre só quando o usuário pede o relatório. */
+
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
@@ -13,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2, Lock, CheckCircle } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
 interface DividendYieldRegisterModalProps {
   isOpen: boolean
@@ -33,7 +35,7 @@ export function DividendYieldRegisterModal({
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [website, setWebsite] = useState("") // 🍯 HONEYPOT: Campo para detectar bots
+  const [website, setWebsite] = useState("") // Honeypot: campo invisível para detectar bots
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
@@ -43,10 +45,10 @@ export function DividendYieldRegisterModal({
     setIsLoading(true)
     setError("")
 
-    // 🍯 HONEYPOT: Verificação frontend (opcional, mas economiza requisição)
+    // Honeypot preenchido: provavelmente um bot. Para sem avisar.
     if (website) {
       setIsLoading(false)
-      return // Simplesmente para a execução sem alertar o bot
+      return
     }
 
     if (password !== confirmPassword) {
@@ -72,7 +74,7 @@ export function DividendYieldRegisterModal({
           name,
           email,
           password,
-          website, // 🍯 HONEYPOT: Campo para detectar bots no backend
+          website,
           acquisition: "Calculadora de Dividend Yield",
         }),
       })
@@ -109,26 +111,20 @@ export function DividendYieldRegisterModal({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Lock className="w-5 h-5" />
-            Cadastre-se para Ver o Relatório Completo
-          </DialogTitle>
+          <DialogTitle>Crie uma conta para ver o relatório</DialogTitle>
           <DialogDescription>
-            Cadastre-se grátis para acessar análise detalhada de sustentabilidade, gráficos
-            históricos completos, comparação setorial e projeções futuras.
+            Conta gratuita, sem cartão de crédito. O relatório traz sustentabilidade dos proventos, histórico completo,
+            comparação com o setor e cenários de renda.
           </DialogDescription>
         </DialogHeader>
 
         {success ? (
-          <div className="py-6 text-center">
-            <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Conta criada com sucesso!</h3>
-            <p className="text-sm text-muted-foreground">
-              Redirecionando para o relatório completo...
-            </p>
+          <div role="status" className="space-y-1 py-6 text-center">
+            <p className="text-base font-medium text-foreground">Conta criada</p>
+            <p className="text-sm text-muted-foreground">Abrindo o relatório completo.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 relative">
@@ -137,6 +133,7 @@ export function DividendYieldRegisterModal({
               <Input
                 id="name"
                 type="text"
+                autoComplete="name"
                 placeholder="Seu nome"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -146,10 +143,11 @@ export function DividendYieldRegisterModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">E-mail</Label>
               <Input
                 id="email"
                 type="email"
+                autoComplete="email"
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -163,6 +161,7 @@ export function DividendYieldRegisterModal({
               <Input
                 id="password"
                 type="password"
+                autoComplete="new-password"
                 placeholder="Mínimo 6 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -172,10 +171,11 @@ export function DividendYieldRegisterModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+              <Label htmlFor="confirmPassword">Confirmar senha</Label>
               <Input
                 id="confirmPassword"
                 type="password"
+                autoComplete="new-password"
                 placeholder="Confirme sua senha"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -184,8 +184,7 @@ export function DividendYieldRegisterModal({
               />
             </div>
 
-            {/* 🍯 HONEYPOT: Campo invisível para detectar bots */}
-            {/* Usa classe CSS sr-field (screen reader field) que parece legítima */}
+            {/* Honeypot: campo invisível (classe sr-field) para detectar bots */}
             <div className="sr-field">
               <Label htmlFor="website">Website</Label>
               <Input
@@ -200,27 +199,14 @@ export function DividendYieldRegisterModal({
             </div>
 
             {error && (
-              <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-md">
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-              </div>
+              <p role="alert" className="text-sm text-negative">
+                {error}
+              </p>
             )}
 
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md p-3">
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                <strong>Grátis para sempre:</strong> Cadastro sem cartão de crédito. Acesso
-                imediato ao relatório completo e todas as ferramentas gratuitas da plataforma.
-              </p>
-            </div>
-
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Criando conta...
-                </>
-              ) : (
-                "Criar Conta e Ver Relatório"
-              )}
+              {isLoading && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />}
+              {isLoading ? "Criando conta" : "Criar conta e ver relatório"}
             </Button>
           </form>
         )}

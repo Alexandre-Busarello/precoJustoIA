@@ -2,147 +2,108 @@
 
 import { useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ArrowRight } from 'lucide-react'
 import { useCheckoutUrl } from '@/components/kiwify-checkout-link'
+import { OfertaCTAButton, OfertaPriceLink } from '@/components/oferta-checkout-buttons'
+import { OFERTA_MONTHLY_PRICE_LABEL } from '@/components/landing/oferta-config'
 
-// Mapeamento de features para copies personalizados
-const FEATURE_COPIES: Record<string, {
+interface FeatureCopy {
   headline: string
   subheadline: string
   priceLabel: string
-  buttonText: {
-    mobile: string
-    desktop: string
-  }
-}> = {
-  'radar-inteligente': {
-    headline: 'Tenha o Radar Inteligente que Monitora suas Ações',
-    subheadline: 'Escolha o ativo, salve o radar e a IA faz o resto. Tudo em uma única tela por apenas R$ 17,99/mês.',
-    priceLabel: 'Radar Inteligente Completo',
-    buttonText: {
-      mobile: 'Garantir Meu Radar Agora',
-      desktop: 'Garantir Meu Radar Inteligente Agora'
-    }
-  },
-  'tres-dados-vitais': {
-    headline: 'Tenha os Três Dados Vitais em Uma Única Tela',
-    subheadline: 'Score de fundamentos, análise técnica e sentimento de mercado. Tudo que você precisa para investir com confiança por R$ 17,99/mês.',
-    priceLabel: 'Análise Completa em Uma Tela',
-    buttonText: {
-      mobile: 'Garantir Análise Completa',
-      desktop: 'Garantir Análise Completa Agora'
-    }
-  },
-  '5-minutos': {
-    headline: 'Pare de Perder Horas Analisando Balanços',
-    subheadline: 'Gaste apenas 5 minutos por mês ao invés de horas. O radar mostra tudo que precisa saber em uma única tela por R$ 17,99/mês.',
-    priceLabel: 'Economia de Tempo',
-    buttonText: {
-      mobile: 'Economizar Meu Tempo',
-      desktop: 'Economizar Meu Tempo Agora'
-    }
-  },
-  'analise-tecnica': {
-    headline: 'Tenha Análise Técnica com IA ao Seu Alcance',
-    subheadline: 'Inteligência Artificial analisa gráficos e padrões técnicos para identificar pontos de entrada e saída ideais por R$ 17,99/mês.',
-    priceLabel: 'Análise Técnica com IA',
-    buttonText: {
-      mobile: 'Garantir Análise Técnica',
-      desktop: 'Garantir Análise Técnica com IA'
-    }
-  },
-  'relatorios-ia': {
-    headline: 'Receba Relatórios da IA Direto no Seu E-mail',
-    subheadline: 'A plataforma te avisa automaticamente se algo mudar no fundamento da empresa. Você não precisa ficar checando. Por R$ 17,99/mês.',
-    priceLabel: 'Relatórios Automáticos',
-    buttonText: {
-      mobile: 'Garantir Relatórios IA',
-      desktop: 'Garantir Relatórios da IA Agora'
-    }
-  },
-  'rankings': {
-    headline: 'Encontre as Melhores Oportunidades com Rankings Inteligentes',
-    subheadline: 'Rankings usando estratégias consagradas ou Inteligência Artificial para encontrar as melhores ações por R$ 17,99/mês.',
-    priceLabel: 'Rankings Inteligentes',
-    buttonText: {
-      mobile: 'Garantir Rankings',
-      desktop: 'Garantir Rankings Inteligentes'
-    }
-  },
-  'screening': {
-    headline: 'Tenha o Melhor Screening de Ações da B3',
-    subheadline: 'Crie configurações personalizadas ou use a IA para encontrar as melhores empresas com mais de 65 indicadores por R$ 17,99/mês.',
-    priceLabel: 'Screening Completo',
-    buttonText: {
-      mobile: 'Garantir Screening',
-      desktop: 'Garantir Screening Completo'
-    }
-  },
-  'analise-b3': {
-    headline: 'Tenha Análise Completa de Todas as Empresas da B3',
-    subheadline: 'Análise de todas as ações e BDRs com mais de 65 indicadores fundamentalistas por empresa. Por R$ 17,99/mês.',
-    priceLabel: 'Análise Completa B3',
-    buttonText: {
-      mobile: 'Garantir Análise B3',
-      desktop: 'Garantir Análise Completa da B3'
-    }
-  },
-  'comparador': {
-    headline: 'Tenha o Melhor Comparador de Empresas',
-    subheadline: 'Compare empresas lado a lado e veja qual é a melhor opção de investimento com análise detalhada de indicadores por R$ 17,99/mês.',
-    priceLabel: 'Comparador Completo',
-    buttonText: {
-      mobile: 'Garantir Comparador',
-      desktop: 'Garantir Comparador Completo Agora'
-    }
-  },
-  'dividendos': {
-    headline: 'Monitore seus Dividendos com Projeções de IA',
-    subheadline: 'Radar de dividendos com projeções feitas por IA para identificar as melhores oportunidades de renda passiva por R$ 17,99/mês.',
-    priceLabel: 'Radar de Dividendos',
-    buttonText: {
-      mobile: 'Garantir Radar Dividendos',
-      desktop: 'Garantir Radar de Dividendos Agora'
-    }
-  },
-  'analise-setorial': {
-    headline: 'Tenha Análise Setorial Completa da B3',
-    subheadline: 'Análise completa por setores para identificar tendências e oportunidades de investimento por R$ 17,99/mês.',
-    priceLabel: 'Análise Setorial',
-    buttonText: {
-      mobile: 'Garantir Análise Setorial',
-      desktop: 'Garantir Análise Setorial Completa'
-    }
-  },
-  'calculadora-renda': {
-    headline: 'Calcule sua Renda Passiva com Precisão',
-    subheadline: 'Calcule quanto você precisa investir para alcançar seus objetivos de renda passiva com dividendos por R$ 17,99/mês.',
-    priceLabel: 'Calculadora de Renda',
-    buttonText: {
-      mobile: 'Garantir Calculadora',
-      desktop: 'Garantir Calculadora de Renda Passiva'
-    }
-  }
+  buttonText: string
 }
 
-// Copy padrão quando não há feature específica
-const DEFAULT_COPY = {
-  headline: 'Clique no link e garanta sua condição antes que encerre!',
-  subheadline: 'Acesso anual promocional por apenas R$ 17,99 mensais no cartão ou com desconto ainda maior se for à vista. Evite o giro excessivo e monitore suas ações com inteligência artificial.',
-  priceLabel: 'Acesso Anual Promocional',
-  buttonText: {
-    mobile: 'Garantir Condição Agora',
-    desktop: 'Garantir Minha Condição Agora'
-  }
+const PRICE = `${OFERTA_MONTHLY_PRICE_LABEL}/mês`
+
+/** Textos do CTA final conforme o card clicado na landing (`?feature=`). */
+const FEATURE_COPIES: Record<string, FeatureCopy> = {
+  'radar-inteligente': {
+    headline: 'Tenha o radar que acompanha suas ações',
+    subheadline: `Escolha os ativos, salve o radar e veja tudo em uma tela, por ${PRICE}.`,
+    priceLabel: 'Radar de ações',
+    buttonText: 'Garantir meu radar',
+  },
+  'tres-dados-vitais': {
+    headline: 'Fundamentos, técnica e sentimento em uma tela',
+    subheadline: `Score de fundamentos, análise técnica e sentimento de mercado lado a lado, por ${PRICE}.`,
+    priceLabel: 'Três leituras em uma tela',
+    buttonText: 'Garantir o acesso anual',
+  },
+  '5-minutos': {
+    headline: 'Menos horas lendo balanços',
+    subheadline: `Confira o radar em poucos minutos por mês e aprofunde só onde algo mudou, por ${PRICE}.`,
+    priceLabel: 'Radar de ações',
+    buttonText: 'Garantir o acesso anual',
+  },
+  'analise-tecnica': {
+    headline: 'Análise técnica com IA',
+    subheadline: `A IA descreve tendências, suportes e resistências do gráfico, por ${PRICE}. É uma estimativa gerada por IA.`,
+    priceLabel: 'Análise técnica com IA',
+    buttonText: 'Garantir a análise técnica',
+  },
+  'relatorios-ia': {
+    headline: 'Relatórios da IA no seu e-mail',
+    subheadline: `Receba um aviso quando algo mudar nos fundamentos de uma empresa que você acompanha, por ${PRICE}.`,
+    priceLabel: 'Relatórios automáticos',
+    buttonText: 'Garantir os relatórios',
+  },
+  rankings: {
+    headline: 'Rankings por modelo de valuation',
+    subheadline: `Ranqueie ações por modelos consagrados ou pela síntese com IA, por ${PRICE}.`,
+    priceLabel: 'Rankings por modelo',
+    buttonText: 'Garantir os rankings',
+  },
+  screening: {
+    headline: 'Screening de ações com mais de 65 indicadores',
+    subheadline: `Monte seus filtros ou descreva o que procura e deixe a IA configurar, por ${PRICE}.`,
+    priceLabel: 'Screening completo',
+    buttonText: 'Garantir o screening',
+  },
+  'analise-b3': {
+    headline: 'Ações e BDRs da B3 com mais de 65 indicadores',
+    subheadline: `Indicadores fundamentalistas e histórico de cada empresa, por ${PRICE}.`,
+    priceLabel: 'Análise das empresas da B3',
+    buttonText: 'Garantir o acesso anual',
+  },
+  comparador: {
+    headline: 'Compare empresas lado a lado',
+    subheadline: `Veja os indicadores de várias empresas na mesma tabela, por ${PRICE}.`,
+    priceLabel: 'Comparador completo',
+    buttonText: 'Garantir o comparador',
+  },
+  dividendos: {
+    headline: 'Acompanhe seus dividendos',
+    subheadline: `Calendário de proventos e projeções estatísticas, por ${PRICE}.`,
+    priceLabel: 'Radar de dividendos',
+    buttonText: 'Garantir o radar de dividendos',
+  },
+  'analise-setorial': {
+    headline: 'Análise setorial da B3',
+    subheadline: `Compare setores e veja como cada empresa se posiciona, por ${PRICE}.`,
+    priceLabel: 'Análise setorial',
+    buttonText: 'Garantir a análise setorial',
+  },
+  'calculadora-renda': {
+    headline: 'Simule sua renda passiva',
+    subheadline: `Calcule quanto investir para chegar à renda mensal em dividendos que você quer, por ${PRICE}.`,
+    priceLabel: 'Calculadora de renda',
+    buttonText: 'Garantir a calculadora',
+  },
+}
+
+const DEFAULT_COPY: FeatureCopy = {
+  headline: 'Garanta a condição enquanto ela está ativa',
+  subheadline: `Acesso anual promocional por ${OFERTA_MONTHLY_PRICE_LABEL} por mês no cartão, ou com desconto maior à vista.`,
+  priceLabel: 'Acesso anual promocional',
+  buttonText: 'Garantir o acesso anual',
 }
 
 export function DynamicCTASection() {
   const searchParams = useSearchParams()
   const feature = searchParams.get('feature')
   const checkoutUrl = useCheckoutUrl()
-  
-  // Scroll para o checkout quando há feature na URL
+
+  // Rola até o checkout quando a landing é aberta a partir de um card
   useEffect(() => {
     if (feature && window.location.hash === '#checkout') {
       const element = document.getElementById('checkout')
@@ -153,61 +114,22 @@ export function DynamicCTASection() {
       }
     }
   }, [feature])
-  
-  const copy = feature && FEATURE_COPIES[feature] 
-    ? FEATURE_COPIES[feature] 
-    : DEFAULT_COPY
+
+  const copy = (feature && FEATURE_COPIES[feature]) || DEFAULT_COPY
 
   return (
-    <section id="checkout" className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-blue-600 to-violet-600 text-white scroll-mt-20">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
-            {copy.headline}
-          </h2>
-          <p className="text-lg sm:text-xl mb-6 sm:mb-8 opacity-90 max-w-2xl mx-auto">
-            {copy.subheadline}
-          </p>
-          <div className="mb-6 sm:mb-8">
-            <a 
-              href={checkoutUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex flex-col items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border-2 border-white/20 hover:bg-white/20 hover:border-white/40 transition-all hover:shadow-xl transform hover:scale-105 cursor-pointer"
-            >
-              <div className="text-sm sm:text-base opacity-90">{copy.priceLabel}</div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
-                  R$ 17,99
-                </span>
-                <span className="text-lg sm:text-xl opacity-90">/mês</span>
-              </div>
-            </a>
-          </div>
-          <Button 
-            size="lg" 
-            className="bg-white text-blue-600 hover:bg-gray-100 text-base sm:text-lg md:text-xl px-6 sm:px-8 md:px-12 py-5 sm:py-6 md:py-7 shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 w-full sm:w-auto font-bold"
-            asChild
-          >
-            <a 
-              href={checkoutUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 sm:gap-3"
-            >
-              <span className="whitespace-nowrap">
-                <span className="sm:hidden">{copy.buttonText.mobile}</span>
-                <span className="hidden sm:inline">{copy.buttonText.desktop}</span>
-              </span>
-              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-            </a>
-          </Button>
-          <p className="text-xs sm:text-sm md:text-base mt-6 opacity-80 px-4">
-            ✅ Pagamento 100% seguro • ✅ Acesso imediato • ✅ Garantia de 7 dias • ✅ Condição encerre em breve
-          </p>
+    <section id="checkout" className="scroll-mt-20 border-t border-border bg-surface py-16 sm:py-20">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 [&>*]:max-w-3xl">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{copy.headline}</h2>
+        <p className="mt-3 max-w-[60ch] text-base text-muted-foreground">{copy.subheadline}</p>
+        <div className="mt-6">
+          <OfertaPriceLink href={checkoutUrl} label={copy.priceLabel} />
         </div>
+        <div className="mt-6">
+          <OfertaCTAButton href={checkoutUrl} label={copy.buttonText} />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">Pagamento seguro · Acesso imediato · Reembolso em até 7 dias</p>
       </div>
     </section>
   )
 }
-

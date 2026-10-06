@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { RecoveryCalculator } from "@/components/recovery-calculator"
 import { RecoveryLimitCTA } from "@/components/recovery-limit-cta"
-import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface UsageResponse {
   allowed: boolean
@@ -65,13 +65,10 @@ export function RecoveryCalculatorClient() {
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]" aria-busy="true">
+        <Skeleton className="h-96 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
     )
   }
 

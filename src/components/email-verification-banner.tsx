@@ -1,76 +1,58 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { useState, useEffect } from "react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Mail, X } from "lucide-react"
-import Link from "next/link"
+import { Mail } from "lucide-react"
+
 import { useEmailVerified } from "@/hooks/use-user-data"
+import type { PageNoticeSource } from "@/components/page-notice"
 
-export function EmailVerificationBanner() {
-  const { data: session, status } = useSession()
-  const [isDismissed, setIsDismissed] = useState(false)
-  const { data: emailVerifiedData, isLoading } = useEmailVerified()
+const DISMISS_KEY = "email-verification-banner-dismissed"
 
-  useEffect(() => {
-    // Verificar se o banner foi dispensado (localStorage)
-    const dismissed = localStorage.getItem('email-verification-banner-dismissed')
-    if (dismissed === 'true') {
-      setIsDismissed(true)
-    }
-  }, [])
-
-  const emailVerified = emailVerifiedData?.verified ?? null
-
-  const handleDismiss = () => {
-    setIsDismissed(true)
-    localStorage.setItem('email-verification-banner-dismissed', 'true')
+function readDismissed(): boolean {
+  try {
+    return window.localStorage.getItem(DISMISS_KEY) === "true"
+  } catch {
+    return false
   }
-
-  // Não mostrar se:
-  // - Não está autenticado
-  // - Foi dispensado
-  // - Email já está verificado
-  // - Ainda está carregando
-  if (status !== 'authenticated' || !session || isDismissed || emailVerified === true || isLoading) {
-    return null
-  }
-
-  // Se email não está verificado, mostrar banner
-  if (emailVerified === false) {
-    return (
-      <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800 relative mb-6">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="absolute top-2 right-2 h-6 w-6 p-0 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
-          onClick={handleDismiss}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-        <CardContent className="p-4 pr-10">
-          <div className="flex items-start gap-3">
-            <Mail className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                Verifique seu email para ativar seu trial de 1 dia
-              </p>
-              <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
-                Seu período de trial Premium só será ativado após verificar seu email. Você pode usar a plataforma normalmente, mas algumas funcionalidades Premium estarão limitadas.
-              </p>
-              <Link href="/verificar-email">
-                <Button size="sm" variant="outline" className="text-xs">
-                  Verificar Email
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return null
 }
 
+/**
+ * Aviso de verificação de e-mail (prioridade máxima no PageNotice).
+ * Só aparece para quem está logado com e-mail ainda não verificado e não dispensou o aviso.
+ */
+export function useEmailVerificationNotice(): PageNoticeSource {
+  const { status } = useSession()
+  const { data, isLoading, isError } = useEmailVerified()
+  const [dismissed, setDismissed] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    setDismissed(readDismissed())
+  }, [])
+
+  const dismiss = () => {
+    setDismissed(true)
+    try {
+      window.localStorage.setItem(DISMISS_KEY, "true")
+    } catch {
+      // Sem localStorage: o aviso some só nesta visita
+    }
+  }
+
+  if (status === "loading" || dismissed === null) return { pending: true, notice: null }
+  if (status !== "authenticated" || dismissed || isError) return { pending: false, notice: null }
+  if (isLoading) return { pending: true, notice: null }
+  if (data?.verified !== false) return { pending: false, notice: null }
+
+  return {
+    pending: false,
+    notice: {
+      id: "email-verification",
+      icon: Mail,
+      title: "Verifique seu e-mail para ativar o teste Premium de 1 dia",
+      description: "Você já pode usar a plataforma. O teste Premium começa depois da verificação.",
+      action: { label: "Verificar e-mail", href: "/verificar-email" },
+      onDismiss: dismiss,
+    },
+  }
+}

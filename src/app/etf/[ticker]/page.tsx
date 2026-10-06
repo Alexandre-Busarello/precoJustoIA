@@ -2,44 +2,28 @@ import { notFound, redirect } from 'next/navigation'
 import { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
+import Link from 'next/link'
+import type { ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import { ChevronLeft, GitCompare, Lock, LineChart, TriangleAlert } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
 import { CompanyLogo } from '@/components/company-logo'
-import { EtfHeaderScore } from '@/components/etf-header-score'
-import { InfoTooltip } from '@/components/info-tooltip'
-import { Footer } from '@/components/footer'
-import { BenChatFAB } from '@/components/ben-chat-fab'
+import { EtfHeaderScore, etfScoreClassification } from '@/components/etf-header-score'
+import { AnonLimitCTA } from '@/components/anon-limit-cta'
+import { Button } from '@/components/ui/button'
+import { DataTable } from '@/components/ui/data-table'
+import { SectionHeader } from '@/components/ui/section-header'
+import { Stat } from '@/components/ui/stat'
 import { cache } from '@/lib/cache-service'
+import { getCachedEtfScore } from '@/lib/etf-score-loader'
 import { ensureTodayPrice } from '@/lib/quote-service'
 import { getOrCalculateDailyTechnicalAnalysis } from '@/lib/technical-analysis-service'
 import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
 import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
-import { AnonLimitCTA } from '@/components/anon-limit-cta'
-import Link from 'next/link'
-
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Crown, Eye, TrendingUp, Info, AlertTriangle, Sparkles, BarChart3 } from 'lucide-react'
-
-function PremiumLockOverlay({ isLoggedIn }: { isLoggedIn: boolean }) {
-  const ctaHref = isLoggedIn ? '/checkout' : '/register'
-  const ctaLabel = isLoggedIn ? 'Upgrade Premium' : 'Cadastre-se Grátis'
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-background/85 backdrop-blur-[2px] border border-dashed border-teal-300/80 px-3 text-center">
-      <Crown className="h-6 w-6 text-teal-600 mb-1" />
-      <p className="text-xs text-muted-foreground mb-2 max-w-xs">
-        {isLoggedIn
-          ? 'Assine o Premium para ver este conteúdo completo.'
-          : 'Crie sua conta gratuita ou faça login para desbloquear.'}
-      </p>
-      <Button asChild size="sm" variant="outline" className="text-xs">
-        <Link href={ctaHref}>{ctaLabel}</Link>
-      </Button>
-    </div>
-  )
-}
+import { formatBRL, formatBRLCompact, formatDate, formatDeltaPct, formatNumber, formatPct } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 interface PageProps {
   params: { ticker: string }
@@ -56,22 +40,11 @@ function toNumber(value: PrismaDecimal | Date | null): number | null {
   return parseFloat(String(value))
 }
 
-function fmtPct(v: number | null | undefined, decimals = 1): string {
-  if (v === null || v === undefined) return '—'
-  const sign = v >= 0 ? '+' : ''
-  return `${sign}${(v * 100).toFixed(decimals)}%`
-}
-
-function fmtBrl(v: number | null | undefined): string {
-  if (v === null || v === undefined) return '—'
-  if (v >= 1e9) return `R$ ${(v / 1e9).toFixed(1)}B`
-  if (v >= 1e6) return `R$ ${(v / 1e6).toFixed(0)}M`
-  return `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
-}
-
-function fmtPrice(v: number | null): string {
-  if (v === null) return '—'
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+/** Cor do retorno: só positivo/negativo quando o valor exibido (1 casa) não é zero. */
+function returnTone(value: number | null): 'default' | 'positive' | 'negative' {
+  if (value === null) return 'default'
+  const shown = Math.round(value * 1000)
+  return shown > 0 ? 'positive' : shown < 0 ? 'negative' : 'default'
 }
 
 const METADATA_TTL = 60 * 60
@@ -79,7 +52,7 @@ const METADATA_TTL = 60 * 60
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { ticker: tickerParam } = await params
   const ticker = tickerParam.toUpperCase()
-  const cacheKey = `metadata-etf-${ticker}`
+  const cacheKey = `metadata-etf-v2-${ticker}`
   const cached = await cache.get<Metadata>(cacheKey, { prefix: 'companies', ttl: METADATA_TTL })
   if (cached) return cached
 
@@ -102,16 +75,15 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     })
 
     if (!company || company.assetType !== 'ETF') {
-      return { title: `${ticker} — ETF | Preço Justo AI` }
+      return { title: `${ticker} — ETF` }
     }
 
-    const taxa = company.etfData?.netExpenseRatio
-      ? `${(toNumber(company.etfData.netExpenseRatio)! * 100).toFixed(2)}% a.a.`
-      : null
+    const expenseRatio = toNumber(company.etfData?.netExpenseRatio ?? null)
+    const taxa = expenseRatio !== null ? `${formatPct(expenseRatio, { digits: 2 })} a.a.` : null
     const bench = company.etfData?.benchmarkIndex ?? null
     const score = company.etfData?.etfScore ?? null
 
-    const title = `${ticker} — ${company.name} | ETF | Preço Justo AI`
+    const title = `${ticker} — ${company.name} | ETF`
     const description = [
       `Análise completa do ETF ${company.name} (${ticker}).`,
       taxa ? `Taxa ${taxa}.` : null,
@@ -142,10 +114,47 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return metadata
   } catch {
     return {
-      title: `${ticker} — ETF | Preço Justo AI`,
+      title: `${ticker} — ETF`,
       alternates: { canonical: `/etf/${tickerParam.toLowerCase()}` },
     }
   }
+}
+
+/**
+ * Colunas `@db.Date` chegam como meia-noite UTC. Formatadas no fuso de Brasília, cairiam no dia anterior;
+ * aqui o dia do calendário é preservado (meio-dia UTC = 9h em Brasília, mesmo dia).
+ */
+function formatCalendarDate(value: Date | string): string {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return formatDate(null)
+  return formatDate(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12)))
+}
+
+interface HeaderAction {
+  label: string
+  href: string
+  icon: LucideIcon
+}
+
+function HeaderActionButton({ action, compact }: { action: HeaderAction; compact?: boolean }) {
+  const Icon = action.icon
+  return (
+    <Button variant="outline" size="sm" asChild className={cn('min-h-11 md:min-h-0', compact && 'shrink-0')}>
+      <Link href={action.href}>
+        <Icon className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+        {action.label}
+      </Link>
+    </Button>
+  )
+}
+
+function LockedNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Lock className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+      {children}
+    </p>
+  )
 }
 
 export default async function EtfPage({ params }: PageProps) {
@@ -210,7 +219,7 @@ export default async function EtfPage({ params }: PageProps) {
       assetType: true,
       dailyQuotes: {
         orderBy: { date: 'desc' },
-        take: 1,
+        take: 2,
         select: { price: true, date: true },
       },
       etfData: {
@@ -237,9 +246,23 @@ export default async function EtfPage({ params }: PageProps) {
   const holdings = etf?.holdings ?? []
   const visibleHoldings = canViewFullContent ? holdings : holdings.slice(0, 5)
 
-  const monthlyPricesCount = await prisma.historicalPrice.count({
-    where: { companyId: companyData.id, interval: '1mo' },
-  })
+  const [monthlyPricesCount, peers, etfScore] = await Promise.all([
+    prisma.historicalPrice.count({
+      where: { companyId: companyData.id, interval: '1mo' },
+    }),
+    etf?.etfClass
+      ? prisma.etfData.findMany({
+          where: {
+            etfClass: etf.etfClass,
+            company: { isActive: true, ticker: { not: ticker } },
+          },
+          orderBy: { etfScore: 'desc' },
+          take: 5,
+          select: { company: { select: { ticker: true } } },
+        })
+      : Promise.resolve([]),
+    canViewFullContent ? getCachedEtfScore(ticker) : Promise.resolve(null),
+  ])
   const hasTechnicalAnalysis = monthlyPricesCount >= 50
 
   // Disparar cálculo de análise técnica em background apenas se houver dados suficientes
@@ -249,344 +272,284 @@ export default async function EtfPage({ params }: PageProps) {
     })
   }
 
-  const peers = etf?.etfClass ? await prisma.etfData.findMany({
-    where: {
-      etfClass: etf.etfClass,
-      company: { isActive: true, ticker: { not: ticker } },
-    },
-    orderBy: { etfScore: 'desc' },
-    take: 5,
-    select: { company: { select: { ticker: true } } },
-  }) : []
-  const peerTickers = peers.map(p => p.company?.ticker).filter(Boolean) as string[]
+  const peerTickers = peers.map((p) => p.company?.ticker).filter(Boolean) as string[]
 
-  const currentPrice = toNumber(companyData.dailyQuotes?.[0]?.price)
-  const priceDate = companyData.dailyQuotes?.[0]?.date
+  const currentPrice = toNumber(companyData.dailyQuotes?.[0]?.price ?? null)
+  const previousPrice = toNumber(companyData.dailyQuotes?.[1]?.price ?? null)
+  const priceDate = companyData.dailyQuotes?.[0]?.date ?? null
+  const dayChange = currentPrice && previousPrice && previousPrice > 0 ? currentPrice / previousPrice - 1 : null
 
-  const r6m = toNumber(etf?.return6m)
-  const r1y = toNumber(etf?.return1y)
-  const r3y = toNumber(etf?.return3y)
-  const r5y = toNumber(etf?.return5y)
+  const r6m = toNumber(etf?.return6m ?? null)
+  const r1y = toNumber(etf?.return1y ?? null)
+  const r3y = toNumber(etf?.return3y ?? null)
+  const r5y = toNumber(etf?.return5y ?? null)
   const effReturn = r1y ?? (r6m !== null ? (1 + r6m) ** 2 - 1 : null)
   const isEstimated = r1y === null && r6m !== null
+  const expenseRatio = toNumber(etf?.netExpenseRatio ?? null)
+  const dividendYield = toNumber(etf?.dividendYield ?? null)
+  const concentrationTop5 = toNumber(etf?.holdingsConcentrationTop5 ?? null)
+  const volatility = toNumber(etf?.volatility12m ?? null)
 
   const returnsData = [
     { label: '6 meses', value: r6m },
-    { label: isEstimated ? '1 ano (est.)' : '1 ano', value: effReturn },
+    { label: isEstimated ? '12 meses (estimado)' : '12 meses', value: effReturn },
     { label: '3 anos', value: r3y },
     { label: '5 anos', value: r5y },
   ].filter((r) => r.value !== null)
 
+  const etfFacts = [
+    { label: 'Taxa de administração', value: expenseRatio !== null ? `${formatPct(expenseRatio, { digits: 2 })} a.a.` : null },
+    { label: 'Patrimônio líquido', value: etf?.netAssets ? formatBRLCompact(toNumber(etf.netAssets)) : null },
+    {
+      label: 'Concentração top 5',
+      value: concentrationTop5 !== null ? formatPct(concentrationTop5) : null,
+      note: etf?.aiConcentracaoPenaltyOverride ? 'Fundo espelho' : undefined,
+    },
+    { label: 'Dividend yield (12m)', value: dividendYield !== null && dividendYield > 0 ? formatPct(dividendYield) : null },
+    { label: 'Volatilidade (12m)', value: volatility !== null ? formatPct(volatility) : null },
+    { label: 'Índice de referência', value: etf?.benchmarkIndex ?? null },
+  ].filter((fact): fact is { label: string; value: string; note?: string } => fact.value !== null)
+
+  const limitedHistory =
+    r5y === null
+      ? r3y !== null
+        ? 'menos de 5 anos'
+        : r1y !== null
+          ? 'menos de 3 anos'
+          : r6m !== null
+            ? 'menos de 1 ano'
+            : 'um histórico muito reduzido'
+      : null
+
+  const actions: HeaderAction[] = [
+    ...(hasTechnicalAnalysis
+      ? [{ label: 'Análise técnica', href: `/etf/${tickerParam.toLowerCase()}/analise-tecnica`, icon: LineChart }]
+      : []),
+    ...(peerTickers.length >= 1
+      ? [
+          {
+            label: `Comparar com pares (${peerTickers.length + 1})`,
+            href: `/compara-etfs/${[ticker, ...peerTickers].map((t) => t.toLowerCase()).join('/')}`,
+            icon: GitCompare,
+          },
+        ]
+      : []),
+    { label: 'Comparar ETFs', href: '/comparador?tipo=etfs', icon: GitCompare },
+  ]
+
+  const lockedCta = isLoggedIn
+    ? { label: 'Assinar o Premium', href: '/checkout' }
+    : { label: 'Criar conta grátis', href: '/register' }
+
+  const holdingRows = visibleHoldings.map((h) => {
+    const holdingTicker = h.company?.ticker ?? h.ticker
+    const holdingName = h.company?.name ?? h.name
+    return {
+      id: String(h.id),
+      asset: (
+        <span className="flex min-w-0 max-w-44 items-center gap-1.5 sm:max-w-none">
+          {holdingTicker &&
+            (h.company?.ticker ? (
+              <Link
+                href={`/acao/${h.company.ticker.toLowerCase()}`}
+                className="inline-flex min-h-11 shrink-0 items-center font-medium text-foreground underline-offset-4 hover:text-brand hover:underline md:min-h-0"
+              >
+                {holdingTicker}
+              </Link>
+            ) : (
+              <span className="shrink-0 font-medium text-foreground">{holdingTicker}</span>
+            ))}
+          <span className="truncate text-muted-foreground">{holdingName}</span>
+        </span>
+      ),
+      weight: formatPct(toNumber(h.weight), { digits: 2 }),
+    }
+  })
+
   return (
     <>
-      <div className="container mx-auto py-8 px-4 max-w-6xl">
-        {/* Breadcrumb */}
-        <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
+      <div className="mx-auto max-w-6xl space-y-8 px-4 pt-4 pb-12">
+        <div className="space-y-2">
           <Link
             href="/ranking?assetType=etf"
-            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+            className="-ml-1 inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground md:min-h-8"
           >
-            ← Ranking de ETFs
+            <ChevronLeft className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            Ranking de ETFs
           </Link>
-          <div className="flex items-center gap-2 flex-wrap">
-            {hasTechnicalAnalysis && (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/etf/${tickerParam.toLowerCase()}/analise-tecnica`}>
-                  <TrendingUp className="w-4 h-4 mr-1.5 text-blue-600" />
-                  Análise Técnica
-                </Link>
-              </Button>
-            )}
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/comparador-etfs`}>
-                <BarChart3 className="w-4 h-4 mr-1.5 text-teal-600" />
-                Comparar ETFs
-              </Link>
-            </Button>
-          </div>
-        </div>
 
-        {/* Header 2-column layout */}
-        <div className="mb-6">
-          <div className="lg:flex lg:space-x-6 space-y-6 lg:space-y-0">
+          {/* Cabeçalho no mesmo formato do AssetHeader: Preço · Retorno 12m · Taxa · Score */}
+          <section aria-label={`Resumo de ${ticker}`} className="space-y-4">
+            <div className="flex items-start gap-3">
+              <CompanyLogo logoUrl={companyData.logoUrl} companyName={companyData.name} ticker={ticker} size={40} />
+              <div className="min-w-0 flex-1">
+                <h1 className="flex min-w-0 items-baseline gap-2">
+                  <span className="shrink-0 text-2xl font-semibold tracking-tight text-foreground">{ticker}</span>
+                  <span className="truncate text-sm font-normal text-muted-foreground">{companyData.name}</span>
+                </h1>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {etf?.benchmarkIndex ? `ETF · ${etf.benchmarkIndex}` : 'ETF'}
+                </p>
+              </div>
+              <div className="hidden shrink-0 items-center gap-2 md:flex">
+                {actions.map((action) => (
+                  <HeaderActionButton key={action.label} action={action} />
+                ))}
+              </div>
+            </div>
 
-            {/* Left: company info card */}
-            <Card className="flex-1">
-              <CardContent className="p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6">
-                  <div className="flex-shrink-0 self-center sm:self-start">
-                    <CompanyLogo
-                      logoUrl={companyData.logoUrl}
-                      companyName={companyData.name}
-                      ticker={ticker}
-                      size={80}
-                    />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between mb-3 gap-2">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h1 className="text-2xl sm:text-3xl font-bold">{ticker}</h1>
-                        <Badge variant="secondary" className="text-sm">
-                          <TrendingUp className="w-3 h-3 mr-1" />
-                          ETF
-                        </Badge>
-                        {etf?.benchmarkIndex && (
-                          <Badge variant="outline" className="text-xs max-w-[200px] truncate">
-                            {etf.benchmarkIndex}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="lg:text-right shrink-0">
-                        <p className="text-xs text-muted-foreground">Preço atual</p>
-                        <p className="text-xl sm:text-2xl font-bold">
-                          {fmtPrice(currentPrice)}
-                        </p>
-                        {priceDate && (
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(priceDate).toLocaleDateString('pt-BR')}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <h2 className="text-lg text-muted-foreground mb-4 truncate">
-                      {companyData.name}
-                    </h2>
-
-                    {/* Key ETF metrics row */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mb-4">
-                      {etf?.netExpenseRatio && (
-                        <div className="bg-muted/40 rounded-lg p-3">
-                          <p className="text-xs text-muted-foreground mb-0.5">Taxa de Administração</p>
-                          <p className="font-bold">
-                            {(toNumber(etf.netExpenseRatio)! * 100).toFixed(2)}% a.a.
-                          </p>
-                        </div>
-                      )}
-                      {etf?.netAssets && (
-                        <div className="bg-muted/40 rounded-lg p-3">
-                          <p className="text-xs text-muted-foreground mb-0.5">Patrimônio Líquido</p>
-                          <p className="font-bold">{fmtBrl(toNumber(etf.netAssets))}</p>
-                        </div>
-                      )}
-                      {etf?.holdingsConcentrationTop5 && (
-                        <div className="bg-muted/40 rounded-lg p-3">
-                          <p className="text-xs text-muted-foreground mb-0.5 flex items-center gap-1">
-                            Concentração Top 5
-                            <InfoTooltip content="Soma do peso percentual das 5 maiores posições da carteira. Valores acima de 65% indicam alta concentração — ETFs muito concentrados recebem penalidade no PJ-ETF Score." />
-                          </p>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-bold">
-                              {(toNumber(etf.holdingsConcentrationTop5)! * 100).toFixed(1)}%
-                            </p>
-                            {etf.aiConcentracaoPenaltyOverride && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded px-1.5 py-0.5">
-                                Fundo espelho
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Comparador Inteligente */}
-                    {etf?.etfClass && peerTickers.length >= 1 && (
-                      <div className="mb-4">
-                        <Button asChild className="w-full bg-black hover:bg-zinc-900 text-white dark:bg-white dark:text-black dark:hover:bg-zinc-100 h-auto min-h-10 py-2 text-sm font-semibold">
-                          <Link href={`/compara-etfs/${[ticker, ...peerTickers].map(t => t.toLowerCase()).join('/')}`}>
-                            <BarChart3 className="w-4 h-4 mr-2 shrink-0" />
-                            Comparador Inteligente
-                            <span className="ml-2 opacity-60 font-normal text-xs hidden sm:inline">{etf.etfClass}</span>
-                            <span className="ml-1.5 opacity-40 text-xs">({peerTickers.length + 1})</span>
-                          </Link>
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* Website */}
-                    {companyData.website && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Eye className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        <Link
-                          href={companyData.website}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline truncate"
-                        >
-                          Site oficial
-                        </Link>
-                      </div>
-                    )}
-
-                    {/* Disclaimer: histórico limitado */}
-                    {r5y === null && (
-                      <div className="mt-3 flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-0.5">
-                            Histórico limitado
-                          </p>
-                          <p className="text-xs text-amber-700 dark:text-amber-400 leading-snug">
-                            Este ETF possui{' '}
-                            {r3y !== null
-                              ? 'menos de 5 anos'
-                              : r1y !== null
-                              ? 'menos de 3 anos'
-                              : r6m !== null
-                              ? 'menos de 1 ano'
-                              : 'histórico muito reduzido'}{' '}
-                            de dados disponíveis. ETFs mais recentes têm menor previsibilidade de comportamento — recomendamos priorizar fundos com pelo menos 5 anos de track record consolidado.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Right: score panel */}
-            <div className="lg:flex-shrink-0 w-full lg:w-auto">
-              <EtfHeaderScore
-                ticker={ticker}
-                canViewFullContent={canViewFullContent}
-                isLoggedIn={isLoggedIn}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <Stat label="Preço" value={formatBRL(currentPrice)} delta={dayChange} deltaLabel="hoje" />
+              <Stat
+                label="Retorno 12m"
+                value={formatDeltaPct(effReturn)}
+                tone={returnTone(effReturn)}
+                caption={isEstimated ? 'Estimado a partir de 6 meses' : undefined}
+                locked={!canViewFullContent}
+                hint="Variação da cota nos últimos 12 meses."
+              />
+              <Stat
+                label="Taxa de administração"
+                value={formatPct(expenseRatio, { digits: 2 })}
+                caption={expenseRatio !== null ? 'ao ano' : undefined}
+              />
+              <Stat
+                label="Score"
+                value={etfScore ? `${formatNumber(etfScore.score, { digits: 0 })}/100` : '—'}
+                caption={etfScore ? etfScoreClassification(etfScore.score) : canViewFullContent ? 'Indisponível' : undefined}
+                locked={!canViewFullContent}
               />
             </div>
 
-          </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {priceDate && <p className="text-xs text-muted-foreground">Cotação de {formatCalendarDate(priceDate)}</p>}
+              {!canViewFullContent && !shouldShowAnonLimitCTA && (
+                <Button size="sm" asChild className="min-h-11 md:min-h-0">
+                  <Link href={lockedCta.href}>{lockedCta.label}</Link>
+                </Button>
+              )}
+            </div>
+
+            <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:hidden">
+              {actions.map((action) => (
+                <HeaderActionButton key={action.label} action={action} compact />
+              ))}
+            </div>
+          </section>
         </div>
 
-        {shouldShowAnonLimitCTA && (
-          <div className="mb-8">
-            <AnonLimitCTA />
-          </div>
-        )}
+        {shouldShowAnonLimitCTA && <AnonLimitCTA />}
 
-        {/* Retornos Históricos */}
-        {returnsData.length > 0 && (
-          <Card className="mb-6 relative overflow-hidden">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Retornos Históricos</CardTitle>
-            </CardHeader>
-            <CardContent className={!canViewFullContent ? 'relative min-h-[120px]' : undefined}>
-              <div className={`flex flex-wrap gap-6 ${!canViewFullContent ? 'filter blur-sm pointer-events-none select-none' : ''}`}>
-                {returnsData.map((r) => (
-                  <div key={r.label} className="text-center min-w-[70px]">
-                    <p className="text-xs text-muted-foreground mb-1">{r.label}</p>
-                    <p
-                      className={`text-lg font-bold ${
-                        r.value! >= 0
-                          ? 'text-green-600 dark:text-green-400'
-                          : 'text-red-600 dark:text-red-400'
-                      }`}
-                    >
-                      {fmtPct(r.value)}
-                    </p>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+          <div className="min-w-0 space-y-8">
+            {returnsData.length > 0 && (
+              <section aria-labelledby="retornos" className="space-y-4">
+                <SectionHeader id="retornos" title="Retornos históricos" description="Variação acumulada da cota em cada período." />
+                <div className="space-y-3 rounded-lg border border-border bg-card p-4 sm:p-5">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    {returnsData.map((r) => (
+                      <Stat
+                        key={r.label}
+                        label={r.label}
+                        value={formatDeltaPct(r.value)}
+                        tone={returnTone(r.value)}
+                        locked={!canViewFullContent}
+                      />
+                    ))}
                   </div>
-                ))}
-              </div>
-              {canViewFullContent && isEstimated && (
-                <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
-                  <Info className="w-3 h-3" />
-                  Retorno de 1 ano estimado com base no retorno de 6 meses anualizado
-                </p>
-              )}
-              {!canViewFullContent && <PremiumLockOverlay isLoggedIn={isLoggedIn} />}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Holdings */}
-        {holdings.length > 0 && (
-          <Card className="mb-6">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">
-                  Principais Participações
-                  {!canViewFullContent && holdings.length > 5 && (
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">
-                      (top 5 de {holdings.length})
-                    </span>
+                  {canViewFullContent && isEstimated && (
+                    <p className="text-xs text-muted-foreground">Retorno de 12 meses estimado a partir do retorno de 6 meses anualizado.</p>
                   )}
-                </CardTitle>
-                {!canViewFullContent && holdings.length > 5 && (
-                  <Badge variant="outline" className="text-xs gap-1">
-                    <Crown className="w-3 h-3 text-yellow-500" />
-                    Premium vê todas
-                  </Badge>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y">
-                {visibleHoldings.map((h, idx) => {
-                  const holdingTicker = h.company?.ticker ?? h.ticker
-                  const holdingName = h.company?.name ?? h.name
-                  const weightPct = (toNumber(h.weight)! * 100).toFixed(2)
-                  const hasLink = !!h.company?.ticker
+                  {!canViewFullContent && <LockedNote>Retornos históricos disponíveis no Premium.</LockedNote>}
+                </div>
+              </section>
+            )}
 
-                  const inner = (
-                    <div className="flex items-center justify-between px-5 py-3 hover:bg-muted/40 transition-colors gap-2">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <span className="text-xs text-muted-foreground w-5 text-right shrink-0">
-                          {idx + 1}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline gap-1.5 min-w-0">
-                            {holdingTicker && (
-                              <span className="font-mono text-sm font-bold shrink-0">{holdingTicker}</span>
-                            )}
-                            <span className="text-sm text-muted-foreground truncate min-w-0 flex-1">{holdingName}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <span className="font-bold text-sm shrink-0 ml-2">{weightPct}%</span>
+            {etfFacts.length > 0 && (
+              <section aria-labelledby="dados-etf" className="space-y-4">
+                <SectionHeader id="dados-etf" title="Dados do ETF" />
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border border-border bg-card p-4 sm:grid-cols-3 sm:p-5">
+                  {etfFacts.map((fact) => (
+                    <div key={fact.label} className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">{fact.label}</dt>
+                      <dd className="mt-0.5 text-sm font-medium tabular-nums text-foreground">
+                        {fact.value}
+                        {fact.note && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{fact.note}</span>}
+                      </dd>
                     </div>
-                  )
+                  ))}
+                </dl>
+                {limitedHistory && (
+                  <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" strokeWidth={1.75} aria-hidden="true" />
+                    <span>
+                      Histórico limitado: este ETF tem {limitedHistory} de dados. Fundos mais novos têm menos histórico para
+                      avaliar o comportamento em diferentes ciclos de mercado.
+                    </span>
+                  </p>
+                )}
+              </section>
+            )}
+          </div>
 
-                  return hasLink ? (
-                    <Link key={h.id} href={`/acao/${h.company!.ticker.toLowerCase()}`}>
-                      {inner}
-                    </Link>
-                  ) : (
-                    <div key={h.id}>{inner}</div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
+          <EtfHeaderScore result={etfScore} locked={!canViewFullContent} />
+        </div>
+
+        {holdings.length > 0 && (
+          <section aria-labelledby="participacoes" className="space-y-4">
+            <SectionHeader
+              id="participacoes"
+              title="Principais participações"
+              description={
+                canViewFullContent || holdings.length <= 5
+                  ? `${holdings.length} ${holdings.length === 1 ? 'ativo' : 'ativos'} por peso na carteira.`
+                  : `As 5 maiores de ${holdings.length} participações.`
+              }
+            />
+            <DataTable
+              columns={[
+                { key: 'asset', header: 'Ativo', sticky: true },
+                { key: 'weight', header: 'Peso', align: 'right' },
+              ]}
+              rows={holdingRows}
+              caption={`Participações do ETF ${ticker}`}
+            />
+            {!canViewFullContent && holdings.length > 5 && (
+              <LockedNote>Lista completa com {holdings.length} participações disponível no Premium.</LockedNote>
+            )}
+          </section>
         )}
 
-        {/* Description */}
         {companyData.description && companyData.descriptionSource === 'ai' && (
-          <Card className="mb-6">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Sobre o {ticker}</CardTitle>
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground border rounded px-1.5 py-0.5">
-                  <Sparkles className="w-2.5 h-2.5" />
-                  Gerado por IA
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent className={!canViewFullContent ? 'relative min-h-[140px]' : undefined}>
-              <div className={`space-y-3 ${!canViewFullContent ? 'filter blur-sm pointer-events-none select-none' : ''}`}>
-                {companyData.description.split('\n\n').filter(Boolean).map((paragraph, i) => (
-                  <p key={i} className="text-sm text-muted-foreground leading-relaxed">
-                    {paragraph.trim()}
-                  </p>
-                ))}
-              </div>
-              {!canViewFullContent && <PremiumLockOverlay isLoggedIn={isLoggedIn} />}
-            </CardContent>
-          </Card>
+          <section aria-labelledby="sobre-etf" className="space-y-4">
+            <SectionHeader id="sobre-etf" title={`Sobre o ${ticker}`} description="Descrição gerada por IA." />
+            <div
+              className={
+                canViewFullContent ? 'max-w-[68ch] space-y-3' : 'pointer-events-none max-w-[68ch] select-none space-y-3 blur-sm'
+              }
+              aria-hidden={canViewFullContent ? undefined : true}
+            >
+              {companyData.description.split('\n\n').filter(Boolean).map((paragraph, i) => (
+                <p key={i} className="text-sm leading-6 text-muted-foreground">
+                  {paragraph.trim()}
+                </p>
+              ))}
+            </div>
+            {!canViewFullContent && <LockedNote>Descrição completa disponível no Premium.</LockedNote>}
+          </section>
+        )}
+
+        {companyData.website && (
+          <a
+            href={companyData.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center text-sm font-medium text-brand underline-offset-4 hover:underline md:min-h-0"
+          >
+            Site oficial do ETF
+          </a>
         )}
       </div>
-
-      {!isLoggedIn && <Footer />}
-      <BenChatFAB />
 
       <script
         type="application/ld+json"

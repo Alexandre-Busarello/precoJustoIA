@@ -1,123 +1,79 @@
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Crown, Lock, Sparkles, TrendingUp, Youtube } from "lucide-react";
-import { FiiStrategicAnalysis } from "@/components/fii-strategic-analysis";
+import { SectionHeader } from "@/components/ui/section-header";
+
+/** Valores fictícios (o dado real nunca vai para o DOM de quem não tem acesso). */
+const PREVIEW_FACTS = [
+  { label: "Dividend yield (12m)", value: "0,0%" },
+  { label: "P/VP", value: "0,00x" },
+  { label: "Preço-teto (DY-alvo 8%)", value: "R$ 00,00" },
+  { label: "Último rendimento", value: "R$ 0,00" },
+  { label: "Patrimônio líquido", value: "R$ 0,0 bi" },
+  { label: "Liquidez média diária", value: "R$ 0,0 mi" },
+  { label: "Vacância média", value: "0,0%" },
+  { label: "Cap rate", value: "0,0%" },
+];
+
+const PREVIEW_PILLARS = [
+  { label: "Dividendos", width: "72%" },
+  { label: "Valuation", width: "58%" },
+  { label: "Qualidade do portfólio", width: "64%" },
+];
 
 /**
- * Prévia estática para !canViewFullContent: layout parecido com a página real,
- * sem dados sensíveis e sem props para hooks de fetch (RSC apenas).
+ * Prévia bloqueada da página de FII: a mesma estrutura da análise completa, borrada, com um único CTA.
+ * `showCta={false}` quando a página já mostra o aviso de limite do anônimo (que tem o mesmo "Criar conta grátis").
+ * Componente de servidor, sem consultas.
  */
-export function FiiPageLockedShell({ isLoggedIn }: { isLoggedIn: boolean }) {
-  const ctaHref = isLoggedIn ? "/checkout" : "/register";
-  const ctaLabel = isLoggedIn ? "Upgrade Premium" : "Cadastre-se Grátis";
-
-  const overlay = (
-    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-background/85 backdrop-blur-[2px] border border-dashed border-orange-300/80 px-3 text-center">
-      <Crown className="h-6 w-6 text-orange-600 mb-1" />
-      <p className="text-xs text-muted-foreground mb-2 max-w-xs">
-        {isLoggedIn
-          ? "Assine o Premium para ver análises completas deste FII."
-          : "Crie sua conta gratuita para desbloquear análises e trial."}
-      </p>
-      <Button asChild size="sm" variant="outline" className="text-xs">
-        <Link href={ctaHref}>{ctaLabel}</Link>
-      </Button>
-    </div>
-  );
+export function FiiPageLockedShell({ isLoggedIn, showCta = true }: { isLoggedIn: boolean; showCta?: boolean }) {
+  const cta = isLoggedIn
+    ? { href: "/checkout", label: "Assinar o Premium", text: "A análise completa deste FII faz parte do Premium." }
+    : { href: "/register", label: "Criar conta grátis", text: "Crie sua conta e teste o Premium por 1 dia para ver a análise completa." };
 
   return (
-    <div className="space-y-8">
-      <div className="relative mb-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/40 p-4 min-h-[180px]">
-        <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-3 text-sm">
-          Dados do Fundo Imobiliário
-        </h3>
-        <div className="filter blur-sm pointer-events-none select-none grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-muted-foreground">
-          <div>Dividend Yield: 0,00%</div>
-          <div>P/VP: 0,00</div>
-          <div>Patrimônio: R$ 0,00</div>
-          <div>Último dividendo: R$ 0,00</div>
-        </div>
-        {overlay}
-      </div>
-
-      <FiiStrategicAnalysis
-        previewLocked
-        isLoggedIn={isLoggedIn}
-        currentPrice={0}
-        dividendYield={null}
-        ultimoDividendo={null}
-        pvp={null}
-        liquidez={null}
-        qtdImoveis={null}
-        vacanciaMedia={null}
-        isPapel={false}
+    <section aria-labelledby="fii-analise-bloqueada" className="space-y-4">
+      <SectionHeader
+        id="fii-analise-bloqueada"
+        title="Análise completa do fundo"
+        description="Preço-teto, dados do fundo, score por pilar, sentimento de mercado e análise técnica."
       />
-
-      <Card className="relative min-h-[200px] overflow-hidden">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Youtube className="h-4 w-4" />
-            Sentimento de mercado
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="filter blur-sm pointer-events-none select-none space-y-2">
-            <div className="flex gap-2">
-              <Badge>Score 0</Badge>
-              <Badge variant="outline">Neutro</Badge>
-            </div>
-            <p className="text-sm leading-relaxed">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Resumo fictício da análise.
-            </p>
-          </div>
-          {overlay}
-        </CardContent>
-      </Card>
-
-      <Card className="relative min-h-[220px] overflow-hidden">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <TrendingUp className="h-4 w-4" />
-            Análise técnica
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="filter blur-sm pointer-events-none select-none h-32 rounded-md bg-muted/50 border" />
-          {overlay}
-        </CardContent>
-      </Card>
-
-      <Card className="relative min-h-[160px] overflow-hidden">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="h-4 w-4" />
-            Indicadores e IA
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="filter blur-sm pointer-events-none select-none grid grid-cols-2 gap-2 text-xs">
-            <div className="h-16 rounded bg-muted" />
-            <div className="h-16 rounded bg-muted" />
-            <div className="h-16 rounded bg-muted col-span-2" />
-          </div>
-          {overlay}
-        </CardContent>
-      </Card>
-
-      <Card className="relative min-h-[140px] overflow-hidden">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Lock className="h-4 w-4" />
-            Dados financeiros detalhados
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="filter blur-sm pointer-events-none select-none h-24 rounded-md bg-muted/40 border" />
-          {overlay}
-        </CardContent>
-      </Card>
-    </div>
+      <div className="rounded-lg border border-border bg-card p-4 sm:p-5">
+        <div aria-hidden="true" className="pointer-events-none select-none space-y-6 blur-sm">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+            {PREVIEW_FACTS.map((fact) => (
+              <div key={fact.label} className="min-w-0">
+                <dt className="truncate text-xs text-muted-foreground">{fact.label}</dt>
+                <dd className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <ul className="space-y-3">
+            {PREVIEW_PILLARS.map((pillar) => (
+              <li key={pillar.label}>
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>{pillar.label}</span>
+                  <span className="tabular-nums">00</span>
+                </div>
+                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-brand" style={{ width: pillar.width }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-start gap-2 text-sm text-muted-foreground">
+            <Lock className="mt-0.5 size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+            {cta.text}
+          </p>
+          {showCta && (
+            <Button asChild className="shrink-0">
+              <Link href={cta.href}>{cta.label}</Link>
+            </Button>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }

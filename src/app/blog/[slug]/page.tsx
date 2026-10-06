@@ -1,22 +1,21 @@
 import { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { 
-  Calendar, 
-  Clock, 
-  User,
-  ArrowLeft,
-  BookOpen,
-  Tag,
-  ArrowRight
-} from "lucide-react"
 import Link from "next/link"
-import { getPostBySlug, getAllPostSlugs, getRelatedPosts } from "@/lib/blog-service"
+import { Breadcrumbs } from "@/components/landing/breadcrumbs"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
+import { Badge } from "@/components/ui/badge"
+import { getPostBySlug, getAllPostSlugs, getRelatedPosts } from "@/lib/blog-service"
+import { formatDate } from "@/lib/format"
+
+/** O template do layout raiz já acrescenta "| Preço Justo AI"; remove a marca repetida de títulos vindos do banco. */
+function stripBrandSuffix(title: string): string {
+  return title.replace(/\s*[|\-–]\s*Preço Justo( AI)?\s*$/i, "").trim()
+}
+
+/** Datas chegam como YYYY-MM-DD; meio-dia UTC evita mostrar o dia anterior no fuso de Brasília. */
+function dayLabel(isoDay: string): string {
+  return formatDate(/^\d{4}-\d{2}-\d{2}$/.test(isoDay) ? `${isoDay}T12:00:00Z` : isoDay)
+}
 
 interface BlogPostPageProps {
   params: Promise<{
@@ -39,7 +38,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   
   if (!post) {
     return {
-      title: "Post não encontrado | Preço Justo AI",
+      title: "Artigo não encontrado",
       description: "O post que você está procurando não foi encontrado."
     }
   }
@@ -54,7 +53,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   const imageUrl = post.image || `${baseUrl}/logo-preco-justo.png`
 
   return {
-    title: post.seoTitle || `${post.title} | Preço Justo AI`,
+    title: stripBrandSuffix(post.seoTitle || post.title),
     description: post.seoDescription || post.excerpt,
     keywords: post.tags.join(", "),
     authors: [{ name: post.author }],
@@ -109,318 +108,135 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params
   const post = await getPostBySlug(slug)
-  const session = await getServerSession(authOptions)
-  
+
   if (!post) {
     notFound()
   }
 
-  // Posts relacionados (mesma categoria, excluindo o atual)
   const relatedPosts = await getRelatedPosts(slug, 3)
-  
-  // Gerar FAQs dinâmicos baseados no tema do post (apenas para usuários deslogados)
-  const generatePostFAQs = () => {
-    if (session) return null
-    
-    const anoAtual = new Date().getFullYear()
-    const baseFAQs = [
-      {
-        "@type": "Question",
-        "name": `O que é ${post.category.toLowerCase()}?`,
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": `Este artigo explica em detalhes sobre ${post.category.toLowerCase()} e como aplicar esses conceitos na análise de ações da B3. Leia o artigo completo para entender melhor.`
-        }
-      },
-      {
-        "@type": "Question",
-        "name": `Como aplicar ${post.category.toLowerCase()} em ${anoAtual}?`,
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": `Este artigo fornece um guia completo sobre como aplicar ${post.category.toLowerCase()} na prática. Use nossa plataforma Preço Justo AI para aplicar esses conhecimentos em análises reais de ações.`
-        }
-      }
-    ]
-    
-    return {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      "mainEntity": baseFAQs
-    }
-  }
-  
-  const postFAQSchema = generatePostFAQs()
 
-  // URL base para compartilhamento
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://precojusto.ai'
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://precojusto.ai"
   const postUrl = `${baseUrl}/blog/${slug}`
   const imageUrl = post.image || `${baseUrl}/logo-preco-justo.png`
 
-  // Schema.org JSON-LD para SEO
   const articleSchema = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
-    "headline": post.title,
-    "description": post.excerpt,
-    "image": imageUrl,
-    "datePublished": new Date(post.publishDate).toISOString(),
-    "dateModified": post.lastModified 
-      ? new Date(post.lastModified).toISOString() 
-      : new Date(post.publishDate).toISOString(),
-    "author": {
+    headline: post.title,
+    description: post.excerpt,
+    image: imageUrl,
+    datePublished: new Date(post.publishDate).toISOString(),
+    dateModified: post.lastModified ? new Date(post.lastModified).toISOString() : new Date(post.publishDate).toISOString(),
+    author: {
       "@type": "Organization",
-      "name": post.author,
-      "url": baseUrl
+      name: post.author,
+      url: baseUrl,
     },
-    "publisher": {
+    publisher: {
       "@type": "Organization",
-      "name": "Preço Justo AI",
-      "url": baseUrl,
-      "logo": {
+      name: "Preço Justo AI",
+      url: baseUrl,
+      logo: {
         "@type": "ImageObject",
-        "url": `${baseUrl}/logo-preco-justo.png`
-      }
+        url: `${baseUrl}/logo-preco-justo.png`,
+      },
     },
-    "mainEntityOfPage": {
+    mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": postUrl
+      "@id": postUrl,
     },
-    "articleSection": post.category,
-    "keywords": post.tags.join(", "),
-    "wordCount": post.content.split(/\s+/).length,
-    "inLanguage": "pt-BR"
+    articleSection: post.category,
+    keywords: post.tags.join(", "),
+    wordCount: post.content.split(/\s+/).length,
+    inLanguage: "pt-BR",
   }
 
   const breadcrumbSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
-    "itemListElement": [
-      {
-        "@type": "ListItem",
-        "position": 1,
-        "name": "Início",
-        "item": baseUrl
-      },
-      {
-        "@type": "ListItem",
-        "position": 2,
-        "name": "Blog",
-        "item": `${baseUrl}/blog`
-      },
-      {
-        "@type": "ListItem",
-        "position": 3,
-        "name": post.title,
-        "item": postUrl
-      }
-    ]
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Início", item: baseUrl },
+      { "@type": "ListItem", position: 2, name: "Blog", item: `${baseUrl}/blog` },
+      { "@type": "ListItem", position: 3, name: post.title, item: postUrl },
+    ],
   }
 
   return (
-    <>
-      {/* JSON-LD Schemas para SEO */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
-      />
-      
-      {/* Schema FAQPage para SEO - Apenas para usuários deslogados */}
-      {!session && postFAQSchema && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(postFAQSchema)
-          }}
-        />
-      )}
+    <div className="bg-background">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
 
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/20 dark:to-background">
-        {/* Header do Post */}
-        <article>
-          <section className="py-12 bg-white dark:bg-background border-b">
-            <div className="container mx-auto px-4">
-              <div className="max-w-4xl mx-auto">
-                {/* Breadcrumb */}
-                <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
-                  <Link href="/" className="hover:text-blue-600 transition-colors">
-                    Início
-                  </Link>
-                  <span>/</span>
-                  <Link href="/blog" className="hover:text-blue-600 transition-colors">
-                    Blog
-                  </Link>
-                  <span>/</span>
-                  <span className="text-foreground">{post.title}</span>
-                </nav>
+      <div className="container mx-auto px-4 py-6 sm:py-10">
+        <article className="mx-auto max-w-[68ch]">
+          <Breadcrumbs items={[{ label: "Blog", href: "/blog" }, { label: post.category }]} />
 
-                {/* Voltar */}
-                <Button variant="ghost" size="sm" className="mb-8" asChild>
-                  <Link href="/blog" className="flex items-center gap-2">
-                    <ArrowLeft className="w-4 h-4" />
-                    Voltar ao Blog
-                  </Link>
-                </Button>
-
-                {/* Categoria e Tags */}
-                <div className="flex flex-wrap items-center gap-3 mb-6">
-                  <Badge className="bg-blue-100 text-blue-800 border-blue-300">
-                    {post.category}
-                  </Badge>
-                  {post.tags.slice(0, 3).map((tag) => (
-                    <Badge key={tag} variant="outline" className="text-xs">
-                      <Tag className="w-3 h-3 mr-1" />
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-
-                {/* Título */}
-                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-6 leading-tight">
-                  {post.title}
-                </h1>
-
-                {/* Excerpt */}
-                <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
-                  {post.excerpt}
-                </p>
-
-                {/* Meta informações */}
-                <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    <span>{post.author}</span>
-                  </div>
-                  <time 
-                    dateTime={post.publishDate}
-                    className="flex items-center gap-2"
-                  >
-                    <Calendar className="w-4 h-4" />
-                    <span>{new Date(post.publishDate).toLocaleDateString('pt-BR', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}</span>
-                  </time>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    <span>{post.readTime} de leitura</span>
-                  </div>
-                </div>
-              </div>
+          <header className="space-y-4 border-b border-border pb-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="brand">{post.category}</Badge>
             </div>
-          </section>
+            <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">{post.title}</h1>
+            <p className="text-base text-muted-foreground">{post.excerpt}</p>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span>{post.author}</span>
+              <span aria-hidden="true">·</span>
+              <time dateTime={post.publishDate} className="tabular-nums">
+                {dayLabel(post.publishDate)}
+              </time>
+              {post.readTime && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{post.readTime} de leitura</span>
+                </>
+              )}
+            </p>
+          </header>
 
-          {/* Conteúdo do Post */}
-          <section className="py-12 bg-gray-50/50 dark:bg-gray-950/20">
-            <div className="container mx-auto px-4">
-              <div className="max-w-4xl mx-auto">
-                <Card className="border-0 shadow-2xl bg-white dark:bg-gray-900">
-                  <CardContent className="p-8 sm:p-12 lg:p-16">
-                    <MarkdownRenderer 
-                      content={post.content}
-                      className="max-w-none"
-                    />
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </section>
+          <MarkdownRenderer content={post.content} className="mt-8 max-w-none text-base leading-7" />
+
+          {post.tags.length > 0 && (
+            <ul className="mt-10 flex flex-wrap gap-2" aria-label="Tags">
+              {post.tags.slice(0, 6).map((tag) => (
+                <li key={tag}>
+                  <Badge variant="neutral">{tag}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <p className="mt-8 rounded-lg border border-border bg-surface p-4 text-sm text-muted-foreground">
+            Conteúdo educativo. Não é recomendação de investimento. Veja como calculamos cada número na{" "}
+            <Link href="/metodologia" className="text-brand underline-offset-4 hover:underline">
+              metodologia
+            </Link>
+            .
+          </p>
         </article>
 
-        {/* Posts Relacionados */}
         {relatedPosts.length > 0 && (
-          <section className="py-12 bg-gray-50 dark:bg-background/50">
-            <div className="container mx-auto px-4">
-              <div className="max-w-6xl mx-auto">
-                <div className="text-center mb-12">
-                  <h2 className="text-2xl sm:text-3xl font-bold mb-4">
-                    Artigos Relacionados
-                  </h2>
-                  <p className="text-muted-foreground">
-                    Continue aprendendo com outros artigos sobre {post.category.toLowerCase()}
+          <section aria-labelledby="relacionados" className="mx-auto mt-12 max-w-[68ch]">
+            <h2 id="relacionados" className="text-lg font-semibold tracking-tight text-foreground">
+              Artigos relacionados
+            </h2>
+            <ul className="mt-3 divide-y divide-border border-y border-border">
+              {relatedPosts.map((related) => (
+                <li key={related.slug} className="relative py-4">
+                  <h3 className="text-base font-medium leading-snug text-foreground hover:text-brand">
+                    <Link href={`/blog/${related.slug}`} className="after:absolute after:inset-0">
+                      {related.title}
+                    </Link>
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <time dateTime={related.publishDate} className="tabular-nums">
+                      {dayLabel(related.publishDate)}
+                    </time>
+                    {related.readTime && ` · ${related.readTime} de leitura`}
                   </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {relatedPosts.map((relatedPost) => (
-                    <Card key={relatedPost.slug} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 group">
-                      <CardContent className="p-6">
-                        <div className="flex items-center gap-2 mb-4">
-                          <Badge variant="outline" className="text-blue-600 border-blue-600">
-                            {relatedPost.category}
-                          </Badge>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {relatedPost.readTime}
-                          </div>
-                        </div>
-                        
-                        <h3 className="text-lg font-bold mb-3 leading-tight group-hover:text-blue-600 transition-colors">
-                          {relatedPost.title}
-                        </h3>
-                        
-                        <p className="text-muted-foreground text-sm mb-4 leading-relaxed">
-                          {relatedPost.excerpt}
-                        </p>
-                        
-                        <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
-                          <time 
-                            dateTime={relatedPost.publishDate}
-                            className="text-xs text-muted-foreground"
-                          >
-                            {new Date(relatedPost.publishDate).toLocaleDateString('pt-BR')}
-                          </time>
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/blog/${relatedPost.slug}`} className="flex items-center gap-1">
-                              Ler mais
-                              <ArrowRight className="w-3 h-3" />
-                            </Link>
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            </div>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
-
-        {/* CTA Final */}
-        <section className="py-20 bg-gradient-to-r from-blue-600 to-violet-600 text-white">
-          <div className="container mx-auto px-4 text-center">
-            <div className="max-w-3xl mx-auto">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                <BookOpen className="w-8 h-8" />
-              </div>
-              
-              <h2 className="text-3xl sm:text-4xl font-bold mb-6">
-                Pronto para Aplicar o que Aprendeu?
-              </h2>
-              <p className="text-xl mb-8 opacity-90">
-                Use nossa plataforma para aplicar as estratégias que você aprendeu 
-                e encontrar ações subvalorizadas na B3.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-6 justify-center">
-                <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-4" asChild>
-                  <Link href="/register" className="flex items-center gap-3">
-                    Começar Análise Gratuita
-                    <ArrowRight className="w-5 h-5" />
-                  </Link>
-                </Button>
-                <Button variant="outline" size="lg" className="border-white hover:bg-white/10 text-lg px-8 py-4" asChild>
-                  <Link href="/ranking">Ver Rankings</Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
-    </>
+    </div>
   )
 }

@@ -1123,6 +1123,52 @@ export class DividendService {
   }
 
   /**
+   * Histórico de proventos de vários ativos desde `since` (data ex), com nome da empresa, em uma consulta.
+   * Usado pela agenda de proventos e pelo yield on cost da carteira.
+   */
+  static async getDividendHistoryByTickers(
+    tickers: string[],
+    since: Date
+  ): Promise<
+    Array<{
+      ticker: string;
+      name: string | null;
+      logoUrl: string | null;
+      assetType: string;
+      dividends: Array<{ exDate: Date; paymentDate: Date | null; amount: number; type: string | null }>;
+    }>
+  > {
+    const unique = [...new Set(tickers.map((t) => t.toUpperCase()))];
+    if (unique.length === 0) return [];
+    const companies = await prisma.company.findMany({
+      where: { ticker: { in: unique } },
+      select: {
+        ticker: true,
+        name: true,
+        logoUrl: true,
+        assetType: true,
+        dividendHistory: {
+          where: { exDate: { gte: since } },
+          orderBy: { exDate: "asc" },
+          select: { exDate: true, paymentDate: true, amount: true, type: true },
+        },
+      },
+    });
+    return companies.map((company) => ({
+      ticker: company.ticker,
+      name: company.name,
+      logoUrl: company.logoUrl,
+      assetType: company.assetType,
+      dividends: company.dividendHistory.map((div) => ({
+        exDate: div.exDate,
+        paymentDate: div.paymentDate,
+        amount: Number(div.amount),
+        type: div.type,
+      })),
+    }));
+  }
+
+  /**
    * Busca dividendos do mês atual para um ativo
    * Útil para gerar transações sugeridas
    */

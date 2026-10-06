@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { Briefcase, ArrowRight } from 'lucide-react';
+import { formatBRL } from '@/lib/format';
 
 interface Backtest {
   id: string;
@@ -36,41 +38,26 @@ export function ConvertBacktestModal({
   const router = useRouter();
   const { toast } = useToast();
   
-  const [backtests, setBacktests] = useState<Backtest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: backtests = [],
+    isLoading: loading,
+    isError: loadError,
+    refetch,
+  } = useQuery({
+    queryKey: ['backtests-for-portfolio'],
+    queryFn: async (): Promise<Backtest[]> => {
+      const response = await fetch('/api/backtest');
+      if (!response.ok) throw new Error('Erro ao carregar backtests');
+      const data = await response.json();
+      return data.backtests || [];
+    },
+  });
   const [submitting, setSubmitting] = useState(false);
   
   const [selectedBacktestId, setSelectedBacktestId] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-
-  useEffect(() => {
-    loadBacktests();
-  }, []);
-
-  const loadBacktests = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/backtest');
-      
-      if (!response.ok) {
-        throw new Error('Erro ao carregar backtests');
-      }
-
-      const data = await response.json();
-      setBacktests(data.backtests || []);
-    } catch (error) {
-      console.error('Erro ao carregar backtests:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar seus backtests',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleBacktestChange = (backtestId: string) => {
     setSelectedBacktestId(backtestId);
@@ -124,8 +111,8 @@ export function ConvertBacktestModal({
       const data = await response.json();
       
       toast({
-        title: 'Sucesso!',
-        description: 'Carteira criada a partir do backtest'
+        title: 'Carteira criada',
+        description: 'A composição do backtest foi copiada para a nova carteira.'
       });
 
       if (onSuccess) {
@@ -147,25 +134,33 @@ export function ConvertBacktestModal({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-3 py-2" aria-busy="true">
+        <span className="sr-only">Carregando backtests</span>
+        <Skeleton className="h-11 w-full" />
+        <Skeleton className="h-11 w-full" />
+        <Skeleton className="h-20 w-full" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div role="alert" className="py-6 text-center">
+        <p className="text-sm font-medium text-foreground">Não foi possível carregar seus backtests</p>
+        <Button variant="outline" onClick={() => refetch()} className="mt-4">
+          Tentar novamente
+        </Button>
       </div>
     );
   }
 
   if (backtests.length === 0) {
     return (
-      <div className="text-center py-8">
-        <Briefcase className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-        <p className="text-muted-foreground">
-          Você ainda não tem backtests salvos
-        </p>
-        <Button
-          variant="link"
-          onClick={() => router.push('/backtest')}
-          className="mt-2"
-        >
-          Criar um backtest primeiro
+      <div className="py-6 text-center">
+        <p className="text-sm font-medium text-foreground">Você ainda não tem backtests salvos</p>
+        <p className="mt-1 text-sm text-muted-foreground">Salve um backtest para convertê-lo em carteira.</p>
+        <Button variant="outline" onClick={() => router.push('/backtest')} className="mt-4">
+          Criar um backtest
         </Button>
       </div>
     );
@@ -173,100 +168,86 @@ export function ConvertBacktestModal({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Backtest Selection */}
-      <div>
-        <Label htmlFor="backtest">Selecione o Backtest *</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="backtest">Backtest</Label>
         <Select value={selectedBacktestId} onValueChange={handleBacktestChange}>
-          <SelectTrigger>
-            <SelectValue placeholder="Escolha um backtest..." />
+          <SelectTrigger id="backtest" className="w-full">
+            <SelectValue placeholder="Escolha um backtest" />
           </SelectTrigger>
           <SelectContent>
             {backtests.map(backtest => (
               <SelectItem key={backtest.id} value={backtest.id}>
-                <div className="flex flex-col">
+                <span className="flex flex-col">
                   <span className="font-medium">{backtest.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    Aporte: R$ {backtest.monthlyContribution.toFixed(2)}/mês
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    Aporte de {formatBRL(backtest.monthlyContribution)}/mês
                   </span>
-                </div>
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground mt-1">
-          A composição de ativos e configurações serão copiadas do backtest
-        </p>
       </div>
 
-      {/* Portfolio Name */}
-      <div>
-        <Label htmlFor="name">Nome da Carteira *</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="convert-name">Nome da carteira</Label>
         <Input
-          id="name"
+          id="convert-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ex: Minha Carteira de Dividendos"
+          placeholder="Ex.: Carteira de dividendos"
+          enterKeyHint="next"
           required
         />
       </div>
 
-      {/* Description */}
-      <div>
-        <Label htmlFor="description">Descrição</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="convert-description">
+          Descrição <span className="font-normal text-muted-foreground">(opcional)</span>
+        </Label>
         <Textarea
-          id="description"
+          id="convert-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Descreva sua estratégia..."
-          rows={3}
+          placeholder="Descreva sua estratégia"
+          rows={2}
         />
       </div>
 
-      {/* Start Date */}
-      <div>
-        <Label htmlFor="startDate">Data de Início *</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="convert-start">Data de início</Label>
         <Input
-          id="startDate"
+          id="convert-start"
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
           required
         />
-        <p className="text-xs text-muted-foreground mt-1">
-          Define quando você começará a usar esta carteira
+        <p className="text-xs text-muted-foreground">A partir de quando você passa a acompanhar esta carteira.</p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-surface p-3 text-sm">
+        <p className="font-medium text-foreground">O que é copiado do backtest</p>
+        <ul className="mt-1 list-inside list-disc space-y-0.5 text-muted-foreground">
+          <li>Ativos e alocação-alvo</li>
+          <li>Valor do aporte mensal</li>
+          <li>Frequência de rebalanceamento</li>
+        </ul>
+        <p className="mt-2 text-xs text-muted-foreground">
+          A carteira começa vazia; você registra as transações conforme investir.
         </p>
       </div>
 
-      {/* Info Box */}
-      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-4">
-        <div className="flex items-start gap-2">
-          <ArrowRight className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-blue-900 dark:text-blue-100">
-            <p className="font-medium mb-1">O que será copiado:</p>
-            <ul className="list-disc list-inside space-y-1 text-xs">
-              <li>Composição de ativos e alocações</li>
-              <li>Valor do aporte mensal</li>
-              <li>Frequência de rebalanceamento</li>
-            </ul>
-            <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">
-              Você começará com uma carteira vazia e poderá confirmar transações sugeridas mensalmente.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-2 justify-end pt-2">
+      <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
             Cancelar
           </Button>
         )}
         <Button type="submit" disabled={submitting || !selectedBacktestId}>
-          {submitting ? 'Criando...' : 'Criar Carteira'}
+          {submitting ? 'Criando' : 'Criar carteira'}
         </Button>
       </div>
     </form>
   );
 }
-

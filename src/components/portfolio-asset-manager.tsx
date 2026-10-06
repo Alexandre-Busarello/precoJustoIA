@@ -2,22 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Plus,
-  Trash2,
-  Save,
-  AlertTriangle,
-  TrendingUp,
-  Bot,
-  FileText,
-} from "lucide-react";
+import { toast as sonnerToast } from "sonner";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +19,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { PortfolioPercentInput, roundTo } from "@/components/portfolio-money-input";
+import { formatPct } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { PortfolioAIAssistant } from "@/components/portfolio-ai-assistant";
 import { PortfolioBulkAssetInput } from "@/components/portfolio-bulk-asset-input";
 import { usePremiumStatus } from "@/hooks/use-premium-status";
@@ -35,6 +42,9 @@ interface Asset {
   targetAllocation: number;
   isActive: boolean;
 }
+
+/** Referência estável enquanto carrega (um `[]` novo a cada render dispararia o efeito de sincronização em loop). */
+const NO_ASSETS: Asset[] = [];
 
 interface PortfolioAssetManagerProps {
   portfolioId: string;
@@ -50,7 +60,9 @@ export function PortfolioAssetManager({
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTicker, setNewTicker] = useState("");
-  const [newAllocation, setNewAllocation] = useState("");
+  /** Alocação em % (15 = 15%). */
+  const [newAllocation, setNewAllocation] = useState<number | undefined>(undefined);
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null);
   const [activeReplaceTab, setActiveReplaceTab] = useState(() => {
     // Detectar se deve abrir na aba IA baseado no hash
     if (
@@ -87,7 +99,7 @@ export function PortfolioAssetManager({
   };
 
   const {
-    data: assets = [],
+    data: assets = NO_ASSETS,
     isLoading: loading,
     error: assetsError
   } = useQuery({
@@ -97,14 +109,9 @@ export function PortfolioAssetManager({
 
   // Show error toast if query fails
   useEffect(() => {
-    if (assetsError) {
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os ativos",
-        variant: "destructive",
-      });
-    }
-  }, [assetsError, toast]);
+    // toast do sonner direto: o de useToast muda a cada render e repetiria o aviso.
+    if (assetsError) sonnerToast.error("Erro", { description: "Não foi possível carregar os ativos" });
+  }, [assetsError]);
 
   // Detectar hash e fazer scroll quando dados carregarem
   useEffect(() => {
@@ -124,20 +131,10 @@ export function PortfolioAssetManager({
             block: "center",
           });
 
-          // Adicionar highlight temporário
-          replaceSection.classList.add(
-            "ring-2",
-            "ring-blue-500",
-            "ring-opacity-50",
-            "rounded-lg"
-          );
+          // Destaque temporário da seção
+          replaceSection.classList.add("ring-2", "ring-ring", "rounded-lg");
           setTimeout(() => {
-            replaceSection.classList.remove(
-              "ring-2",
-              "ring-blue-500",
-              "ring-opacity-50",
-              "rounded-lg"
-            );
+            replaceSection.classList.remove("ring-2", "ring-ring", "rounded-lg");
           }, 2000);
         }
       }, 300);
@@ -156,10 +153,10 @@ export function PortfolioAssetManager({
     }
   }, [assets]);
 
-  const updateAllocation = (index: number, value: string) => {
-    const newAssets = [...localAssets];
-    newAssets[index].targetAllocation = parseFloat(value) / 100 || 0;
-    setLocalAssets(newAssets);
+  const updateAllocation = (index: number, percent: number | undefined) => {
+    setLocalAssets((current) =>
+      current.map((asset, i) => (i === index ? { ...asset, targetAllocation: (percent ?? 0) / 100 } : asset))
+    );
   };
 
   // Use localAssets for display/editing, fallback to assets from query
@@ -212,14 +209,12 @@ export function PortfolioAssetManager({
     },
     onSuccess: (_, variables) => {
       toast({
-        title: "Ativo adicionado!",
-        description: `${variables.ticker} foi adicionado com ${(
-          variables.targetAllocation * 100
-        ).toFixed(1)}% e as demais alocações foram redistribuídas`,
+        title: "Ativo adicionado",
+        description: `${variables.ticker} entrou com ${formatPct(variables.targetAllocation)} e as demais alocações foram redistribuídas`,
       });
 
       setNewTicker("");
-      setNewAllocation("");
+      setNewAllocation(undefined);
       setShowAddModal(false);
       queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
       onUpdate();
@@ -286,13 +281,13 @@ export function PortfolioAssetManager({
     // Validate allocation if provided
     let newAllocValue: number;
 
-    if (newAllocation && newAllocation.trim() !== "") {
-      const parsedAlloc = parseFloat(newAllocation) / 100;
+    if (newAllocation !== undefined) {
+      const parsedAlloc = newAllocation / 100;
 
-      if (isNaN(parsedAlloc) || parsedAlloc <= 0 || parsedAlloc > 1) {
+      if (parsedAlloc <= 0 || parsedAlloc > 1) {
         toast({
           title: "Alocação inválida",
-          description: "A alocação deve ser entre 0.1% e 100%",
+          description: "A alocação deve ficar entre 0,1% e 100%",
           variant: "destructive",
         });
         return;
@@ -307,9 +302,7 @@ export function PortfolioAssetManager({
 
       toast({
         title: "Alocação automática",
-        description: `Sem % informado. Será distribuído igualmente: ${(
-          newAllocValue * 100
-        ).toFixed(1)}% para cada ativo`,
+        description: `Sem % informado: ${formatPct(newAllocValue)} para cada ativo`,
         variant: "default",
       });
     }
@@ -367,7 +360,7 @@ export function PortfolioAssetManager({
     },
     onSuccess: (_, variables) => {
       toast({
-        title: "Ativo removido!",
+        title: "Ativo removido",
         description: `${variables.ticker} foi removido e as demais alocações foram redistribuídas`,
       });
 
@@ -384,15 +377,9 @@ export function PortfolioAssetManager({
     }
   });
 
-  const handleRemoveAsset = (ticker: string) => {
-    if (
-      !confirm(
-        `Remover ${ticker} da carteira?\n\nSe você possui ações deste ativo, uma transação de venda será sugerida.`
-      )
-    ) {
-      return;
-    }
+  const handleRemoveAsset = (ticker: string) => setRemoveTarget(ticker);
 
+  const confirmRemoveAsset = (ticker: string) => {
     // Find the asset being removed
     const removedAsset = assets.find((a: Asset) => a.ticker === ticker);
     if (!removedAsset) return;
@@ -444,7 +431,7 @@ export function PortfolioAssetManager({
       );
 
       toast({
-        title: "Alocações salvas!",
+        title: "Alocações salvas",
         description:
           currentTotal !== 1
             ? "As alocações foram normalizadas para 100% e salvas com sucesso"
@@ -468,7 +455,7 @@ export function PortfolioAssetManager({
     if (!isValid) {
       toast({
         title: "Alocação inválida",
-        description: "A soma das alocações deve estar entre 99.5% e 100.5%",
+        description: "A soma das alocações deve ficar entre 99,5% e 100,5%",
         variant: "destructive",
       });
       return;
@@ -512,14 +499,14 @@ export function PortfolioAssetManager({
     onSuccess: (result, variables) => {
       if (variables.source === 'ai') {
         toast({
-          title: "Carteira reconstruída pela IA!",
+          title: "Ativos atualizados",
           description:
             result.message ||
             `${variables.assets.length} ativos foram configurados pela IA`,
         });
       } else {
         toast({
-          title: "Ativos aplicados!",
+          title: "Ativos aplicados",
           description:
             result.message || `${variables.assets.length} ativos foram configurados`,
         });
@@ -549,331 +536,223 @@ export function PortfolioAssetManager({
   // Combined saving state from all mutations
   const saving = addAssetMutation.isPending || removeAssetMutation.isPending || saveAllocationsMutation.isPending || replaceAllAssetsMutation.isPending;
 
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const replaceTabs = (
+    <>
+      <TabsContent value="bulk" className="mt-4">
+        <PortfolioBulkAssetInput onAssetsGenerated={handleAssetsFromBulk} />
+      </TabsContent>
+      <TabsContent value="ai" className="mt-4">
+        <PortfolioAIAssistant
+          onAssetsGenerated={handleAssetsFromAI}
+          disabled={saving}
+          locked={!isPremium}
+          currentAssets={displayAssets.map((a: Asset) => ({
+            ticker: a.ticker,
+            targetAllocation: a.targetAllocation,
+          }))}
+        />
+      </TabsContent>
+    </>
+  );
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Gerenciamento de Ativos
-            </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAddModal(true)}
-              className="w-full sm:w-auto"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Ativo
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {/* Quick Actions for Adding Multiple Assets */}
-            {displayAssets.length === 0 && (
-              <div className="space-y-4">
-                <Tabs defaultValue="manual" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger
-                      value="manual"
-                      className="flex items-center gap-2"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Manual
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="bulk"
-                      className="flex items-center gap-2"
-                    >
-                      <FileText className="h-4 w-4" />
-                      Lista
-                    </TabsTrigger>
-                    <TabsTrigger value="ai" className="flex items-center gap-2">
-                      <Bot className="h-4 w-4" />
-                      IA
-                    </TabsTrigger>
-                  </TabsList>
+    <section aria-labelledby="asset-manager-title" className="space-y-4">
+      <SectionHeader
+        id="asset-manager-title"
+        title="Ativos e alocação-alvo"
+        description="O peso de cada ativo define os ajustes sugeridos para a carteira."
+        actions={
+          <Button variant="outline" size="sm" onClick={() => setShowAddModal(true)} disabled={loading}>
+            <Plus strokeWidth={1.75} aria-hidden="true" />
+            Adicionar ativo
+          </Button>
+        }
+      />
 
-                  <TabsContent value="manual" className="mt-6">
-                    <div className="text-center py-8 text-muted-foreground">
-                      <AlertTriangle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p>Nenhum ativo configurado</p>
-                      <p className="text-sm mt-1">
-                        Use o botão &quot;Adicionar Ativo&quot; acima
-                      </p>
-                    </div>
-                  </TabsContent>
+      {loading ? (
+        <div className="space-y-2" aria-busy="true">
+          <span className="sr-only">Carregando ativos</span>
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} className="h-12 w-full" />
+          ))}
+        </div>
+      ) : displayAssets.length === 0 ? (
+        <div className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+          <p className="text-sm text-muted-foreground">
+            Nenhum ativo configurado. Use &quot;Adicionar ativo&quot;, cole uma lista de tickers ou descreva a carteira.
+          </p>
+          <Tabs value={activeReplaceTab} onValueChange={setActiveReplaceTab}>
+            <TabsList variant="underline">
+              <TabsTrigger value="bulk">Colar lista</TabsTrigger>
+              <TabsTrigger value="ai">Com IA</TabsTrigger>
+            </TabsList>
+            {replaceTabs}
+          </Tabs>
+        </div>
+      ) : (
+        <>
+          <div className="rounded-lg border border-border bg-card">
+            <ul className="divide-y divide-border">
+              {displayAssets.map((asset: Asset, index: number) => (
+                <li key={`asset-${asset.id}`} className="flex items-center gap-3 px-3 py-2 sm:px-4">
+                  <span className="min-w-0 flex-1 truncate font-medium text-foreground">{asset.ticker}</span>
+                  <PortfolioPercentInput
+                    className="w-28"
+                    value={roundTo(asset.targetAllocation * 100)}
+                    onChange={(value) => updateAllocation(index, value)}
+                    ariaLabel={`Alocação de ${asset.ticker} em %`}
+                    suffix="%"
+                    disabled={saving}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveAsset(asset.ticker)}
+                    disabled={saving}
+                    aria-label={`Remover ${asset.ticker}`}
+                  >
+                    <Trash2 className="text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
 
-                  <TabsContent value="bulk" className="mt-6">
-                    <PortfolioBulkAssetInput
-                      onAssetsGenerated={handleAssetsFromBulk}
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="ai" className="mt-6">
-                    <PortfolioAIAssistant
-                      onAssetsGenerated={handleAssetsFromAI}
-                      disabled={!isPremium || saving}
-                      currentAssets={displayAssets.map((a: Asset) => ({
-                        ticker: a.ticker,
-                        targetAllocation: a.targetAllocation,
-                      }))}
-                    />
-                  </TabsContent>
-                </Tabs>
-              </div>
-            )}
-
-            {displayAssets.length > 0 && (
-              <>
-                <div className="space-y-3">
-                  {displayAssets.map((asset: Asset, index: number) => (
-                    <div
-                      key={`asset-${asset.id}`}
-                      className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 border rounded-lg bg-card"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold">{asset.ticker}</p>
-                      </div>
-                      <div className="w-full sm:w-32">
-                        <Label
-                          htmlFor={`allocation-${index}`}
-                          className="text-xs"
-                        >
-                          Alocação (%)
-                        </Label>
-                        <Input
-                          id={`allocation-${index}`}
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="100"
-                          value={(asset.targetAllocation * 100).toFixed(2)}
-                          onChange={(e) =>
-                            updateAllocation(index, e.target.value)
-                          }
-                          className="mt-1"
-                          disabled={saving}
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveAsset(asset.ticker)}
-                        className="text-destructive hover:text-destructive flex-shrink-0 self-start sm:self-center"
-                        disabled={saving}
-                        title={saving ? "Aguarde..." : "Remover ativo"}
-                      >
-                        {saving ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-destructive"></div>
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="border-t pt-4">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-                    <div className="flex-1">
-                      <p className="text-sm text-muted-foreground">
-                        Total Alocado
-                      </p>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p
-                          className={`text-2xl font-bold ${
-                            isValid ? "text-green-600" : "text-destructive"
-                          }`}
-                        >
-                          {totalPercent.toFixed(2)}%
-                        </p>
-                        {!isValid && (
-                          <Badge variant="destructive" className="gap-1">
-                            <AlertTriangle className="h-3 w-3" />
-                            Inválido
-                          </Badge>
-                        )}
-                        {isValid && totalPercent !== 100 && (
-                          <Badge variant="outline" className="gap-1">
-                            Será ajustado para 100%
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <Button
-                      onClick={handleSaveAllocations}
-                      disabled={!isValid || saving}
-                      className="gap-2 w-full sm:w-auto flex-shrink-0"
-                    >
-                      <Save className="h-4 w-4" />
-                      {saving ? "Salvando..." : "Salvar Alocações"}
-                    </Button>
-                  </div>
-
-                  {!isValid && (
-                    <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">
-                      <p className="font-medium">⚠️ Alocação total inválida</p>
-                      <p className="mt-1">
-                        A soma das alocações deve estar entre 99.5% e 100.5%.
-                        Atualmente: {totalPercent.toFixed(2)}%
-                      </p>
-                    </div>
+            <div className="flex flex-col gap-3 border-t border-border px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Total alocado</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className={cn("text-lg font-semibold tabular-nums", isValid ? "text-foreground" : "text-negative")}>
+                    {formatPct(totalAllocation, { digits: 2 })}
+                  </p>
+                  {!isValid && <Badge variant="negative">Precisa somar 100%</Badge>}
+                  {isValid && Math.abs(totalPercent - 100) > 0.001 && (
+                    <Badge variant="neutral">Será ajustado para 100%</Badge>
                   )}
                 </div>
-
-                {/* Quick Replace Options for Existing Assets */}
-                <div className="border-t pt-4" data-replace-section="true">
-                  <h4 className="text-sm font-medium text-muted-foreground mb-3">
-                    Substituir Todos os Ativos
-                  </h4>
-                  <Tabs
-                    value={activeReplaceTab}
-                    onValueChange={setActiveReplaceTab}
-                    className="w-full"
-                  >
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger
-                        value="bulk"
-                        className="flex items-center gap-2"
-                      >
-                        <FileText className="h-4 w-4" />
-                        Lista de Tickers
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="ai"
-                        className="flex items-center gap-2"
-                      >
-                        <Bot className="h-4 w-4" />
-                        Assistente IA
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="bulk" className="mt-4">
-                      <PortfolioBulkAssetInput
-                        onAssetsGenerated={handleAssetsFromBulk}
-                      />
-                    </TabsContent>
-
-                    <TabsContent value="ai" className="mt-4">
-                      <PortfolioAIAssistant
-                        onAssetsGenerated={handleAssetsFromAI}
-                        disabled={!isPremium || saving}
-                        currentAssets={displayAssets.map((a: Asset) => ({
-                          ticker: a.ticker,
-                          targetAllocation: a.targetAllocation,
-                        }))}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              </>
-            )}
+              </div>
+              <Button onClick={handleSaveAllocations} disabled={!isValid || saving} className="w-full sm:w-auto">
+                {saving ? (
+                  <>
+                    <Loader2 className="animate-spin" strokeWidth={1.75} aria-hidden="true" />
+                    Salvando
+                  </>
+                ) : (
+                  "Salvar alocações"
+                )}
+              </Button>
+            </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Add Asset Modal */}
-      <Dialog
-        open={showAddModal}
-        onOpenChange={(open) => !saving && setShowAddModal(open)}
-      >
+          <div className="space-y-3 rounded-lg border border-border bg-card p-4 sm:p-5" data-replace-section="true">
+            <div>
+              <h3 className="text-sm font-medium text-foreground">Substituir todos os ativos</h3>
+              <p className="text-xs text-muted-foreground">Troca a composição inteira por uma nova lista.</p>
+            </div>
+            <Tabs value={activeReplaceTab} onValueChange={setActiveReplaceTab}>
+              <TabsList variant="underline">
+                <TabsTrigger value="bulk">Colar lista</TabsTrigger>
+                <TabsTrigger value="ai">Com IA</TabsTrigger>
+              </TabsList>
+              {replaceTabs}
+            </Tabs>
+          </div>
+        </>
+      )}
+
+      <Dialog open={showAddModal} onOpenChange={(open) => !saving && setShowAddModal(open)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adicionar Ativo</DialogTitle>
-            <DialogDescription>
-              Adicione um novo ativo à sua carteira
-            </DialogDescription>
+            <DialogTitle>Adicionar ativo</DialogTitle>
+            <DialogDescription>As demais alocações são redistribuídas proporcionalmente.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="newTicker">Ticker *</Label>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleAddAsset();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="newTicker">Ticker</Label>
               <Input
                 id="newTicker"
                 value={newTicker}
                 onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
-                placeholder="Ex: PETR4"
-                className="uppercase"
+                placeholder="Ex.: PETR4"
+                autoCapitalize="characters"
+                autoComplete="off"
+                enterKeyHint="go"
                 disabled={saving}
               />
             </div>
-            <div>
-              <Label htmlFor="newAllocation">
-                Alocação (%){" "}
-                <span className="text-muted-foreground font-normal">
-                  (opcional)
-                </span>
+            <div className="space-y-1.5">
+              <Label>
+                Alocação <span className="font-normal text-muted-foreground">(opcional)</span>
               </Label>
-              <Input
-                id="newAllocation"
-                type="number"
-                step="0.1"
-                min="0.1"
-                max="100"
+              <PortfolioPercentInput
                 value={newAllocation}
-                onChange={(e) => setNewAllocation(e.target.value)}
-                placeholder="Deixe vazio para distribuição automática"
+                onChange={setNewAllocation}
+                ariaLabel="Alocação do novo ativo em %"
+                placeholder="Distribuição automática"
+                suffix="%"
                 disabled={saving}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                💡 Se não informar, o ativo será incluído com distribuição
-                igualitária entre todos os ativos
+              <p className="text-xs text-muted-foreground">
+                Sem valor, o ativo entra com peso igual ao dos demais.
               </p>
             </div>
 
-            {saving && (
-              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                <div className="flex items-center gap-2 text-sm text-blue-900 dark:text-blue-100">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  <span className="font-medium">Processando alterações...</span>
-                </div>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1 ml-6">
-                  Adicionando ativo e redistribuindo alocações
-                </p>
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row justify-end gap-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => {
                   setNewTicker("");
-                  setNewAllocation("");
+                  setNewAllocation(undefined);
                   setShowAddModal(false);
                 }}
                 disabled={saving}
-                className="w-full sm:w-auto"
               >
                 Cancelar
               </Button>
-              <Button onClick={handleAddAsset} disabled={saving} className="w-full sm:w-auto">
+              <Button type="submit" disabled={saving}>
                 {saving ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Adicionando...
+                    <Loader2 className="animate-spin" strokeWidth={1.75} aria-hidden="true" />
+                    Adicionando
                   </>
                 ) : (
                   "Adicionar"
                 )}
               </Button>
             </div>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
-    </>
+
+      <AlertDialog open={removeTarget !== null} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover {removeTarget} da carteira?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A alocação dele é redistribuída entre os demais ativos. Se você tem ações deste ativo, uma venda
+              aparecerá nas sugestões.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className={cn(buttonVariants({ variant: "destructive" }))}
+              onClick={() => {
+                if (removeTarget) confirmRemoveAsset(removeTarget);
+                setRemoveTarget(null);
+              }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
   );
 }

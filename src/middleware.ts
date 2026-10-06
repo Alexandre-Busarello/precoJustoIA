@@ -2,6 +2,26 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
+// Parâmetros que podem permanecer nas páginas de ativo/comparação: rastreamento de campanhas
+// (utm_*, cliques de anúncios) e os fluxos internos que dependem da query string.
+const ALLOWED_QUERY_PARAMS = new Set([
+  'gclid',
+  'gbraid',
+  'wbraid',
+  'fbclid',
+  'msclkid',
+  'ref',
+  'source',
+  'subscribe',
+  'new_user',
+  'feature',
+])
+
+function isAllowedQueryParam(key: string) {
+  // Parâmetros internos do Next (ex.: _rsc) nunca podem ser removidos
+  return key.startsWith('_') || key.startsWith('utm_') || ALLOWED_QUERY_PARAMS.has(key)
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
 
@@ -12,120 +32,66 @@ export async function middleware(request: NextRequest) {
       headers: { 'X-Robots-Tag': 'noindex, noarchive, noimageindex' },
     })
   }
-  
-  // 🛡️ PROTEÇÃO GLOBAL: Rate limiting em todas as rotas /api/*
-  // Isso aplica proteção básica automaticamente sem precisar alterar cada rota
-  // Import dinâmico para evitar incluir módulos Node.js no bundle do Edge Runtime
-  if (pathname.startsWith('/api/')) {
-    try {
-      const { applyGlobalApiProtection } = await import('@/lib/api-global-protection')
-      const rateLimitResponse = await applyGlobalApiProtection(request)
-      if (rateLimitResponse) {
-        return rateLimitResponse // Rate limit excedido ou IP bloqueado
-      }
-    } catch (error) {
-      // Se houver erro ao importar (ex: em Edge Runtime), continuar sem rate limiting
-      // Isso garante que o middleware funcione mesmo se o módulo não estiver disponível
-      console.warn('Rate limiting não disponível no middleware:', error)
-    }
-    // Se não houver problema com rate limit, continuar com o processamento normal
-  }
-  
-  // OTIMIZAÇÃO CRAWL BUDGET: Redirecionar tickers maiúsculos para minúsculos
+
+  // Crawl budget: tickers em maiúsculas viram minúsculas e parâmetros de query sem função
+  // são removidos, num único redirect 301 (evita cadeias de redirect e URLs duplicadas)
   if (pathname.startsWith('/acao/') || pathname.startsWith('/compara-acoes/')) {
     const segments = pathname.split('/')
-    let needsRedirect = false
-    
-    // Verificar se há tickers em maiúsculo
+    let pathChanged = false
+
     for (let i = 2; i < segments.length; i++) {
       const segment = segments[i]
       if (segment && segment !== segment.toLowerCase() && /^[A-Z0-9]+$/.test(segment)) {
         segments[i] = segment.toLowerCase()
-        needsRedirect = true
+        pathChanged = true
       }
     }
-    
-    // Redirecionar se necessário (301 - permanente)
-    if (needsRedirect) {
-      const newPath = segments.join('/')
-      const url = new URL(newPath, request.url)
-      if (search) url.search = search
+
+    const params = request.nextUrl.searchParams
+    const queryChanged = search !== '' && [...params.keys()].some((key) => !isAllowedQueryParam(key))
+
+    if (pathChanged || queryChanged) {
+      const url = request.nextUrl.clone()
+      url.pathname = segments.join('/')
+      if (queryChanged) {
+        url.search = ''
+        for (const [key, value] of params) {
+          if (isAllowedQueryParam(key)) url.searchParams.append(key, value)
+        }
+      }
       return NextResponse.redirect(url, 301)
     }
   }
-  
-  // Bloquear URLs com parâmetros de query desnecessários para SEO
-  if (search && (pathname.startsWith('/acao/') || pathname.startsWith('/compara-acoes/'))) {
-    const url = new URL(request.url)
-    const allowedParams = ['utm_source', 'utm_medium', 'utm_campaign'] // Permitir apenas UTM
-    
-    let hasDisallowedParams = false
-    for (const [key] of url.searchParams) {
-      if (!allowedParams.includes(key)) {
-        hasDisallowedParams = true
-        break
-      }
-    }
-    
-    // Redirecionar para versão limpa se houver parâmetros não permitidos
-    if (hasDisallowedParams) {
-      const cleanUrl = new URL(pathname, request.url)
-      // Manter apenas parâmetros UTM
-      for (const param of allowedParams) {
-        const value = url.searchParams.get(param)
-        if (value) cleanUrl.searchParams.set(param, value)
-      }
-      return NextResponse.redirect(cleanUrl, 301)
-    }
-  }
-  
 
-  // Proteger rotas administrativas
+  // Rotas administrativas exigem sessão (a verificação de admin acontece nas páginas/APIs)
   if (pathname.startsWith('/admin')) {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
-    
     if (!token) {
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('callbackUrl', pathname)
       return NextResponse.redirect(loginUrl)
     }
-    
-    // Verificar se o usuário é admin (será verificado novamente no servidor)
-    // Por segurança, a verificação real de admin é feita nas páginas/APIs
   }
-  
-  // Redirecionar /upgrade para /checkout
-  if (pathname === '/upgrade') {
-    const url = new URL('/checkout', request.url)
-    
-    // Preservar query parameters (como redirect)
-    if (search) {
-      url.search = search
-    }
-    
-    return NextResponse.redirect(url, 301) // Permanent redirect
-  }
-  
-  // Redirecionar webhook do Stripe para a URL correta da API
+
+  // Webhook antigo do Stripe aponta para a rota de API correta
   if (pathname === '/webhooks/stripe') {
-    const url = new URL('/api/webhooks/stripe', request.url)
-    return NextResponse.redirect(url, 301) // Permanent redirect
+    return NextResponse.redirect(new URL('/api/webhooks/stripe', request.url), 301)
   }
-  
+
   return NextResponse.next()
 }
 
+// /api/* fica fora do matcher: o rate limiter atual (api-global-protection) depende de APIs
+// do Node (process.on, cliente Redis) e não roda no Edge runtime. Proteção de API pendente de
+// um limiter compatível com Edge (ou middleware em runtime nodejs) e de decisão sobre limites.
 export const config = {
   matcher: [
     '/fundador',
     '/fundador/:path*',
     '/eu.png',
-    '/api/:path*',        // 🛡️ Proteger todas as rotas da API
     '/admin/:path*',
-    '/upgrade',
-    '/upgrade/:path*',
     '/webhooks/stripe',
     '/acao/:path*',
-    '/compara-acoes/:path*'
-  ]
+    '/compara-acoes/:path*',
+  ],
 }

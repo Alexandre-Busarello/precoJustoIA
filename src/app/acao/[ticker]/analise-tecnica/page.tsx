@@ -4,14 +4,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
+import { formatBRL } from '@/lib/format'
 import TechnicalAnalysisPage from '@/components/technical-analysis-page'
 import TechnicalAnalysisPageLimited from '@/components/technical-analysis-page-limited'
 import { PredecessorTickerLink } from '@/components/predecessor-ticker-link'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { ArrowLeft, Crown, Lock } from 'lucide-react'
-import { BenChatFAB } from '@/components/ben-chat-fab'
+import { TechnicalAnalysisLayout } from './technical-analysis-layout'
+import { getPriceStats } from './price-stats'
 
 interface PageProps {
   params: Promise<{
@@ -19,13 +17,16 @@ interface PageProps {
   }>
 }
 
+const INDICATORS_TEXT =
+  'IFR, MACD, estocástico, bandas de Bollinger, médias móveis, suporte e resistência, Fibonacci, Ichimoku e faixa de preço estimada por IA para 30 dias'
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const resolvedParams = await params
   const ticker = resolvedParams.ticker.toUpperCase()
-  
+
   const company = await prisma.company.findUnique({
     where: { ticker },
-    select: { 
+    select: {
       name: true,
       sector: true,
       dailyQuotes: {
@@ -38,48 +39,43 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!company) {
     return {
-      title: `${ticker} - Análise Técnica | Preço Justo AI`,
-      description: `Análise técnica completa de ${ticker} com indicadores avançados: RSI, MACD, Bollinger Bands, Fibonacci, Ichimoku e previsão de preços com IA.`,
-      robots: {
-        index: true,
-        follow: true
-      }
+      title: `Análise técnica de ${ticker}`,
+      description: `Análise técnica de ${ticker}: ${INDICATORS_TEXT}.`,
+      robots: { index: true, follow: true }
     }
   }
 
-  const currentPrice = company.dailyQuotes[0]?.price
-    ? Number(company.dailyQuotes[0].price).toFixed(2)
-    : null
-
-  const description = currentPrice
-    ? `Análise técnica completa de ${ticker} (${company.name})${company.sector ? ` - Setor: ${company.sector}` : ''}. Preço atual: R$ ${currentPrice}. Indicadores avançados: RSI, MACD, Bollinger Bands, Fibonacci, Ichimoku e previsão de preços com IA.`
-    : `Análise técnica completa de ${ticker} (${company.name})${company.sector ? ` - Setor: ${company.sector}` : ''}. Indicadores avançados: RSI, MACD, Bollinger Bands, Fibonacci, Ichimoku e previsão de preços com IA.`
+  const price = company.dailyQuotes[0]?.price ? Number(company.dailyQuotes[0].price) : null
+  const title = `Análise técnica de ${ticker} (${company.name})`
+  const description = `Análise técnica de ${ticker} (${company.name})${company.sector ? `, setor ${company.sector}` : ''}.${
+    price ? ` Preço atual: ${formatBRL(price)}.` : ''
+  } ${INDICATORS_TEXT.charAt(0).toUpperCase()}${INDICATORS_TEXT.slice(1)}.`
 
   return {
-    title: `Análise Técnica - ${ticker} (${company.name}) | Preço Justo AI`,
+    title,
     description,
     keywords: [
       `análise técnica ${ticker}`,
       `${ticker} análise técnica`,
       `indicadores técnicos ${ticker}`,
-      `RSI ${ticker}`,
+      `IFR ${ticker}`,
       `MACD ${ticker}`,
-      `Bollinger Bands ${ticker}`,
+      `Bollinger ${ticker}`,
       `Fibonacci ${ticker}`,
       `Ichimoku ${ticker}`,
-      `previsão preço ${ticker}`,
+      `suporte e resistência ${ticker}`,
       company.name,
       company.sector || ''
     ].filter(Boolean).join(', '),
     openGraph: {
-      title: `Análise Técnica - ${ticker} (${company.name})`,
+      title,
       description,
       type: 'website',
       siteName: 'Preço Justo AI'
     },
     twitter: {
       card: 'summary_large_image',
-      title: `Análise Técnica - ${ticker} (${company.name})`,
+      title,
       description
     },
     robots: {
@@ -104,13 +100,15 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
   const tickerParam = resolvedParams.ticker
   const ticker = tickerParam.toUpperCase()
 
-  // Verificar se empresa existe
   const company = await prisma.company.findUnique({
     where: { ticker },
     select: {
       id: true,
       name: true,
-      assetType: true
+      sector: true,
+      logoUrl: true,
+      assetType: true,
+      predecessor: { select: { ticker: true } }
     }
   })
 
@@ -118,206 +116,37 @@ export default async function TechnicalAnalysisPageRoute({ params }: PageProps) 
     notFound()
   }
 
-  // Verificar se é ação (STOCK)
   if (company.assetType !== 'STOCK') {
     redirect(`/acao/${tickerParam.toLowerCase()}`)
   }
 
-  // Verificar se usuário está logado
   const session = await getServerSession(authOptions)
-  const user = session ? await getCurrentUser() : null
-  const userIsPremium = user?.isPremium || false
-
-  // Buscar dados da empresa (necessário para ambas versões)
-  const companyData = await prisma.company.findUnique({
-    where: { ticker },
-    select: {
-      id: true,
-      name: true,
-      sector: true,
-      logoUrl: true,
-      predecessor: {
-        select: {
-          ticker: true,
-        },
-      },
-      dailyQuotes: {
-        orderBy: { date: 'desc' },
-        take: 1,
-        select: { price: true }
-      }
-    }
-  })
-
-  const currentPrice = companyData?.dailyQuotes[0]?.price
-    ? Number(companyData.dailyQuotes[0].price)
-    : 0
-
-  // Se não estiver logado, mostrar versão limitada para SEO
-  if (!user) {
-    return (
-      <div className="container mx-auto py-8 px-4">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <Button asChild variant="ghost" className="mb-4">
-              <Link href={`/acao/${tickerParam.toLowerCase()}`}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Voltar para página do ativo
-              </Link>
-            </Button>
-            <div className="flex items-center space-x-4">
-              <div className="flex-1">
-                <h1 className="text-3xl font-bold">Análise Técnica</h1>
-                <p className="text-muted-foreground mt-1">
-                  {ticker} - {companyData?.name || company.name}
-                </p>
-                {companyData?.predecessor && (
-                  <div className="mt-2">
-                    <PredecessorTickerLink
-                      predecessorTicker={companyData.predecessor.ticker}
-                      currentTicker={ticker}
-                      pageType="analise-tecnica"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Versão Limitada para SEO */}
-          <TechnicalAnalysisPageLimited
-            ticker={ticker}
-            companyName={companyData?.name || company.name}
-            currentPrice={currentPrice}
-          />
-        </div>
-
-        {/* Ben Chat FAB */}
-        <BenChatFAB />
-      </div>
-    )
-  }
-
-  // Se não for premium, mostrar CTA de upgrade
-  if (!userIsPremium) {
-    return (
-      <div className="container mx-auto py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <Button asChild variant="ghost" className="mb-4">
-              <Link href={`/acao/${tickerParam.toLowerCase()}`}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Voltar para página do ativo
-              </Link>
-            </Button>
-            <h1 className="text-3xl font-bold">Análise Técnica - {ticker}</h1>
-            <p className="text-muted-foreground mt-2">{company.name}</p>
-            {companyData?.predecessor && (
-              <div className="mt-2">
-                <PredecessorTickerLink
-                  predecessorTicker={companyData.predecessor.ticker}
-                  currentTicker={ticker}
-                  pageType="analise-tecnica"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Premium CTA */}
-          <Card className="border-2 border-amber-200 dark:border-amber-800">
-            <CardContent className="p-8 text-center">
-              <Lock className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold mb-4">Análise Técnica Premium</h2>
-              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                A análise técnica completa com indicadores avançados é uma feature exclusiva para assinantes Premium.
-              </p>
-              
-              <div className="mb-6 p-4 bg-muted/50 rounded-lg text-left max-w-md mx-auto">
-                <h3 className="font-semibold mb-3">O que você terá acesso:</h3>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>Indicadores técnicos completos (RSI, MACD, Stochastic, Bollinger Bands)</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>Análise de Fibonacci e Ichimoku Cloud</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>Detecção automática de suporte e resistência</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>Previsão de preços com IA (mínimo, máximo e preço justo de entrada)</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>Gráficos interativos com todos os indicadores</span>
-                  </li>
-                </ul>
-              </div>
-
-              <Button asChild size="lg" className="bg-amber-600 hover:bg-amber-700">
-                <Link href="/checkout">
-                  <Crown className="w-4 h-4 mr-2" />
-                  Upgrade para Premium
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Ben Chat FAB */}
-        <BenChatFAB />
-      </div>
-    )
-  }
+  const [user, stats] = await Promise.all([session ? getCurrentUser() : null, getPriceStats(company.id)])
+  const assetPath = `/acao/${ticker.toLowerCase()}`
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <Button asChild variant="ghost" className="mb-4">
-            <Link href={`/acao/${tickerParam.toLowerCase()}`}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Voltar para página do ativo
-            </Link>
-          </Button>
-          <div className="flex items-center space-x-4">
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold">Análise Técnica</h1>
-              <p className="text-muted-foreground mt-1">
-                {ticker} - {companyData?.name || company.name}
-              </p>
-              {companyData?.predecessor && (
-                <div className="mt-2">
-                  <PredecessorTickerLink
-                    predecessorTicker={companyData.predecessor.ticker}
-                    currentTicker={ticker}
-                    pageType="analise-tecnica"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Componente de Análise Técnica */}
-        <TechnicalAnalysisPage
-          ticker={ticker}
-          companyName={companyData?.name || company.name}
-          sector={companyData?.sector ?? null}
-          currentPrice={currentPrice}
-        />
-      </div>
-
-      {/* Ben Chat FAB */}
-      <BenChatFAB />
-    </div>
+    <TechnicalAnalysisLayout
+      ticker={ticker}
+      name={company.name}
+      sector={company.sector}
+      logoUrl={company.logoUrl}
+      assetPath={assetPath}
+      stats={stats}
+      headerExtra={
+        company.predecessor ? (
+          <PredecessorTickerLink
+            predecessorTicker={company.predecessor.ticker}
+            currentTicker={ticker}
+            pageType="analise-tecnica"
+          />
+        ) : null
+      }
+    >
+      {user?.isPremium ? (
+        <TechnicalAnalysisPage ticker={ticker} />
+      ) : (
+        <TechnicalAnalysisPageLimited ticker={ticker} analysisPath={`${assetPath}/analise-tecnica`} isLoggedIn={!!user} />
+      )}
+    </TechnicalAnalysisLayout>
   )
 }
-

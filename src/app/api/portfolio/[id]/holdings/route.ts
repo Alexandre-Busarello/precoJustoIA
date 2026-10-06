@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/user-service';
 import { PortfolioMetricsService } from '@/lib/portfolio-metrics-service';
+import { getCompanyBriefs } from '@/lib/company-brief';
 
 interface RouteContext {
   params: Promise<{
@@ -26,7 +27,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
     // Get current holdings with real-time prices from Yahoo Finance
     // This always fetches fresh prices, not cached
-    const holdings = await PortfolioMetricsService.getCurrentHoldings(resolvedParams.id);
+    const rawHoldings = await PortfolioMetricsService.getCurrentHoldings(resolvedParams.id);
+
+    // Nome, logo e tipo do ativo para a lista (só leitura; sem cadastro, a UI mostra o monograma)
+    const briefs = await getCompanyBriefs(rawHoldings.map((h) => h.ticker));
+    const holdings = rawHoldings.map((h) => {
+      const brief = briefs.get(h.ticker.toUpperCase());
+      return { ...h, companyName: brief?.name ?? null, logoUrl: brief?.logoUrl ?? null, assetType: brief?.assetType ?? null };
+    });
 
     return NextResponse.json({
       holdings,

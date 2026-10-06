@@ -5,6 +5,8 @@ import { prisma, safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 import { StrategyFactory, RankBuilderResult } from '@/lib/strategies';
 import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config';
+import { getRankingModel, isRankingUniverse, rankingModelLabel } from '@/lib/ranking-models';
+import { summarizeParams } from '@/components/ranking-wizard/ranking-data';
 
 export async function GET(
   request: NextRequest,
@@ -68,51 +70,23 @@ export async function GET(
       );
     }
 
-    // Função para obter nome amigável do modelo
-    const getModelDisplayName = (model: string): string => {
-      const modelNames: Record<string, string> = {
-        'graham': 'Fórmula de Graham',
-        'dividendYield': 'Anti-Dividend Trap',
-        'lowPE': 'Baixo P/L',
-        'magicFormula': 'Fórmula Mágica',
-        'fcd': 'Fluxo de Caixa Descontado',
-        'gordon': 'Fórmula de Gordon',
-        'fundamentalist': 'Fundamentalista 3+1',
-        'ai': 'Análise Preditiva com IA'
-      };
-      return modelNames[model] || model;
-    };
-
-    // Função para gerar descrição do histórico
-    const generateHistoryDescription = (model: string, params: Record<string, unknown>): string => {
-      switch (model) {
-        case 'graham':
-          return `Margem de segurança: ${params.marginOfSafety || 15}%`;
-        case 'dividendYield':
-          return `Yield mínimo: ${params.minYield || 6}%`;
-        case 'lowPE':
-          return `P/L máximo: ${params.maxPE || 15}`;
-        case 'magicFormula':
-          return `ROE mínimo: ${params.minROE || 15}%`;
-        case 'fcd':
-          return `Taxa de crescimento: ${params.growthRate || 5}%`;
-        case 'gordon':
-          return `Crescimento de dividendos: ${params.dividendGrowthRate || 5}%`;
-        case 'fundamentalist':
-          return `ROIC mín: ${params.minROIC || 10}%, Dívida/EBITDA máx: ${params.maxDebtToEbitda || 3}`;
-        case 'ai':
-          return `Tolerância ao risco: ${params.riskTolerance || 'moderado'}`;
-        default:
-          return 'Parâmetros personalizados';
-      }
-    };
+    // Nome e resumo dos parâmetros em pt-BR, a partir do registro de modelos de /ranking.
+    const savedParams = (ranking.params ?? {}) as Record<string, unknown>;
+    const registryModel = getRankingModel(ranking.model);
+    const modelName = rankingModelLabel(ranking.model);
+    const description = registryModel
+      ? summarizeParams(registryModel, {
+          ...registryModel.defaults(isRankingUniverse(savedParams.assetTypeFilter) ? savedParams.assetTypeFilter : 'b3'),
+          ...savedParams,
+        }) || registryModel.description
+      : 'Parâmetros personalizados';
 
     // Enriquecer resultados com múltiplos upsides se necessário
     let enrichedResults = ranking.results as unknown as RankBuilderResult[];
 
     // ETFs e FIIs têm estrutura própria — enriquecimento de ações não se aplica
-    const isEtfModel = ranking.model.startsWith('etfs-');
-    const isFiiModel = ranking.model === 'fiiDividendYield';
+    const isEtfModel = ranking.model.startsWith('etfs-') || registryModel?.assetType === 'etf';
+    const isFiiModel = registryModel?.assetType === 'fii' || ranking.model === 'fiiScreening';
 
     // Verificar se os resultados precisam de enriquecimento
     // 1. Verificar se faltam upsides adicionais
@@ -281,7 +255,7 @@ export async function GET(
                   if (grahamAnalysis.upside !== null && grahamAnalysis.upside !== undefined) {
                     upsides.push(grahamAnalysis.upside);
                   }
-                } catch (e) {
+                } catch {
                   // Ignorar erro
                 }
                 
@@ -292,7 +266,7 @@ export async function GET(
                     if (fcdAnalysis.upside !== null && fcdAnalysis.upside !== undefined) {
                       upsides.push(fcdAnalysis.upside);
                     }
-                  } catch (e) {
+                  } catch {
                     // Ignorar erro
                   }
                 }
@@ -304,7 +278,7 @@ export async function GET(
                     if (gordonAnalysis.upside !== null && gordonAnalysis.upside !== undefined) {
                       upsides.push(gordonAnalysis.upside);
                     }
-                  } catch (e) {
+                  } catch {
                     // Ignorar erro
                   }
                 }
@@ -314,8 +288,8 @@ export async function GET(
                   mainUpside = Math.max(...upsides);
                 }
               }
-            } catch (e) {
-              console.warn(`⚠️ Erro ao calcular upside principal para ${result.ticker}:`, e);
+            } catch (error) {
+              console.warn(`Erro ao calcular upside principal para ${result.ticker}:`, error);
             }
           }
           
@@ -326,7 +300,7 @@ export async function GET(
               if (grahamAnalysis.upside !== null && grahamAnalysis.upside !== undefined) {
                 enrichedKeyMetrics.grahamUpside = grahamAnalysis.upside;
               }
-            } catch (e) {
+            } catch {
               // Silenciosamente ignorar erros
             }
           }
@@ -338,7 +312,7 @@ export async function GET(
               if (fcdAnalysis.upside !== null && fcdAnalysis.upside !== undefined) {
                 enrichedKeyMetrics.fcdUpside = fcdAnalysis.upside;
               }
-            } catch (e) {
+            } catch {
               // Silenciosamente ignorar erros
             }
           }
@@ -350,7 +324,7 @@ export async function GET(
               if (gordonAnalysis.upside !== null && gordonAnalysis.upside !== undefined) {
                 enrichedKeyMetrics.gordonUpside = gordonAnalysis.upside;
               }
-            } catch (e) {
+            } catch {
               // Silenciosamente ignorar erros
             }
           }
@@ -377,8 +351,8 @@ export async function GET(
       results: enrichedResults,
       resultCount: ranking.resultCount,
       createdAt: ranking.createdAt,
-      modelName: getModelDisplayName(ranking.model),
-      description: generateHistoryDescription(ranking.model, ranking.params as Record<string, unknown>)
+      modelName,
+      description
     };
 
     return NextResponse.json({

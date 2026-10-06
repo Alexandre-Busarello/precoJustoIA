@@ -4,32 +4,29 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Lock, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
+import { Check, Loader2, Minus } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { AuthFallback, AuthShell, PasswordInput } from '../login/auth-ui'
 
 function ResetPasswordForm() {
   const [token, setToken] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isValidating, setIsValidating] = useState(true)
   const [isValidToken, setIsValidToken] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [maskedEmail, setMaskedEmail] = useState('')
   const [error, setError] = useState('')
-  
-  // const router = useRouter() // Removido pois não está sendo usado
+
   const searchParams = useSearchParams()
 
   useEffect(() => {
     const tokenParam = searchParams.get('token')
     if (!tokenParam) {
-      setError('Token não fornecido')
+      setError('Link sem o código de redefinição.')
       setIsValidating(false)
       return
     }
@@ -103,7 +100,7 @@ function ResetPasswordForm() {
 
       if (data.success) {
         setIsSuccess(true)
-        toast.success('Senha redefinida com sucesso!')
+        toast.success('Senha alterada')
       } else {
         toast.error(data.message || 'Erro ao redefinir senha')
         if (data.message?.includes('inválido') || data.message?.includes('expirado')) {
@@ -119,233 +116,102 @@ function ResetPasswordForm() {
     }
   }
 
-  // Loading state
+  const backToLogin = (
+    <Link href="/login" className="inline-flex min-h-11 items-center font-medium text-brand underline-offset-4 hover:underline sm:min-h-0">
+      Voltar para o login
+    </Link>
+  )
+
   if (isValidating) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-4" />
-            <p className="text-muted-foreground">Validando link...</p>
-          </CardContent>
-        </Card>
-      </div>
+      <AuthShell title="Nova senha" description="Validando o link…">
+        <div className="flex justify-center py-6">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" strokeWidth={1.75} aria-label="Carregando" />
+        </div>
+      </AuthShell>
     )
   }
 
-  // Success state
   if (isSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
-            </div>
-            <CardTitle className="text-2xl font-bold">Senha redefinida!</CardTitle>
-            <CardDescription className="text-base">
-              Sua senha foi alterada com sucesso
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="text-center space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Agora você pode fazer login com sua nova senha.
-              </p>
-            </div>
-
-            <Button asChild className="w-full">
-              <Link href="/login">
-                Fazer login
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <AuthShell title="Senha alterada" description="Agora você já pode entrar com a nova senha.">
+        <Button asChild className="w-full">
+          <Link href="/login">Entrar</Link>
+        </Button>
+      </AuthShell>
     )
   }
 
-  // Error state
   if (!isValidToken || error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mb-4">
-              <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
-            </div>
-            <CardTitle className="text-2xl font-bold">Link inválido</CardTitle>
-            <CardDescription className="text-base">
-              {error || 'Este link de redefinição não é válido'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="text-center space-y-4">
-              <p className="text-sm text-muted-foreground">
-                O link pode ter expirado ou já ter sido utilizado.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <Button asChild className="w-full">
-                <Link href="/esqueci-senha">
-                  Solicitar novo link
-                </Link>
-              </Button>
-              
-              <Button asChild variant="outline" className="w-full">
-                <Link href="/login">
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Voltar ao login
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <AuthShell title="Link inválido" description={error || 'Este link de redefinição não é válido.'} footer={backToLogin}>
+        <p className="text-sm text-muted-foreground">O link pode ter expirado ou já ter sido usado.</p>
+        <Button asChild className="w-full">
+          <Link href="/esqueci-senha">Pedir novo link</Link>
+        </Button>
+      </AuthShell>
     )
   }
 
-  // Main form
+  const requirements = [
+    { label: '8 caracteres ou mais', ok: password.length >= 8 },
+    { label: 'Uma letra minúscula', ok: /[a-z]/.test(password) },
+    { label: 'Uma letra maiúscula', ok: /[A-Z]/.test(password) },
+    { label: 'Um número', ok: /\d/.test(password) },
+  ]
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mb-4">
-            <Lock className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-          </div>
-          <CardTitle className="text-2xl font-bold">Nova senha</CardTitle>
-          <CardDescription className="text-base">
-            {maskedEmail && `Para a conta: ${maskedEmail}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="password">Nova senha</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Digite sua nova senha"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
-                  className="h-12 pr-12"
-                  autoComplete="new-password"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-12 px-3 hover:bg-transparent"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={isLoading}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
+    <AuthShell title="Nova senha" description={maskedEmail ? `Para a conta ${maskedEmail}` : undefined} footer={backToLogin}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Nova senha</Label>
+          <PasswordInput
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={isLoading}
+            autoComplete="new-password"
+            aria-describedby="password-requirements"
+            required
+          />
+          <ul id="password-requirements" className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1 text-xs">
+            {requirements.map((item) => (
+              <li key={item.label} className={cn('flex items-center gap-1.5', item.ok ? 'text-foreground' : 'text-muted-foreground')}>
+                {item.ok ? (
+                  <Check className="size-3.5 text-positive" strokeWidth={1.75} aria-hidden="true" />
+                ) : (
+                  <Minus className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+                )}
+                {item.label}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar nova senha</Label>
-              <div className="relative">
-                <Input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  placeholder="Digite novamente sua nova senha"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  disabled={isLoading}
-                  className="h-12 pr-12"
-                  autoComplete="new-password"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-12 px-3 hover:bg-transparent"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  disabled={isLoading}
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="confirmPassword">Confirmar nova senha</Label>
+          <PasswordInput
+            id="confirmPassword"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            disabled={isLoading}
+            autoComplete="new-password"
+            required
+          />
+        </div>
 
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <div className="text-sm text-blue-800 dark:text-blue-200">
-                <p className="font-medium mb-2">Requisitos da senha:</p>
-                <ul className="space-y-1 text-xs">
-                  <li className={password.length >= 8 ? 'text-green-600 dark:text-green-400' : ''}>
-                    • Pelo menos 8 caracteres
-                  </li>
-                  <li className={/(?=.*[a-z])/.test(password) ? 'text-green-600 dark:text-green-400' : ''}>
-                    • Uma letra minúscula
-                  </li>
-                  <li className={/(?=.*[A-Z])/.test(password) ? 'text-green-600 dark:text-green-400' : ''}>
-                    • Uma letra maiúscula
-                  </li>
-                  <li className={/(?=.*\d)/.test(password) ? 'text-green-600 dark:text-green-400' : ''}>
-                    • Um número
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <Button 
-              type="submit" 
-              className="w-full h-12" 
-              disabled={isLoading || !password || !confirmPassword}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Redefinindo...
-                </>
-              ) : (
-                <>
-                  <Lock className="w-4 h-4 mr-2" />
-                  Redefinir senha
-                </>
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <Button asChild variant="ghost" className="text-sm">
-              <Link href="/login">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Voltar ao login
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        <Button type="submit" className="w-full" disabled={isLoading || !password || !confirmPassword}>
+          {isLoading && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />}
+          {isLoading ? 'Salvando…' : 'Salvar nova senha'}
+        </Button>
+      </form>
+    </AuthShell>
   )
 }
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-4" />
-            <p className="text-muted-foreground">Carregando...</p>
-          </CardContent>
-        </Card>
-      </div>
-    }>
+    <Suspense fallback={<AuthFallback />}>
       <ResetPasswordForm />
     </Suspense>
   )

@@ -1,472 +1,224 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Info } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Loader2, ArrowLeft, Calendar, DollarSign, TrendingUp, Info } from 'lucide-react'
-import { CompanyLogo } from '@/components/company-logo'
+import { SectionHeader } from '@/components/ui/section-header'
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table'
+import { DividendRadarGrid } from '@/components/dividend-radar-grid'
 import { useDividendRadarProjections } from '@/hooks/use-dividend-radar'
-import { DividendProjection } from '@/lib/dividend-radar-service'
-import { cn } from '@/lib/utils'
-import { BenChatFAB } from '@/components/ben-chat-fab'
+import { formatBRL, formatPct } from '@/lib/format'
+import { AssetPriceHeader } from '@/app/acao/[ticker]/analise-tecnica/asset-price-header'
+import {
+  flattenEvents,
+  formatDateOnly,
+  nextExDateEvent,
+  perShareDigits,
+  trailingTwelveMonthsTotal,
+  type DividendEvent,
+} from '@/app/radar-dividendos/dividend-months'
 
-interface Company {
-  id: number
+interface DividendRadarTickerCompany {
   ticker: string
   name: string
   sector: string | null
   logoUrl: string | null
-  dividendRadarProjections: any
+  assetType: string
 }
 
 interface DividendRadarTickerPageContentProps {
-  company: Company
+  company: DividendRadarTickerCompany
+  price: number | null
+  /** Variação do dia como fração. */
+  dayChange: number | null
 }
 
-const MONTHS = [
-  'Janeiro',
-  'Fevereiro',
-  'Março',
-  'Abril',
-  'Maio',
-  'Junho',
-  'Julho',
-  'Agosto',
-  'Setembro',
-  'Outubro',
-  'Novembro',
-  'Dezembro',
-]
+function assetPath(company: DividendRadarTickerCompany): string {
+  const ticker = company.ticker.toLowerCase()
+  if (company.assetType === 'FII') return `/fii/${ticker}`
+  if (company.assetType === 'ETF') return `/etf/${ticker}`
+  if (company.assetType === 'BDR') return `/bdr/${ticker}`
+  return `/acao/${ticker}`
+}
 
-export function DividendRadarTickerPageContent({
-  company,
-}: DividendRadarTickerPageContentProps) {
-  const { data, isLoading, error } = useDividendRadarProjections(company.ticker)
+function formatPerShare(amount: number | null): string {
+  return amount === null ? '—' : formatBRL(amount, { digits: perShareDigits(amount) })
+}
 
-  const projections = data?.projections || [] // Todas as projeções completas
-  const historicalDividends = data?.historicalDividends || [] // Últimos 4 meses para visualização resumida
-  const allHistoricalDividends = data?.allHistoricalDividends || [] // Histórico completo
+type EventRow = DividendEvent & { id: string }
 
-  // Calcular meses a mostrar: 4 meses passados + mês atual + 6 meses futuros (total 11 meses)
-  const now = new Date()
-  const currentMonth = now.getMonth() + 1 // 1-12
-  const currentYear = now.getFullYear()
+/** Página do ativo no radar de dividendos: cabeçalho de preço/proventos, calendário e tabela de eventos. */
+export function DividendRadarTickerPageContent({ company, price, dayChange }: DividendRadarTickerPageContentProps) {
+  const { data, isLoading, error, refetch } = useDividendRadarProjections(company.ticker)
 
-  const monthsToShow: Array<{ month: number; year: number; label: string; isCurrent: boolean }> = []
-  
-  // Adicionar 4 meses passados
-  for (let i = 4; i >= 1; i--) {
-    const date = new Date(currentYear, currentMonth - 1 - i, 1)
-    const month = date.getMonth() + 1
-    const year = date.getFullYear()
-    monthsToShow.push({
-      month,
-      year,
-      label: `${MONTHS[month - 1]} ${year}`,
-      isCurrent: false,
+  const projections = useMemo(() => data?.projections ?? [], [data?.projections])
+  const recentHistory = useMemo(() => data?.historicalDividends ?? [], [data?.historicalDividends])
+  const allHistory = useMemo(() => data?.allHistoricalDividends ?? [], [data?.allHistoricalDividends])
+
+  const events = useMemo<EventRow[]>(
+    () => flattenEvents(allHistory, projections).map((event, index) => ({ ...event, id: `${event.kind}-${event.exDate}-${index}` })),
+    [allHistory, projections]
+  )
+  const total12m = useMemo(() => trailingTwelveMonthsTotal(allHistory), [allHistory])
+  const next = useMemo(() => nextExDateEvent(allHistory, projections), [allHistory, projections])
+  const confirmedCount = events.filter((e) => e.kind === 'confirmed').length
+  const projectedCount = events.length - confirmedCount
+  const yield12m = total12m !== null && price ? total12m / price : null
+  const hasPayment = events.some((e) => e.paymentDate)
+  const hasType = events.some((e) => e.type)
+
+  const columns: DataTableColumn<EventRow>[] = [
+    {
+      key: 'exDate',
+      header: 'Data ex',
+      sortable: true,
+      cell: (row) => <span className="tabular-nums text-foreground">{formatDateOnly(row.exDate)}</span>,
+    },
+    {
+      key: 'amount',
+      header: 'Valor por ação',
+      align: 'right',
+      sortable: true,
+      cell: (row) => formatPerShare(row.amount),
+    },
+    {
+      key: 'kind',
+      header: 'Situação',
+      hint: 'Confirmado: provento anunciado pela empresa. Projetado: data e valor estimados estatisticamente a partir do histórico.',
+      cell: (row) =>
+        row.kind === 'confirmed' ? (
+          <Badge variant="brand">Confirmado</Badge>
+        ) : (
+          <span className="inline-flex items-center gap-2">
+            <Badge variant="neutral">Projetado</Badge>
+            {row.confidence !== null && (
+              <span className="text-xs text-muted-foreground">{formatPct(row.confidence / 100, { digits: 0 })}</span>
+            )}
+          </span>
+        ),
+    },
+  ]
+  if (hasPayment) {
+    columns.splice(1, 0, {
+      key: 'paymentDate',
+      header: 'Pagamento',
+      sortable: true,
+      cell: (row) => <span className="tabular-nums">{row.paymentDate ? formatDateOnly(row.paymentDate) : '—'}</span>,
     })
   }
-  
-  // Adicionar mês atual (destacado)
-  monthsToShow.push({
-    month: currentMonth,
-    year: currentYear,
-    label: `${MONTHS[currentMonth - 1]} ${currentYear}`,
-    isCurrent: true,
-  })
-  
-  // Adicionar 6 meses futuros
-  for (let i = 1; i <= 6; i++) {
-    const date = new Date(currentYear, currentMonth - 1 + i, 1)
-    const month = date.getMonth() + 1
-    const year = date.getFullYear()
-    monthsToShow.push({
-      month,
-      year,
-      label: `${MONTHS[month - 1]} ${year}`,
-      isCurrent: false,
-    })
+  if (hasType) {
+    columns.push({ key: 'type', header: 'Tipo', cell: (row) => row.type ?? '—' })
   }
 
-  // Criar mapas para acesso rápido
-  const projectionsByMonth = new Map<string, DividendProjection[]>()
-  projections.forEach((p) => {
-    const key = `${p.year}-${String(p.month).padStart(2, '0')}`
-    if (!projectionsByMonth.has(key)) {
-      projectionsByMonth.set(key, [])
-    }
-    projectionsByMonth.get(key)!.push(p)
-  })
-
-  const historicalByMonth = new Map<string, typeof historicalDividends>()
-  historicalDividends.forEach((h) => {
-    const key = `${h.year}-${String(h.month).padStart(2, '0')}`
-    if (!historicalByMonth.has(key)) {
-      historicalByMonth.set(key, [])
-    }
-    historicalByMonth.get(key)!.push(h)
-  })
+  const hasData = projections.length > 0 || allHistory.length > 0
 
   return (
-    <div className="container mx-auto px-4 py-6 sm:py-8 max-w-5xl">
-      {/* Header */}
-      <div className="mb-6">
-        <Link href="/radar-dividendos">
-          <Button variant="ghost" className="mb-4">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar ao Radar
+    <div className="mx-auto max-w-6xl space-y-8 px-4 pt-4 pb-12">
+      <AssetPriceHeader
+        ticker={company.ticker}
+        name={company.name}
+        pageLabel="Radar de dividendos"
+        subtitle={company.sector ? `${company.name} · ${company.sector}` : company.name}
+        logoUrl={company.logoUrl}
+        back={{ href: '/radar-dividendos', label: 'Voltar ao radar' }}
+        stats={[
+          { label: 'Preço', value: formatBRL(price), delta: dayChange, deltaLabel: 'hoje' },
+          {
+            label: 'Proventos 12 meses',
+            value: formatPerShare(total12m),
+            caption: 'por ação, bruto',
+          },
+          {
+            label: 'Dividend yield 12 meses',
+            value: formatPct(yield12m),
+            hint: 'Soma dos proventos com data ex nos últimos 12 meses dividida pelo preço atual.',
+          },
+          {
+            label: 'Próxima data ex',
+            value: next ? formatDateOnly(next.exDate) : '—',
+            caption: next ? `${next.kind === 'confirmed' ? 'anunciada' : 'estimada'} · ${formatPerShare(next.amount)}` : undefined,
+          },
+        ]}
+      />
+
+      {error ? (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-border px-4 py-10 text-center">
+          <p className="text-sm text-muted-foreground">Não foi possível carregar os proventos.</p>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            Tentar novamente
           </Button>
-        </Link>
-
-        <div className="flex items-start gap-4">
-          <CompanyLogo
-            logoUrl={company.logoUrl}
-            companyName={company.name}
-            ticker={company.ticker}
-            size={64}
-          />
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold mb-2">
-              Radar de Dividendos - {company.ticker}
-            </h1>
-            <p className="text-lg text-muted-foreground mb-2">{company.name}</p>
-            {company.sector && (
-              <span className="inline-block px-3 py-1 bg-muted rounded-md text-sm">
-                {company.sector}
-              </span>
-            )}
-          </div>
         </div>
+      ) : !isLoading && !hasData ? (
+        <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            {company.ticker} não tem histórico de proventos nem projeções no momento.
+          </p>
+        </div>
+      ) : (
+        <>
+          <section aria-labelledby="calendario" className="space-y-3">
+            <SectionHeader
+              id="calendario"
+              title="Calendário"
+              description="Últimos 4 meses, mês atual e próximos 7 meses."
+            />
+            <DividendRadarGrid
+              companies={[
+                {
+                  ticker: company.ticker,
+                  name: company.name,
+                  sector: company.sector,
+                  logoUrl: company.logoUrl,
+                  projections,
+                  historicalDividends: recentHistory,
+                },
+              ]}
+              loading={isLoading}
+              showCompanyLinks={false}
+            />
+          </section>
+
+          <section aria-labelledby="eventos" className="space-y-3">
+            <SectionHeader
+              id="eventos"
+              title="Proventos"
+              description={
+                isLoading
+                  ? 'Carregando histórico'
+                  : `${confirmedCount} ${confirmedCount === 1 ? 'confirmado' : 'confirmados'} e ${projectedCount} ${
+                      projectedCount === 1 ? 'projetado' : 'projetados'
+                    }`
+              }
+            />
+            <DataTable
+              columns={columns}
+              rows={events}
+              getRowId={(row) => row.id}
+              loading={isLoading}
+              stickyFirstColumn
+              maxHeight={480}
+              defaultSort={{ key: 'exDate', direction: 'desc' }}
+              caption={`Proventos de ${company.ticker}`}
+              empty={{ title: 'Nenhum provento encontrado' }}
+            />
+          </section>
+        </>
+      )}
+
+      <div className="flex flex-col gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+          <Info className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          <span>
+            Projeções são estimativas estatísticas a partir do histórico e podem mudar ou não se confirmar. Confira os
+            comunicados oficiais da empresa. Não é recomendação de investimento.
+          </span>
+        </p>
+        <Button asChild variant="outline" className="shrink-0">
+          <Link href={assetPath(company)}>Ver análise de {company.ticker}</Link>
+        </Button>
       </div>
-
-      {/* Info Alert */}
-      <Alert className="mb-6 border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
-        <Info className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-        <AlertDescription className="text-sm text-blue-900 dark:text-blue-100">
-          As projeções são baseadas em análise de padrões históricos usando inteligência artificial.
-          Os valores e datas são estimativas e podem variar. Sempre consulte informações oficiais da empresa.
-        </AlertDescription>
-      </Alert>
-
-      {/* Legenda */}
-      <Card className="mb-6">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white">
-                <DollarSign className="w-3 h-3" />
-              </div>
-              <span className="text-muted-foreground">Confirmado (dividendo pago)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white">
-                <DollarSign className="w-3 h-3" />
-              </div>
-              <span className="text-muted-foreground">Projetado (estimativa)</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Loading */}
-      {isLoading && (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Gerando projeções de dividendos...</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Error */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Erro ao carregar projeções. Tente novamente mais tarde.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Projeções e Histórico */}
-      {!isLoading && !error && (projections.length > 0 || historicalDividends.length > 0) && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5" />
-                Radar de Dividendos (4 meses passados + 6 meses futuros)
-              </CardTitle>
-              <CardDescription>
-                Histórico de dividendos pagos e projeções baseadas em análise de padrões históricos
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {monthsToShow.map(({ month, year, label, isCurrent }) => {
-                  const monthKey = `${year}-${String(month).padStart(2, '0')}`
-                  const monthProjections = projectionsByMonth.get(monthKey) || []
-                  const monthHistorical = historicalByMonth.get(monthKey) || []
-                  const isPast = !isCurrent && (year < currentYear || (year === currentYear && month < currentMonth))
-                  const isFuture = year > currentYear || (year === currentYear && month > currentMonth)
-
-                  // Se não tem histórico nem projeções, não mostrar
-                  if (monthHistorical.length === 0 && monthProjections.length === 0) {
-                    return null
-                  }
-
-                  return (
-                    <div
-                      key={monthKey}
-                      className={cn(
-                        "border rounded-lg p-4 hover:bg-muted/50 transition-colors",
-                        isCurrent && "bg-primary/5 border-primary border-2"
-                      )}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold">
-                            {label}
-                          </h3>
-                          {isCurrent && (
-                            <span className="px-2 py-1 bg-primary text-primary-foreground text-xs font-bold rounded">
-                              MÊS ATUAL
-                            </span>
-                          )}
-                          {isPast && (
-                            <span className="px-2 py-1 bg-blue-500 text-white text-xs font-medium rounded">
-                              HISTÓRICO
-                            </span>
-                          )}
-                          {isFuture && (
-                            <span className="px-2 py-1 bg-green-500 text-white text-xs font-medium rounded">
-                              PROJEÇÃO
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-sm text-muted-foreground">
-                          {monthHistorical.length > 0 && `${monthHistorical.length} pago${monthHistorical.length > 1 ? 's' : ''}`}
-                          {monthHistorical.length > 0 && monthProjections.length > 0 && ' • '}
-                          {monthProjections.length > 0 && `${monthProjections.length} projetado${monthProjections.length > 1 ? 's' : ''}`}
-                        </span>
-                      </div>
-
-                      <div className="space-y-2">
-                        {/* Histórico de dividendos pagos */}
-                        {monthHistorical.map((h, idx) => (
-                          <div
-                            key={`hist-${idx}`}
-                            className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-800"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
-                                <DollarSign className="w-5 h-5" />
-                              </div>
-                              <div>
-                                <p className="font-medium">
-                                  Data Ex-Dividendo: {new Date(h.exDate).toLocaleDateString('pt-BR')}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  Valor pago: R$ {h.amount.toFixed(4)} por ação
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                                PAGO
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-
-                        {/* Projeções futuras */}
-                        {monthProjections.map((p, idx) => (
-                          <div
-                            key={`proj-${idx}`}
-                            className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-800"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center text-white">
-                                <DollarSign className="w-5 h-5" />
-                              </div>
-                              <div>
-                                <p className="font-medium">
-                                  Data Ex-Dividendo: {new Date(p.projectedExDate).toLocaleDateString('pt-BR')}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  Valor projetado: R$ {p.projectedAmount.toFixed(4)} por ação
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="flex items-center gap-2">
-                                <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                                <span className="text-sm font-medium">
-                                  {p.confidence}% confiança
-                                </span>
-                              </div>
-                              <div
-                                className={cn(
-                                  "mt-1 h-2 w-24 rounded-full",
-                                  p.confidence >= 70
-                                    ? 'bg-green-500'
-                                    : p.confidence >= 40
-                                    ? 'bg-yellow-500'
-                                    : 'bg-red-500'
-                                )}
-                                style={{ width: `${p.confidence}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Histórico Completo de Dividendos */}
-          {allHistoricalDividends.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
-                  Histórico Completo de Dividendos Pagos
-                </CardTitle>
-                <CardDescription>
-                  Todos os dividendos pagos pela empresa ({allHistoricalDividends.length} pagamentos)
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                  {allHistoricalDividends.map((h, idx) => (
-                    <div
-                      key={`all-hist-${idx}`}
-                      className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-800"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
-                          <DollarSign className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className="font-medium">
-                            {new Date(h.exDate).toLocaleDateString('pt-BR', {
-                              day: '2-digit',
-                              month: 'long',
-                              year: 'numeric',
-                            })}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Valor pago: R$ {h.amount.toFixed(4)} por ação
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                          PAGO
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Todas as Projeções Completas */}
-          {projections.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
-                  Todas as Projeções de Dividendos
-                </CardTitle>
-                <CardDescription>
-                  Projeções completas para os próximos meses baseadas em análise de padrões históricos ({projections.length} projeções)
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                  {projections
-                    .sort((a, b) => {
-                      const dateA = new Date(a.projectedExDate)
-                      const dateB = new Date(b.projectedExDate)
-                      return dateA.getTime() - dateB.getTime()
-                    })
-                    .map((p, idx) => (
-                      <div
-                        key={`all-proj-${idx}`}
-                        className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-800"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center text-white">
-                            <DollarSign className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <p className="font-medium">
-                              {MONTHS[p.month - 1]} {p.year} - {new Date(p.projectedExDate).toLocaleDateString('pt-BR')}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Valor projetado: R$ {p.projectedAmount.toFixed(4)} por ação
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">
-                              {p.confidence}% confiança
-                            </span>
-                          </div>
-                          <div
-                            className={cn(
-                              "mt-1 h-2 w-24 rounded-full",
-                              p.confidence >= 70
-                                ? 'bg-green-500'
-                                : p.confidence >= 40
-                                ? 'bg-yellow-500'
-                                : 'bg-red-500'
-                            )}
-                            style={{ width: `${p.confidence}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Link para página da ação */}
-          <Card>
-            <CardContent className="p-4">
-              <Link href={`/acao/${company.ticker.toLowerCase()}`}>
-                <Button variant="outline" className="w-full">
-                  Ver Análise Completa de {company.ticker}
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Sem projeções nem histórico */}
-      {!isLoading && !error && projections.length === 0 && historicalDividends.length === 0 && (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <p className="text-muted-foreground">
-              Não há histórico de dividendos nem projeções disponíveis para {company.ticker} no momento.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Ben Chat FAB */}
-      <BenChatFAB />
     </div>
   )
 }
-

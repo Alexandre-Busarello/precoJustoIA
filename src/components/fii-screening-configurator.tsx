@@ -1,139 +1,132 @@
-"use client";
+"use client"
 
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { NumberField } from "@/components/screening/number-field"
+import type { FiiScreeningFormParams } from "@/components/screening/screening-metrics"
 
-export interface FiiScreeningFormParams {
-  tipoFii: "papel" | "tijolo" | "both";
-  minDY?: number;
-  maxPVP?: number;
-  minLiquidity?: number;
-  minQtdImoveis?: number;
-  maxVacancia?: number;
-  segmento?: string;
-}
+export type { FiiScreeningFormParams } from "@/components/screening/screening-metrics"
+
+const ALL_SEGMENTS = "__all__"
 
 interface Props {
-  params: FiiScreeningFormParams;
-  onChange: (p: FiiScreeningFormParams) => void;
+  params: FiiScreeningFormParams
+  onChange: (params: FiiScreeningFormParams) => void
+  /** Segmentos vindos de /api/sectors-industries (indústrias do setor "Fundos Imobiliários"). */
+  segments: string[]
+  segmentsLoading?: boolean
 }
 
-export function FiiScreeningConfigurator({ params, onChange }: Props) {
-  const set = (partial: Partial<FiiScreeningFormParams>) =>
-    onChange({ ...params, ...partial });
+/** Percentual digitado (8) ↔ fração salva (0,08). */
+function pctToDisplay(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : Number((value * 100).toPrecision(12))
+}
+
+function pctToStored(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : value / 100
+}
+
+export function FiiScreeningConfigurator({ params, onChange, segments, segmentsLoading = false }: Props) {
+  const set = (partial: Partial<FiiScreeningFormParams>) => onChange({ ...params, ...partial })
 
   return (
-    <Card className="border-amber-200/60 dark:border-amber-900/40">
-      <CardHeader>
-        <CardTitle className="text-lg">Filtros — FIIs</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="space-y-2">
-          <Label>Tipo</Label>
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="fii-tipo">Tipo</Label>
+        <Select value={params.tipoFii} onValueChange={(value) => set({ tipoFii: value as FiiScreeningFormParams["tipoFii"] })}>
+          <SelectTrigger id="fii-tipo" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="both">Tijolo e papel</SelectItem>
+            <SelectItem value="tijolo">Tijolo</SelectItem>
+            <SelectItem value="papel">Papel</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="fii-segmento">Segmento</Label>
+        {segments.length > 0 || segmentsLoading ? (
           <Select
-            value={params.tipoFii}
-            onValueChange={(v) =>
-              set({ tipoFii: v as FiiScreeningFormParams["tipoFii"] })
-            }
+            value={params.segmento ?? ALL_SEGMENTS}
+            onValueChange={(value) => set({ segmento: value === ALL_SEGMENTS ? undefined : value })}
+            disabled={segmentsLoading}
           >
-            <SelectTrigger>
-              <SelectValue />
+            <SelectTrigger id="fii-segmento" className="w-full">
+              <SelectValue placeholder={segmentsLoading ? "Carregando segmentos…" : "Todos os segmentos"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="both">Tijolo e papel</SelectItem>
-              <SelectItem value="tijolo">Tijolo</SelectItem>
-              <SelectItem value="papel">Papel</SelectItem>
+              <SelectItem value={ALL_SEGMENTS}>Todos os segmentos</SelectItem>
+              {segments.map((segment) => (
+                <SelectItem key={segment} value={segment}>
+                  {segment}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-2">
-          <Label>DY mín. (% a.a.)</Label>
+        ) : (
           <Input
-            type="number"
-            step="0.1"
-            placeholder="ex: 8"
-            value={params.minDY != null ? params.minDY * 100 : ""}
-            onChange={(e) => {
-              const v = parseFloat(e.target.value);
-              set({ minDY: e.target.value === "" ? undefined : v / 100 });
-            }}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>P/VP máx.</Label>
-          <Input
-            type="number"
-            step="0.01"
-            placeholder="ex: 1.1"
-            value={params.maxPVP ?? ""}
-            onChange={(e) => {
-              const v = parseFloat(e.target.value);
-              set({ maxPVP: e.target.value === "" ? undefined : v });
-            }}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Liquidez mín. (R$/dia)</Label>
-          <Input
-            type="number"
-            step="1000"
-            placeholder="ex: 1000000"
-            value={params.minLiquidity ?? ""}
-            onChange={(e) => {
-              const v = parseFloat(e.target.value);
-              set({ minLiquidity: e.target.value === "" ? undefined : v });
-            }}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Qtd. imóveis mín.</Label>
-          <Input
-            type="number"
-            step="1"
-            placeholder="ex: 5"
-            value={params.minQtdImoveis ?? ""}
-            onChange={(e) => {
-              const v = parseInt(e.target.value, 10);
-              set({
-                minQtdImoveis: e.target.value === "" ? undefined : v,
-              });
-            }}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Vacância máx. (%)</Label>
-          <Input
-            type="number"
-            step="0.5"
-            placeholder="ex: 15"
-            value={
-              params.maxVacancia != null ? params.maxVacancia * 100 : ""
-            }
-            onChange={(e) => {
-              const v = parseFloat(e.target.value);
-              set({
-                maxVacancia: e.target.value === "" ? undefined : v / 100,
-              });
-            }}
-          />
-        </div>
-        <div className="space-y-2 sm:col-span-2">
-          <Label>Segmento (contém)</Label>
-          <Input
-            placeholder="ex: Logística, Shoppings…"
+            id="fii-segmento"
+            placeholder="Ex.: Logística, Shoppings"
             value={params.segmento ?? ""}
-            onChange={(e) => set({ segmento: e.target.value || undefined })}
+            onChange={(event) => set({ segmento: event.target.value || undefined })}
           />
-        </div>
-      </CardContent>
-    </Card>
-  );
+        )}
+      </div>
+
+      <FiiField label="Dividend yield mínimo (a.a.)">
+        <NumberField
+          value={pctToDisplay(params.minDY)}
+          onChange={(value) => set({ minDY: pctToStored(value) })}
+          placeholder="Ex.: 8"
+          ariaLabel="Dividend yield mínimo"
+          suffix="%"
+        />
+      </FiiField>
+      <FiiField label="P/VP máximo">
+        <NumberField
+          value={params.maxPVP}
+          onChange={(value) => set({ maxPVP: value })}
+          placeholder="Ex.: 1,1"
+          ariaLabel="P/VP máximo"
+        />
+      </FiiField>
+      <FiiField label="Liquidez diária mínima (R$)">
+        <NumberField
+          value={params.minLiquidity}
+          onChange={(value) => set({ minLiquidity: value })}
+          placeholder="Ex.: 1.000.000"
+          ariaLabel="Liquidez diária mínima em reais"
+        />
+      </FiiField>
+      <FiiField label="Quantidade mínima de imóveis">
+        <NumberField
+          value={params.minQtdImoveis}
+          onChange={(value) => set({ minQtdImoveis: value === undefined ? undefined : Math.round(value) })}
+          placeholder="Ex.: 5"
+          ariaLabel="Quantidade mínima de imóveis"
+        />
+      </FiiField>
+      <FiiField label="Vacância máxima">
+        <NumberField
+          value={pctToDisplay(params.maxVacancia)}
+          onChange={(value) => set({ maxVacancia: pctToStored(value) })}
+          placeholder="Ex.: 15"
+          ariaLabel="Vacância máxima"
+          suffix="%"
+        />
+      </FiiField>
+    </div>
+  )
+}
+
+function FiiField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-sm font-medium text-foreground">{label}</p>
+      {children}
+    </div>
+  )
 }

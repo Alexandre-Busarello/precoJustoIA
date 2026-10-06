@@ -1,80 +1,39 @@
 'use client'
 
 /**
- * Ben Chat FAB - Floating Action Button para abrir o chat do Ben
- * Com popup proativo para engajamento
+ * FAB do Ben: botão flutuante que abre o chat. Montado uma vez no layout raiz.
+ * Só aparece com sessão, fica acima da bottom nav no mobile e some em checkout, login, cadastro, oferta e admin.
+ * O contexto da página (ticker etc.) é lido do pathname pelo próprio chat.
  */
 
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { BenChatSidebar } from './ben-chat-sidebar'
-import { BenProactivePopup, useBenProactivePopup } from './ben-proactive-popup'
-import { useSession } from 'next-auth/react'
-import { cn } from '@/lib/utils'
+import { useState } from 'react'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
+import { useSession } from 'next-auth/react'
+import { BenChatSidebar } from './ben-chat-sidebar'
+import { isAppChromeHidden } from '@/lib/navigation'
 
 export function BenChatFAB() {
   const { data: session } = useSession()
+  const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
-  const { showPopup, popupData, handleClose, handleStartConversation } = useBenProactivePopup()
 
-  // Não mostrar se usuário não estiver logado
-  if (!session) {
+  if (!session || isAppChromeHidden(pathname)) {
     return null
-  }
-
-  const handleFabClick = () => {
-    handleClose() // Fechar popup se estiver aberto
-    setIsOpen(true)
-  }
-
-  const handleStartFromPopup = () => {
-    handleStartConversation()
-    setIsOpen(true)
   }
 
   return (
     <>
-      {/* Popup Proativo */}
-      {showPopup && popupData.message && (
-        <BenProactivePopup
-          show={showPopup}
-          onClose={handleClose}
-          onStartConversation={handleStartFromPopup}
-          messageType={popupData.messageType}
-          message={popupData.message}
-        />
-      )}
-
-      {/* FAB Button */}
-      <Button
-        onClick={handleFabClick}
-        className={cn(
-          'fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50',
-          'w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-lg',
-          'p-0 overflow-hidden',
-          'bg-gradient-to-br from-blue-600 to-violet-600',
-          'hover:from-blue-700 hover:to-violet-700',
-          'active:scale-95', // Feedback visual em mobile
-          'flex items-center justify-center',
-          'transition-all duration-300',
-          'hover:scale-110',
-          'touch-manipulation', // Melhorar toque em mobile
-          'min-w-[56px] min-h-[56px]' // Garantir tamanho mínimo para toque
-        )}
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
         aria-label="Abrir chat do Ben"
+        className="fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 size-12 touch-manipulation overflow-hidden rounded-full border border-border bg-background shadow-md transition-transform hover:scale-105 focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none active:scale-95 lg:right-6 lg:bottom-[calc(1.5rem+env(safe-area-inset-bottom))]"
       >
-        <Image 
-          src="/ben.png" 
-          alt="Ben" 
-          width={64} 
-          height={64} 
-          className="w-full h-full object-cover rounded-full"
-        />
-      </Button>
+        <Image src="/ben.png" alt="" width={48} height={48} className="size-full object-cover" />
+      </button>
 
       <BenChatSidebar open={isOpen} onOpenChange={setIsOpen} />
     </>
   )
 }
-

@@ -1,13 +1,14 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
+import { ChevronRight } from 'lucide-react'
 import { PLBolsaPageClient } from '@/components/pl-bolsa-page-client'
+import { PageHeader } from '@/components/page-header'
 import { getAvailableSectors } from '@/lib/pl-bolsa-service'
-import { Home, ChevronRight } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'P/L Histórico da Bovespa | Análise de Valuation da Bolsa Brasileira | Preço Justo AI',
+  title: 'P/L histórico da Bovespa: valuation da bolsa brasileira',
   description:
-    'Gráfico interativo do P/L histórico da Bovespa desde 2010. Filtre por setor, período e score. Entenda a evolução da valorização da bolsa brasileira. Dados de mais de 300 empresas da B3.',
+    'Gráfico interativo do P/L histórico da Bovespa desde 2010. Filtre por setor, período e score. Entenda a evolução da valorização da bolsa brasileira. Dados de empresas listadas na B3.',
   keywords: [
     'P/L bovespa',
     'P/L histórico',
@@ -26,9 +27,9 @@ export const metadata: Metadata = {
     'valorização bolsa valores',
   ],
   openGraph: {
-    title: 'P/L Histórico da Bovespa | Preço Justo AI',
+    title: 'P/L histórico da Bovespa',
     description:
-      'Gráfico interativo do P/L histórico da Bovespa desde 2010. Filtre por setor, período e score. Dados de mais de 300 empresas.',
+      'Gráfico interativo do P/L histórico da Bovespa desde 2010. Filtre por setor, período e score. Dados de empresas listadas na B3.',
     type: 'website',
     url: 'https://precojusto.ai/pl-bolsa',
     siteName: 'Preço Justo AI',
@@ -43,13 +44,13 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'P/L Histórico da Bovespa | Preço Justo AI',
+    title: 'P/L histórico da Bovespa',
     description:
       'Gráfico interativo do P/L histórico da Bovespa desde 2010. Filtre por setor, período e score.',
     images: ['https://precojusto.ai/og-pl-bolsa.png'],
   },
   alternates: {
-    canonical: 'https://precojusto.ai/pl-bolsa',
+    canonical: '/pl-bolsa',
   },
   robots: {
     index: true,
@@ -83,7 +84,7 @@ export default async function PLBolsaPage() {
       {
         '@type': 'ListItem',
         position: 2,
-        name: 'P/L Histórico da Bovespa',
+        name: 'P/L histórico da Bovespa',
         item: `${baseUrl}/pl-bolsa`,
       },
     ],
@@ -97,192 +98,134 @@ export default async function PLBolsaPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
 
-      <div className="container mx-auto px-4 py-8">
-        {/* Breadcrumb Navigation */}
-        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
-          <Link href="/" className="hover:text-blue-600 transition-colors flex items-center gap-1">
-            <Home className="w-4 h-4" />
-            Início
-          </Link>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-foreground font-medium">P/L Histórico da Bovespa</span>
-        </nav>
+      <div className="container mx-auto max-w-6xl space-y-8 px-4 py-6 sm:py-8">
+        <PageHeader
+          breadcrumb={[{ label: 'Início', href: '/' }, { label: 'P/L histórico da Bovespa' }]}
+          title="P/L histórico da Bovespa"
+          description="Evolução do P/L (preço/lucro) agregado da bolsa brasileira desde 2010, com filtros por período, setor e score."
+        />
 
-        {/* Hero Section */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-4">
-            P/L Histórico da Bovespa
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-3xl">
-            Acompanhe a evolução do P/L (Preço/Lucro) agregado da bolsa brasileira
-            desde 2010. Use os filtros para analisar setores específicos, períodos
-            de tempo e empresas com score mínimo.
-          </p>
-        </div>
+        <PLBolsaPageClient initialSectors={sectors} />
 
-      {/* Client Component com gráfico e filtros */}
-      <PLBolsaPageClient initialSectors={sectors} />
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <article className="max-w-[68ch] space-y-8 text-base leading-7 text-muted-foreground">
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold text-foreground">O que é P/L</h2>
+              <p>
+                O P/L (preço/lucro) indica quantos anos de lucro, no ritmo atual, seriam necessários para pagar o preço
+                de uma ação ou de um conjunto de ações. É um dos indicadores mais usados para avaliar o valuation.
+              </p>
+              <p>
+                Um P/L baixo indica que as ações negociam a um múltiplo menor dos lucros; um P/L alto, a um múltiplo
+                maior. O contexto importa: setores em crescimento tendem a ter P/L mais altos, e setores maduros, mais
+                baixos.
+              </p>
+            </section>
 
-      {/* Conteúdo SEO */}
-      <div className="mt-12 prose prose-slate dark:prose-invert max-w-none">
-        <section className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">O que é P/L?</h2>
-          <p className="text-muted-foreground mb-4">
-            O P/L (Preço/Lucro) é um dos indicadores mais importantes para avaliar
-            a valorização de uma ação ou de um índice. Ele representa quantos anos
-            de lucro seriam necessários para pagar o preço atual da ação.
-          </p>
-          <p className="text-muted-foreground mb-4">
-            Um P/L baixo pode indicar que as ações estão baratas em relação aos
-            lucros, enquanto um P/L alto pode sugerir que estão caras. No entanto,
-            é importante considerar o contexto: setores em crescimento tendem a ter
-            P/L mais altos, enquanto setores maduros podem ter P/L mais baixos.
-          </p>
-        </section>
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold text-foreground">Por que acompanhar o P/L histórico</h2>
+              <ul className="list-disc space-y-2 pl-5">
+                <li>Identificar ciclos de mercado, com períodos de múltiplos mais altos e mais baixos.</li>
+                <li>Comparar o momento atual com a média histórica do período escolhido.</li>
+                <li>Observar tendências de longo prazo no valuation da bolsa.</li>
+              </ul>
+            </section>
 
-        <section className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">
-            Por que acompanhar o P/L histórico?
-          </h2>
-          <p className="text-muted-foreground mb-4">
-            Acompanhar o P/L histórico da bolsa permite identificar:
-          </p>
-          <ul className="list-disc list-inside text-muted-foreground space-y-2 mb-4">
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold text-foreground">Como ler o gráfico</h2>
+              <p>
+                A linha azul é o P/L agregado, calculado como média ponderada pelo valor de mercado das empresas. A linha
+                cinza tracejada é a média do período selecionado.
+              </p>
+              <ul className="list-disc space-y-2 pl-5">
+                <li>Abaixo da média: a bolsa negocia a múltiplos menores que o habitual no período.</li>
+                <li>Perto da média: múltiplos em linha com o histórico.</li>
+                <li>Acima da média: múltiplos maiores que o habitual no período.</li>
+              </ul>
+              <p className="text-sm">
+                O P/L agregado é uma referência de contexto. Não é recomendação de investimento.
+              </p>
+            </section>
+
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold text-foreground">Filtros disponíveis</h2>
+              <ul className="list-disc space-y-2 pl-5">
+                <li>Período: o intervalo de datas a analisar.</li>
+                <li>Setor: um setor específico da economia, como bancos, petróleo ou varejo.</li>
+                <li>Score mínimo: só empresas com score fundamentalista a partir do valor escolhido (0 a 100).</li>
+              </ul>
+            </section>
+
+            <section className="space-y-1">
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Perguntas frequentes sobre P/L</h2>
+              <div className="divide-y divide-border border-y border-border">
+              <details className="group">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 py-3 font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+                  Qual é o P/L médio histórico da Bovespa?
+                  <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-90"><ChevronRight className="size-4" strokeWidth={1.75} /></span>
+                </summary>
+                <p className="pb-4 text-sm leading-6 text-muted-foreground">O P/L médio histórico da Bovespa varia ao longo do tempo e costuma ficar entre 10x e 15x. Use o gráfico para ver a média exata do período que você quer analisar.</p>
+              </details>
+              <details className="group">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 py-3 font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+                  Como interpretar o P/L histórico?
+                  <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-90"><ChevronRight className="size-4" strokeWidth={1.75} /></span>
+                </summary>
+                <p className="pb-4 text-sm leading-6 text-muted-foreground">Quando o P/L agregado está abaixo da média histórica, o mercado negocia a múltiplos menores que o habitual; acima da média, a múltiplos maiores. É uma referência de contexto, não um indicador de momento para operar.</p>
+              </details>
+              <details className="group">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 py-3 font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+                  O P/L histórico é atualizado com que frequência?
+                  <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-90"><ChevronRight className="size-4" strokeWidth={1.75} /></span>
+                </summary>
+                <p className="pb-4 text-sm leading-6 text-muted-foreground">Os dados são atualizados mensalmente com base nos últimos resultados financeiros disponíveis e nos preços de fechamento do último dia útil de cada mês.</p>
+              </details>
+              </div>
+            </section>
+          </article>
+
+          <aside className="space-y-3">
+            <h2 className="text-sm font-medium text-foreground">Recursos relacionados</h2>
+            <ul className="divide-y divide-border rounded-lg border border-border bg-card">
             <li>
-              <strong>Ciclos de mercado:</strong> Períodos de alta e baixa
-              valorização
+              <Link href="/ranking" className="flex min-h-14 items-center justify-between gap-3 px-4 py-3 hover:bg-muted">
+                <span>
+                  <span className="block text-sm font-medium text-foreground">Rankings de ações</span>
+                  <span className="block text-sm text-muted-foreground">Modelos de valuation aplicados a ações individuais.</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              </Link>
             </li>
             <li>
-              <strong>Oportunidades de compra:</strong> Quando o P/L está abaixo
-              da média histórica
+              <Link href="/analise-setorial" className="flex min-h-14 items-center justify-between gap-3 px-4 py-3 hover:bg-muted">
+                <span>
+                  <span className="block text-sm font-medium text-foreground">Análise setorial</span>
+                  <span className="block text-sm text-muted-foreground">Compare setores da B3 por score e valuation.</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              </Link>
             </li>
             <li>
-              <strong>Momentos de cautela:</strong> Quando o P/L está muito acima
-              da média histórica
+              <Link href="/metodologia" className="flex min-h-14 items-center justify-between gap-3 px-4 py-3 hover:bg-muted">
+                <span>
+                  <span className="block text-sm font-medium text-foreground">Metodologia</span>
+                  <span className="block text-sm text-muted-foreground">Como os modelos de análise fundamentalista funcionam.</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              </Link>
             </li>
             <li>
-              <strong>Tendências de longo prazo:</strong> Evolução da valorização
-              da bolsa ao longo dos anos
+              <Link href="/comparador" className="flex min-h-14 items-center justify-between gap-3 px-4 py-3 hover:bg-muted">
+                <span>
+                  <span className="block text-sm font-medium text-foreground">Comparador de ações</span>
+                  <span className="block text-sm text-muted-foreground">Até 6 ações lado a lado com os mesmos indicadores.</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              </Link>
             </li>
-          </ul>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">Como interpretar os dados</h2>
-          <p className="text-muted-foreground mb-4">
-            O gráfico mostra o P/L agregado da Bovespa calculado como média
-            ponderada por market cap. A linha tracejada representa a média histórica
-            até cada ponto no tempo.
-          </p>
-          <div className="bg-muted p-4 rounded-lg mb-4">
-            <p className="text-sm font-semibold mb-2">Interpretação:</p>
-            <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-              <li>
-                <strong>P/L abaixo da média:</strong> Mercado pode estar
-                subvalorizado, potencial oportunidade de compra
-              </li>
-              <li>
-                <strong>P/L próximo à média:</strong> Mercado em valorização
-                normal
-              </li>
-              <li>
-                <strong>P/L acima da média:</strong> Mercado pode estar
-                supervalorizado, momento de cautela
-              </li>
             </ul>
-          </div>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">Filtros disponíveis</h2>
-          <p className="text-muted-foreground mb-4">
-            Use os filtros acima do gráfico para personalizar sua análise:
-          </p>
-          <ul className="list-disc list-inside text-muted-foreground space-y-2">
-            <li>
-              <strong>Período:</strong> Selecione o intervalo de datas que deseja
-              analisar
-            </li>
-            <li>
-              <strong>Setor:</strong> Filtre por setor específico da economia
-              (ex: Bancário, Petróleo, Varejo)
-            </li>
-            <li>
-              <strong>Score Mínimo:</strong> Mostre apenas empresas com score
-              mínimo (0-100) baseado em análise fundamentalista
-            </li>
-            <li>
-              <strong>Excluir não lucrativas:</strong> Remova empresas que não
-              tiveram lucro no período analisado
-            </li>
-          </ul>
-        </section>
-      </div>
-
-        <section className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">Perguntas Frequentes sobre P/L</h2>
-          <div className="space-y-4">
-            <div className="bg-muted p-4 rounded-lg">
-              <h3 className="font-semibold mb-2">Qual é o P/L médio histórico da Bovespa?</h3>
-              <p className="text-sm text-muted-foreground">
-                O P/L médio histórico da Bovespa varia ao longo do tempo, mas geralmente fica entre 10x e 15x. 
-                Use nosso gráfico interativo para ver a média exata do período que você deseja analisar.
-              </p>
-            </div>
-            <div className="bg-muted p-4 rounded-lg">
-              <h3 className="font-semibold mb-2">Como interpretar o P/L histórico?</h3>
-              <p className="text-sm text-muted-foreground">
-                Quando o P/L está abaixo da média histórica, o mercado pode estar subvalorizado, 
-                indicando potencial oportunidade de compra. Quando está acima, pode indicar supervalorização.
-              </p>
-            </div>
-            <div className="bg-muted p-4 rounded-lg">
-              <h3 className="font-semibold mb-2">O P/L histórico é atualizado com que frequência?</h3>
-              <p className="text-sm text-muted-foreground">
-                Os dados são atualizados mensalmente com base nos últimos resultados financeiros disponíveis 
-                e nos preços de fechamento do último dia útil de cada mês.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">Recursos Relacionados</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Link href="/ranking" className="block">
-              <div className="bg-muted p-4 rounded-lg hover:bg-muted/80 transition-colors">
-                <h3 className="font-semibold mb-2">Rankings de Ações</h3>
-                <p className="text-sm text-muted-foreground">
-                  Analise ações individuais usando modelos de valuation consagrados
-                </p>
-              </div>
-            </Link>
-            <Link href="/analise-setorial" className="block">
-              <div className="bg-muted p-4 rounded-lg hover:bg-muted/80 transition-colors">
-                <h3 className="font-semibold mb-2">Análise Setorial</h3>
-                <p className="text-sm text-muted-foreground">
-                  Compare o desempenho de diferentes setores da B3
-                </p>
-              </div>
-            </Link>
-            <Link href="/metodologia" className="block">
-              <div className="bg-muted p-4 rounded-lg hover:bg-muted/80 transition-colors">
-                <h3 className="font-semibold mb-2">Metodologia de Valuation</h3>
-                <p className="text-sm text-muted-foreground">
-                  Entenda os modelos de análise fundamentalista utilizados
-                </p>
-              </div>
-            </Link>
-            <Link href="/comparador" className="block">
-              <div className="bg-muted p-4 rounded-lg hover:bg-muted/80 transition-colors">
-                <h3 className="font-semibold mb-2">Comparador de Ações</h3>
-                <p className="text-sm text-muted-foreground">
-                  Compare até 6 ações lado a lado com métricas detalhadas
-                </p>
-              </div>
-            </Link>
-          </div>
-        </section>
+          </aside>
+        </div>
       </div>
 
       {/* Schema.org Structured Data - Melhorado */}
@@ -292,9 +235,9 @@ export default async function PLBolsaPage() {
           __html: JSON.stringify({
             '@context': 'https://schema.org',
             '@type': 'Dataset',
-            name: 'P/L Histórico da Bovespa',
+            name: 'P/L histórico da Bovespa',
             description:
-              'Dados históricos do P/L agregado da Bovespa desde 2010, calculado como média ponderada por market cap. Inclui mais de 300 empresas listadas na B3.',
+              'Dados históricos do P/L agregado da Bovespa desde 2010, calculado como média ponderada por market cap. Inclui empresas listadas na B3.',
             url: 'https://precojusto.ai/pl-bolsa',
             creator: {
               '@type': 'Organization',
@@ -329,7 +272,7 @@ export default async function PLBolsaPage() {
           __html: JSON.stringify({
             '@context': 'https://schema.org',
             '@type': 'WebPage',
-            name: 'P/L Histórico da Bovespa',
+            name: 'P/L histórico da Bovespa',
             description:
               'Gráfico interativo do P/L histórico da Bovespa desde 2010. Filtre por setor, período e score.',
             url: 'https://precojusto.ai/pl-bolsa',
@@ -351,7 +294,7 @@ export default async function PLBolsaPage() {
                 {
                   '@type': 'ListItem',
                   position: 2,
-                  name: 'P/L Histórico da Bovespa',
+                  name: 'P/L histórico da Bovespa',
                   item: 'https://precojusto.ai/pl-bolsa',
                 },
               ],

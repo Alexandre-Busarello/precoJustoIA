@@ -1,17 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Edit, MoreHorizontal, Trash2, Calculator } from 'lucide-react';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { SectionHeader } from '@/components/ui/section-header';
 import {
   Select,
   SelectContent,
@@ -19,27 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { portfolioCache } from '@/lib/portfolio-cache';
-import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
-import {
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Trash2,
-  DollarSign,
-  Edit,
-  MoreHorizontal,
-  Calculator
-} from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-
-// Helper to parse date strings as local dates without timezone conversion
-const parseLocalDate = (dateString: string): Date => {
-  // Remove timezone info and parse as local
-  const [year, month, day] = dateString.split('T')[0].split('-');
-  return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-};
 import {
   Dialog,
   DialogContent,
@@ -66,8 +39,46 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-is-mobile';
+import { toast as sonnerToast } from 'sonner';
+import { portfolioCache } from '@/lib/portfolio-cache';
+import { formatBRL, formatDate, formatDeltaPct, formatNumber } from '@/lib/format';
+import { cn } from '@/lib/utils';
+import { invalidateDashboardPortfoliosCache } from '@/components/dashboard-portfolios';
 import { RecoveryCalculatorSheet } from '@/components/recovery-calculator-sheet';
+import { PortfolioMoneyInput, PortfolioQuantityInput, roundTo } from '@/components/portfolio-money-input';
 import { calculateRecovery } from '@/lib/recovery-calculator-utils';
+
+/** "YYYY-MM-DD..." → data local ao meio-dia (sem trocar o dia por fuso). */
+const parseLocalDate = (dateString: string): Date => {
+  const [year, month, day] = dateString.split('T')[0].split('-');
+  return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 12);
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  CASH_CREDIT: 'Aporte',
+  MONTHLY_CONTRIBUTION: 'Aporte mensal',
+  CASH_DEBIT: 'Saque',
+  BUY: 'Compra',
+  SELL_REBALANCE: 'Venda (ajuste)',
+  BUY_REBALANCE: 'Compra (ajuste)',
+  SELL_WITHDRAWAL: 'Venda',
+  DIVIDEND: 'Dividendo',
+};
+
+const getTypeLabel = (type: string) => TYPE_LABELS[type] || type;
+
+/** Transações exibidas por vez (o restante vem com "Mostrar mais"). */
+const PAGE_SIZE = 30;
+
+interface EditFormState {
+  date: string;
+  amount: number | undefined;
+  price: number | undefined;
+  quantity: number | undefined;
+  notes: string;
+}
 
 interface Transaction {
   id: string;
@@ -94,18 +105,20 @@ export function PortfolioTransactionList({
 }: PortfolioTransactionListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [filterType, setFilterType] = useState<string>('all');
   const [filterRecovery, setFilterRecovery] = useState<'all' | 'recovery'>('all');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<EditFormState>({
     date: '',
-    amount: '',
-    price: '',
-    quantity: '',
-    notes: ''
+    amount: undefined,
+    price: undefined,
+    quantity: undefined,
+    notes: '',
   });
   
   // Delete confirmation state
@@ -115,19 +128,19 @@ export function PortfolioTransactionList({
   // Recovery sheet - transação selecionada para ver aporte
   const [recoveryTransaction, setRecoveryTransaction] = useState<Transaction | null>(null);
 
-  // Fetch holdings para preços atuais (recuperação por transação)
+  // Fetch holdings para preços atuais (recuperação por transação).
+  // A chave é compartilhada com PortfolioHoldingsTable: o cache guarda sempre o JSON inteiro
+  // da API ({ holdings, ... }), nunca só o array, para as duas telas lerem o mesmo formato.
   const { data: holdingsData } = useQuery({
     queryKey: ['portfolio-holdings', portfolioId],
     queryFn: async () => {
       const res = await fetch(`/api/portfolio/${portfolioId}/holdings`);
       if (!res.ok) throw new Error('Erro ao carregar posições');
-      const data = await res.json();
-      return data.holdings || [];
+      return res.json();
     },
   });
-  const holdings = Array.isArray(holdingsData)
-    ? holdingsData
-    : (holdingsData as { holdings?: { ticker: string; currentPrice: number }[] } | null)?.holdings ?? [];
+  const holdings: { ticker: string; currentPrice: number }[] =
+    (holdingsData as { holdings?: { ticker: string; currentPrice: number }[] } | undefined)?.holdings ?? [];
   const priceByTicker = Object.fromEntries(
     holdings.map((h: { ticker: string; currentPrice: number }) => [h.ticker, h.currentPrice])
   );
@@ -202,29 +215,24 @@ export function PortfolioTransactionList({
 
   // Show error toast if query fails
   useEffect(() => {
-    if (transactionsError) {
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar as transações',
-        variant: 'destructive'
-      });
-    }
-  }, [transactionsError, toast]);
+    // toast do sonner direto: o de useToast muda a cada render e repetiria o aviso.
+    if (transactionsError) sonnerToast.error('Erro', { description: 'Não foi possível carregar as transações' });
+  }, [transactionsError]);
 
   const handleEditClick = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setEditForm({
       date: transaction.date.split('T')[0],
-      amount: transaction.amount.toString(),
-      price: transaction.price?.toString() || '',
-      quantity: transaction.quantity?.toString() || '',
-      notes: transaction.notes || ''
+      amount: transaction.amount,
+      price: transaction.price ?? undefined,
+      quantity: transaction.quantity ?? undefined,
+      notes: transaction.notes || '',
     });
     setShowEditModal(true);
   };
 
   const editMutation = useMutation({
-    mutationFn: async ({ transactionId, updates }: { transactionId: string; updates: any }) => {
+    mutationFn: async ({ transactionId, updates }: { transactionId: string; updates: Record<string, unknown> }) => {
       const response = await fetch(
         `/api/portfolio/${portfolioId}/transactions/${transactionId}`,
         {
@@ -243,8 +251,8 @@ export function PortfolioTransactionList({
     },
     onSuccess: () => {
       toast({
-        title: 'Sucesso',
-        description: 'Transação atualizada com sucesso'
+        title: 'Transação atualizada',
+        description: 'As métricas da carteira serão recalculadas.'
       });
 
       // Invalidar todos os caches da carteira e dashboard
@@ -277,20 +285,25 @@ export function PortfolioTransactionList({
     }
   });
 
-  const handleEditSave = async () => {
+  const handleEditSave = (event: FormEvent) => {
+    event.preventDefault();
     if (!editingTransaction) return;
+    if (!editForm.amount || editForm.amount <= 0) {
+      toast({ title: 'Valor inválido', description: 'O valor deve ser maior que zero.', variant: 'destructive' });
+      return;
+    }
 
-    const updates: any = {
+    const updates: { date: string; amount: number; notes: string; price?: number; quantity?: number } = {
       date: editForm.date,
-      amount: parseFloat(editForm.amount),
-      notes: editForm.notes
+      amount: editForm.amount,
+      notes: editForm.notes,
     };
 
     if (editForm.price) {
-      updates.price = parseFloat(editForm.price);
+      updates.price = editForm.price;
     }
     if (editForm.quantity) {
-      updates.quantity = parseFloat(editForm.quantity);
+      updates.quantity = editForm.quantity;
     }
 
     editMutation.mutate({
@@ -320,8 +333,8 @@ export function PortfolioTransactionList({
     },
     onSuccess: () => {
       toast({
-        title: 'Sucesso',
-        description: 'Transação excluída com sucesso'
+        title: 'Transação excluída',
+        description: 'As métricas da carteira serão recalculadas.'
       });
 
       // Invalidar todos os caches da carteira e dashboard
@@ -359,34 +372,6 @@ export function PortfolioTransactionList({
     deleteMutation.mutate(deletingTransaction.id);
   };
 
-  // Removed handleConfirm and handleReject - PENDING and REJECTED transactions are no longer shown
-
-  // Removed handleRevert and revertMutation - transactions are always executed, no need to revert
-
-  const getTypeIcon = (type: string) => {
-    if (type === 'CASH_CREDIT' || type === 'MONTHLY_CONTRIBUTION' || type === 'DIVIDEND') {
-      return <ArrowDownCircle className="h-4 w-4 text-green-600" />;
-    }
-    if (type === 'CASH_DEBIT' || type.includes('SELL')) {
-      return <ArrowUpCircle className="h-4 w-4 text-red-600" />;
-    }
-    return <DollarSign className="h-4 w-4 text-blue-600" />;
-  };
-
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      'CASH_CREDIT': 'Aporte',
-      'MONTHLY_CONTRIBUTION': 'Aporte Mensal',
-      'CASH_DEBIT': 'Saque',
-      'BUY': 'Compra',
-      'SELL_REBALANCE': 'Venda (Rebal.)',
-      'BUY_REBALANCE': 'Compra (Rebal.)',
-      'SELL_WITHDRAWAL': 'Venda',
-      'DIVIDEND': 'Dividendo'
-    };
-    return labels[type] || type;
-  };
-
   const getRecoveryForTransaction = (
     tx: Transaction
   ): { qtyToBuy: number; investment: number; pricePaid: number; currentPrice: number } | null => {
@@ -407,38 +392,143 @@ export function PortfolioTransactionList({
       : null;
   };
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-
   const displayedTransactions =
     filterRecovery === 'recovery'
       ? transactions.filter((tx) => getRecoveryForTransaction(tx) !== null)
       : transactions;
 
-  const getStatusBadge = (status: string) => {
-    // CONFIRMED e EXECUTED aparecem como "Executada" na interface
-    const variants: Record<string, any> = {
-      'CONFIRMED': { variant: 'secondary', label: 'Executada' },
-      'EXECUTED': { variant: 'secondary', label: 'Executada' }
+  const recoveryHolding = (() => {
+    if (!recoveryTransaction?.ticker || !recoveryTransaction.quantity) return null;
+    const averagePrice = recoveryTransaction.price ?? recoveryTransaction.amount / recoveryTransaction.quantity;
+    const currentPrice = priceByTicker[recoveryTransaction.ticker] ?? 0;
+    return {
+      ticker: recoveryTransaction.ticker,
+      quantity: recoveryTransaction.quantity,
+      averagePrice,
+      currentPrice,
+      returnPercentage: averagePrice > 0 ? currentPrice / averagePrice - 1 : 0,
     };
-    const config = variants[status] || { variant: 'outline', label: status };
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+  })();
+
+  const baseColumns: DataTableColumn<Transaction>[] = [
+    {
+      key: 'date',
+      header: 'Data',
+      cell: (tx) => (
+        <div className="whitespace-nowrap leading-tight">
+          <span className="block tabular-nums text-foreground">{formatDate(parseLocalDate(tx.date))}</span>
+          <span className="block text-xs text-muted-foreground">{getTypeLabel(tx.type)}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'ticker',
+      header: 'Ativo',
+      cell: (tx) => (tx.ticker ? <span className="font-medium">{tx.ticker}</span> : <span className="text-muted-foreground">—</span>),
+    },
+    {
+      key: 'amount',
+      header: 'Valor',
+      align: 'right',
+      cell: (tx) => <span className="font-medium">{formatBRL(tx.amount)}</span>,
+    },
+    {
+      key: 'quantity',
+      header: 'Qtd.',
+      align: 'right',
+      cell: (tx) => (tx.quantity ? formatNumber(tx.quantity) : '—'),
+    },
+    {
+      key: 'price',
+      header: 'Preço',
+      align: 'right',
+      cell: (tx) =>
+        tx.price
+          ? tx.type === 'DIVIDEND'
+            ? `${formatBRL(tx.price, { digits: 4 })}/ação`
+            : formatBRL(tx.price)
+          : '—',
+    },
+    {
+      key: 'recovery',
+      header: 'Preço pago vs atual',
+      align: 'right',
+      hint: 'Compras cujo preço atual está abaixo do preço pago. Simule o aporte que traria o preço médio de volta.',
+      cell: (tx) => {
+        const recovery = getRecoveryForTransaction(tx);
+        if (!recovery) return <span className="text-muted-foreground">—</span>;
+        return (
+          <div className="flex items-center justify-end gap-2">
+            <span className="text-negative">{formatDeltaPct(recovery.currentPrice / recovery.pricePaid - 1)}</span>
+            <Button variant="ghost" size="sm" onClick={() => setRecoveryTransaction(tx)}>
+              <Calculator strokeWidth={1.75} aria-hidden="true" />
+              Simular
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  const actionsColumn: DataTableColumn<Transaction> = {
+    key: 'actions',
+    header: <span className="sr-only">Ações</span>,
+    align: 'right',
+    cell: (tx) => (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="icon" variant="ghost" aria-label={`Ações da transação de ${formatDate(parseLocalDate(tx.date))}`}>
+            <MoreHorizontal strokeWidth={1.75} aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => handleEditClick(tx)}>
+            <Edit className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+            Editar
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleDeleteClick(tx)} className="text-destructive focus:text-destructive">
+            <Trash2 className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            Excluir
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ),
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  // No mobile o menu Editar/Excluir vem logo após a data (coluna fixa), para não exigir
+  // rolagem horizontal até a última coluna. No desktop fica no fim da linha.
+  const columns: DataTableColumn<Transaction>[] = isMobile
+    ? [baseColumns[0], actionsColumn, ...baseColumns.slice(1)]
+    : [...baseColumns, actionsColumn];
+
+  const hasTicker = !!editingTransaction?.ticker;
+  // Preço unitário com 4 casas quando o valor salvo não cabe em 2 (dividendos por ação e
+  // compras cujo preço veio de total ÷ quantidade, ex.: 274,88 ÷ 7 = 39,2686). Assim o campo
+  // mostra exatamente o número usado no recálculo do total.
+  const storedPrice = editingTransaction?.price;
+  const priceDigits =
+    editingTransaction?.type === 'DIVIDEND' ||
+    (typeof storedPrice === 'number' && Math.abs(roundTo(storedPrice, 2) - storedPrice) > 1e-9)
+      ? 4
+      : 2;
 
   return (
-    <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-full sm:w-[180px]">
+    <section aria-labelledby="transactions-title" className="space-y-4">
+      <SectionHeader
+        id="transactions-title"
+        title="Histórico"
+        description={loading ? undefined : `${displayedTransactions.length} ${displayedTransactions.length === 1 ? 'transação' : 'transações'}`}
+      />
+
+      <div className="grid gap-2 sm:flex">
+        <Select
+          value={filterType}
+          onValueChange={(value) => {
+            setFilterType(value);
+            setVisibleCount(PAGE_SIZE);
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-48" aria-label="Filtrar por tipo">
             <SelectValue placeholder="Tipo" />
           </SelectTrigger>
           <SelectContent>
@@ -449,146 +539,62 @@ export function PortfolioTransactionList({
             <SelectItem value="DIVIDEND">Dividendos</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={filterRecovery} onValueChange={(v) => setFilterRecovery(v as 'all' | 'recovery')}>
-          <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder="Recuperação" />
+        <Select
+          value={filterRecovery}
+          onValueChange={(v) => {
+            setFilterRecovery(v as 'all' | 'recovery');
+            setVisibleCount(PAGE_SIZE);
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-64" aria-label="Filtrar por preço pago">
+            <SelectValue placeholder="Preço pago" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas as transações</SelectItem>
-            <SelectItem value="recovery">Precisam de recuperação</SelectItem>
+            <SelectItem value="recovery">Compras abaixo do preço pago</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {/* Transactions Table */}
-      {displayedTransactions.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          <p>
-            {filterRecovery === 'recovery'
-              ? 'Nenhuma transação precisa de recuperação'
-              : 'Nenhuma transação encontrada'}
+      {!loading && displayedTransactions.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+          <p className="text-sm font-medium text-foreground">
+            {filterRecovery === 'recovery' ? 'Nenhuma compra abaixo do preço pago' : 'Nenhuma transação encontrada'}
           </p>
+          {filterRecovery !== 'recovery' && (
+            <p className="mt-1 text-sm text-muted-foreground">Registre aportes e compras para montar o histórico.</p>
+          )}
         </div>
       ) : (
-        <div className="border rounded-lg overflow-x-auto max-w-full">
-          <Table className="min-w-full">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Ativo</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
-                <TableHead className="text-right">Qtd.</TableHead>
-                <TableHead>Recuperação</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {displayedTransactions.map(tx => (
-                <TableRow key={tx.id}>
-                  <TableCell>
-                    {format(parseLocalDate(tx.date), 'dd/MM/yyyy', { locale: ptBR })}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {getTypeIcon(tx.type)}
-                      <span className="text-sm">{getTypeLabel(tx.type)}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {tx.ticker || '-'}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    R$ {tx.amount.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {tx.type === 'DIVIDEND' && tx.quantity && tx.price ? (
-                      <div className="flex flex-col items-end">
-                        <span>{tx.quantity.toFixed(0)}</span>
-                        <span className="text-xs text-muted-foreground">
-                          × R$ {tx.price.toFixed(4)}/ação
-                        </span>
-                      </div>
-                    ) : (
-                      tx.quantity ? tx.quantity.toFixed(0) : '-'
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {(() => {
-                      const recovery = getRecoveryForTransaction(tx);
-                      if (!recovery) return <span className="text-muted-foreground text-xs">—</span>;
-                      return (
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs text-muted-foreground">
-                            Pago: {formatCurrency(recovery.pricePaid)} → Hoje: {formatCurrency(recovery.currentPrice)}
-                          </span>
-                          <span className="text-xs">
-                            Aporte: <strong>{recovery.qtyToBuy}</strong> ações ({formatCurrency(recovery.investment)})
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-xs p-0"
-                            onClick={() => setRecoveryTransaction(tx)}
-                          >
-                            <Calculator className="h-3 w-3 mr-1" />
-                            Ver calculadora
-                          </Button>
-                        </div>
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell>
-                    {getStatusBadge(tx.status)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex gap-1 justify-end">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            title="Mais ações"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEditClick(tx)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteClick(tx)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          caption="Transações da carteira"
+          columns={columns}
+          rows={displayedTransactions.slice(0, visibleCount)}
+          getRowId={(tx) => tx.id}
+          stickyFirstColumn
+          loading={loading}
+        />
+      )}
+      {!loading && displayedTransactions.length > visibleCount && (
+        <Button variant="outline" className="w-full" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+          Mostrar mais {Math.min(PAGE_SIZE, displayedTransactions.length - visibleCount)} de{' '}
+          {displayedTransactions.length - visibleCount} restantes
+        </Button>
       )}
 
-      {/* Edit Transaction Modal */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Editar Transação</DialogTitle>
+            <DialogTitle>Editar transação</DialogTitle>
             <DialogDescription>
-              Atualize os detalhes da transação
+              {editingTransaction
+                ? `${getTypeLabel(editingTransaction.type)}${editingTransaction.ticker ? ` · ${editingTransaction.ticker}` : ''}`
+                : 'Atualize os detalhes da transação'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="edit-date">Data *</Label>
+          <form onSubmit={handleEditSave} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-date">Data</Label>
               <Input
                 id="edit-date"
                 type="date"
@@ -597,129 +603,134 @@ export function PortfolioTransactionList({
                 required
               />
             </div>
-            
-            <div>
-              <Label htmlFor="edit-amount">Valor (R$) *</Label>
-              <Input
+
+            {hasTicker && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-price">Preço unitário</Label>
+                  <PortfolioMoneyInput
+                    id="edit-price"
+                    value={editForm.price}
+                    digits={priceDigits}
+                    enterKeyHint="next"
+                    onValueChange={(price) =>
+                      setEditForm((form) => ({
+                        ...form,
+                        price,
+                        amount: price !== undefined && form.quantity ? roundTo(price * form.quantity) : form.amount,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-quantity">Quantidade</Label>
+                  <PortfolioQuantityInput
+                    id="edit-quantity"
+                    value={editForm.quantity}
+                    allowFraction={editForm.quantity !== undefined && !Number.isInteger(editForm.quantity)}
+                    enterKeyHint="next"
+                    onValueChange={(quantity) =>
+                      setEditForm((form) => ({
+                        ...form,
+                        quantity,
+                        amount: quantity !== undefined && form.price ? roundTo(form.price * quantity) : form.amount,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-amount">Valor total</Label>
+              <PortfolioMoneyInput
                 id="edit-amount"
-                type="number"
-                step="0.01"
                 value={editForm.amount}
-                onChange={(e) => setEditForm({ ...editForm, amount: e.target.value, price: (parseFloat(editForm.amount) / parseFloat(editForm.quantity || '0')).toFixed(2), quantity: (parseFloat(editForm.amount) / parseFloat(editForm.price || '0')).toFixed(2) })}
+                enterKeyHint="go"
                 required
+                onValueChange={(amount) =>
+                  setEditForm((form) => ({
+                    ...form,
+                    amount,
+                    price:
+                      hasTicker && amount !== undefined && form.quantity
+                        ? roundTo(amount / form.quantity, priceDigits)
+                        : form.price,
+                  }))
+                }
               />
             </div>
 
-            {editingTransaction?.ticker && (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="edit-price">Preço Unitário</Label>
-                    <Input
-                      id="edit-price"
-                      type="number"
-                      step="0.01"
-                      value={editForm.price}
-                      onChange={(e) => setEditForm({ ...editForm, price: e.target.value, amount: (parseFloat(editForm.quantity || '0') * parseFloat(e.target.value)).toFixed(2) })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="edit-quantity">Quantidade</Label>
-                    <Input
-                      id="edit-quantity"
-                      type="number"
-                      step="1"
-                      value={editForm.quantity}
-                      onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value, amount: (parseFloat(editForm.price || '0') * parseFloat(e.target.value)).toFixed(2) })}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div>
-              <Label htmlFor="edit-notes">Observações</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-notes">
+                Observações <span className="font-normal text-muted-foreground">(opcional)</span>
+              </Label>
               <Textarea
                 id="edit-notes"
                 value={editForm.notes}
                 onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                placeholder="Adicione observações sobre esta transação..."
-                rows={3}
+                placeholder="Detalhes sobre esta transação"
+                rows={2}
               />
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowEditModal(false)}
-                disabled={editMutation.isPending}
-              >
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)} disabled={editMutation.isPending}>
                 Cancelar
               </Button>
-              <Button onClick={handleEditSave} disabled={editMutation.isPending}>
-                {editMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
+              <Button type="submit" disabled={editMutation.isPending}>
+                {editMutation.isPending ? 'Salvando' : 'Salvar alterações'}
               </Button>
             </div>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
 
-      {/* Recovery Calculator Sheet - por transação */}
       <RecoveryCalculatorSheet
-        holding={
-          recoveryTransaction && recoveryTransaction.ticker && recoveryTransaction.quantity
-            ? {
-                ticker: recoveryTransaction.ticker,
-                quantity: recoveryTransaction.quantity,
-                averagePrice: recoveryTransaction.price ?? recoveryTransaction.amount / recoveryTransaction.quantity,
-                currentPrice: priceByTicker[recoveryTransaction.ticker] ?? 0,
-                returnPercentage:
-                  (priceByTicker[recoveryTransaction.ticker] ?? 0) < (recoveryTransaction.price ?? recoveryTransaction.amount / recoveryTransaction.quantity)
-                    ? ((priceByTicker[recoveryTransaction.ticker] ?? 0) - (recoveryTransaction.price ?? recoveryTransaction.amount / recoveryTransaction.quantity)) /
-                      (recoveryTransaction.price ?? recoveryTransaction.amount / recoveryTransaction.quantity)
-                    : 0,
-              }
-            : null
-        }
+        holding={recoveryHolding}
         open={!!recoveryTransaction}
         onOpenChange={(open) => !open && setRecoveryTransaction(null)}
       />
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogTitle>Excluir transação</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir esta transação?
-              {deletingTransaction && (
-                <div className="mt-3 p-3 bg-muted rounded-lg text-sm">
-                  <p><strong>Data:</strong> {format(parseLocalDate(deletingTransaction.date), 'dd/MM/yyyy', { locale: ptBR })}</p>
-                  <p><strong>Tipo:</strong> {getTypeLabel(deletingTransaction.type)}</p>
-                  {deletingTransaction.ticker && (
-                    <p><strong>Ativo:</strong> {deletingTransaction.ticker}</p>
-                  )}
-                  <p><strong>Valor:</strong> R$ {deletingTransaction.amount.toFixed(2)}</p>
-                </div>
-              )}
-              <p className="mt-3 text-destructive font-medium">
-                Esta ação não pode ser desfeita e as métricas serão recalculadas.
-              </p>
+              Esta ação não pode ser desfeita. As métricas da carteira serão recalculadas.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deletingTransaction && (
+            <dl className="divide-y divide-border rounded-lg border border-border text-sm">
+              <div className="flex justify-between gap-3 px-3 py-2">
+                <dt className="text-muted-foreground">Data</dt>
+                <dd className="text-foreground">{formatDate(parseLocalDate(deletingTransaction.date))}</dd>
+              </div>
+              <div className="flex justify-between gap-3 px-3 py-2">
+                <dt className="text-muted-foreground">Tipo</dt>
+                <dd className="text-foreground">
+                  {getTypeLabel(deletingTransaction.type)}
+                  {deletingTransaction.ticker ? ` · ${deletingTransaction.ticker}` : ''}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3 px-3 py-2">
+                <dt className="text-muted-foreground">Valor</dt>
+                <dd className="tabular-nums text-foreground">{formatBRL(deletingTransaction.amount)}</dd>
+              </div>
+            </dl>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
               disabled={deleteMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={cn(buttonVariants({ variant: 'destructive' }))}
             >
-              {deleteMutation.isPending ? 'Excluindo...' : 'Excluir Transação'}
+              {deleteMutation.isPending ? 'Excluindo' : 'Excluir transação'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </section>
   );
 }
-

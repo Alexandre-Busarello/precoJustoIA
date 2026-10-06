@@ -1,216 +1,102 @@
 "use client"
 
-import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { usePathname } from "next/navigation"
+import Link from "next/link"
+import { Search } from "lucide-react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
-import Link from "next/link"
-import Image from "next/image"
+import { getActiveSection, isMinimalChromeRoute, isStandaloneRoute, navigation } from "@/lib/navigation"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { BrandLogo } from "@/components/ui/brand-logo"
+import { Skeleton } from "@/components/ui/skeleton"
 import { MobileNav, MobileMenuButton } from "@/components/mobile-nav"
-import { OportunidadesDropdown } from "@/components/oportunidades-dropdown"
-import { AnaliseEstrategiaDropdown } from "@/components/analise-estrategia-dropdown"
-import { CarteirasDropdown } from "@/components/carteiras-dropdown"
+import { NavDropdown } from "@/components/nav-dropdown"
 import { UserProfileDropdown } from "@/components/user-profile-dropdown"
 import { NotificationBell } from "@/components/notification-bell"
-import { LayoutDashboard, Headphones } from "lucide-react"
-import { GlobalSearchBar } from "@/components/global-search-bar"
-import { MarketTickerBar } from "@/components/indices/market-ticker-bar"
+import { GlobalSearchBar, SearchTrigger } from "@/components/global-search-bar"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { useShell } from "@/components/shell-context"
 
+/** Header global: 56 px no mobile / 64 px no desktop, busca integrada e navegação de @/lib/navigation. */
 export default function Header() {
   const { data: session, status } = useSession()
   const pathname = usePathname()
-  const { isPremium, isTrialActive, trialDaysRemaining, subscriptionTier } = usePremiumStatus() // ÚNICA FONTE DA VERDADE
+  const { isPremium, isTrialActive, trialDaysRemaining, subscriptionTier } = usePremiumStatus()
   const { trackEngagement } = useEngagementPixel()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { openSearch } = useShell()
 
-  // Handler para disparar pixel quando usuário deslogado clica em link de navegação
-  const handleNavigationClick = () => {
-    if (!session) {
-      trackEngagement()
-    }
-  }
+  if (isStandaloneRoute(pathname)) return null
 
-  // Não mostrar Header em rotas de LP de parceiros nem em /oferta
-  if (pathname === '/oferta' || pathname.startsWith('/parceiros/')) {
-    return null
+  const minimal = isMinimalChromeRoute(pathname)
+  const sections = session ? navigation.app : navigation.marketing
+  const activeSection = getActiveSection(pathname, sections)
+  const handleAnonClick = () => {
+    if (!session) trackEngagement()
   }
 
   return (
     <>
-      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 relative">
-          {/* Mobile Layout */}
-          <div className="lg:hidden flex items-center relative">
-            {/* Mobile Menu Button - Absolute Left (mais próximo da borda) */}
-            <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10">
-              <MobileMenuButton 
-                isOpen={mobileMenuOpen} 
-                setIsOpen={setMobileMenuOpen}
-              />
-            </div>
-            
-            {/* Logo - Centered */}
-            <div className="w-full flex justify-center">
-              <Link href="/" className="hover:opacity-80 transition-opacity">
-                <Image 
-                  src="/logo-preco-justo.png" 
-                  alt="Preço Justo AI" 
-                  width={553}
-                  height={135}
-                  style={{ width: 'auto' }}
-                  className="h-12 sm:h-16 w-auto max-w-[200px] sm:max-w-[250px]"
-                />
-              </Link>
-            </div>
+      <header className="sticky top-0 z-40 h-14 border-b border-border bg-background lg:h-16">
+        <div className="container mx-auto flex h-full items-center gap-1 px-4 sm:gap-2">
+          {!minimal && <MobileMenuButton className="-ml-2 lg:hidden" />}
 
-            {/* Notification Bell - Absolute Right (mais próximo da borda, apenas se logado) */}
-            {session && (
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
-                <NotificationBell />
-              </div>
-            )}
-          </div>
+          <BrandLogo priority className="h-7 lg:h-8" />
 
-          {/* Desktop Layout */}
-          <div className="hidden lg:flex items-center justify-between gap-4 xl:gap-8">
-            <div className="flex items-center flex-shrink-0">
-              <Link href="/" className="hover:opacity-80 transition-opacity">
-                <Image 
-                  src="/logo-preco-justo.png" 
-                  alt="Preço Justo AI" 
-                  width={553}
-                  height={135}
-                  style={{ width: 'auto' }}
-                  className="h-[60px] xl:h-[70px] w-auto"
-                />
-              </Link>
-            </div>
+          {!minimal && (
+            <>
+              <nav aria-label="Principal" className="ml-4 hidden items-center gap-0.5 lg:flex xl:ml-6">
+                {sections.map((section) => (
+                  <NavDropdown key={section.label} section={section} active={section === activeSection} />
+                ))}
+              </nav>
 
-          {/* Desktop Navigation */}
-          <nav className="flex items-center space-x-6 flex-1 justify-end min-w-0">
-          {status === "loading" ? (
-            <div className="animate-pulse flex items-center space-x-2">
-              <div className="w-4 h-4 bg-gray-300 rounded-full"></div>
-              <span className="text-sm">Carregando...</span>
-            </div>
-          ) : session ? (
-            // Logged in user navigation
-            <div className="flex items-center space-x-4">
-              {/* Navigation Links */}
-              <div className="flex items-center space-x-1">
-                <Button 
-                  variant={pathname === "/dashboard" ? "default" : "ghost"} 
-                  size="sm" 
-                  asChild
-                >
-                  <Link href="/dashboard" className="flex items-center gap-2">
-                    <LayoutDashboard className="w-4 h-4" />
-                    Dashboard
-                  </Link>
+              <div className="ml-auto flex items-center gap-1 sm:gap-2">
+                <SearchTrigger className="hidden lg:inline-flex" />
+                <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Buscar ativo" onClick={openSearch}>
+                  <Search className="size-5 text-muted-foreground" strokeWidth={1.75} />
                 </Button>
 
-                {/* Oportunidades Dropdown */}
-                <OportunidadesDropdown />
+                <ThemeToggle variant="icon" className="hidden lg:inline-flex" />
 
-                {/* Análise & Estratégia Dropdown */}
-                <AnaliseEstrategiaDropdown />
-
-                {/* Carteiras Dropdown */}
-                <CarteirasDropdown />
-              </div>
-
-              {/* Notification Bell, Suporte e User Profile - Agrupados */}
-              <div className="flex items-center space-x-2">
-                {/* Suporte como ícone */}
-                <Button 
-                  variant={pathname === "/suporte" ? "default" : "ghost"} 
-                  size="sm" 
-                  asChild
-                  className="h-9 w-9 p-0 relative"
-                  title="Suporte"
-                >
-                  <Link href="/suporte" className="flex items-center justify-center relative">
-                    <Headphones className="w-4 h-4" />
-                    {!isPremium && (
-                      <Badge variant="default" className="absolute -top-1 -right-1 h-2.5 w-2.5 p-0 bg-gradient-to-r from-blue-500 to-purple-600 border-0 rounded-full" />
-                    )}
-                  </Link>
-                </Button>
-                <NotificationBell />
-                <UserProfileDropdown
-                userName={session.user?.name}
-                userEmail={session.user?.email}
-                isPremium={isPremium || false}
-                isTrialActive={isTrialActive || false}
-                trialDaysRemaining={trialDaysRemaining || null}
-                subscriptionTier={(subscriptionTier as 'FREE' | 'PREMIUM' | 'VIP') || 'FREE'}
-                />
-              </div>
-            </div>
-          ) : (
-            // Not logged in navigation
-            <div className="flex items-center space-x-4">
-              {/* Public Links */}
-              <div className="flex items-center space-x-1">
-                {/* Oportunidades Dropdown para usuários não logados */}
-                <OportunidadesDropdown />
-                
-                {/* Análise & Estratégia Dropdown para usuários não logados */}
-                <AnaliseEstrategiaDropdown />
-                
-                {/* Link para Preços - Scroll na LP, link direto em outras páginas */}
-                {pathname === '/' ? (
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      handleNavigationClick()
-                      const pricingSection = document.getElementById('pricing')
-                      if (pricingSection) {
-                        pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                      }
-                    }}
-                  >
-                    Preços
-                  </Button>
+                {status === "loading" ? (
+                  <Skeleton className="h-9 w-9 lg:w-[132px]" aria-hidden="true" />
+                ) : session ? (
+                  <>
+                    <NotificationBell />
+                    <div className="hidden lg:block">
+                      <UserProfileDropdown
+                        userName={session.user?.name}
+                        userEmail={session.user?.email}
+                        isPremium={isPremium || false}
+                        isTrialActive={isTrialActive || false}
+                        trialDaysRemaining={trialDaysRemaining || null}
+                        subscriptionTier={(subscriptionTier as 'FREE' | 'PREMIUM' | 'VIP') || 'FREE'}
+                      />
+                    </div>
+                  </>
                 ) : (
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href="/#pricing" onClick={handleNavigationClick}>Preços</Link>
-                  </Button>
+                  <>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href="/login" onClick={handleAnonClick}>Entrar</Link>
+                    </Button>
+                    <Button size="sm" asChild className="hidden sm:inline-flex">
+                      <Link href="/register" onClick={handleAnonClick}>Criar conta</Link>
+                    </Button>
+                  </>
                 )}
               </div>
-              
-              {/* Auth Buttons */}
-              <div className="flex items-center space-x-2">
-                <Button variant="ghost" asChild>
-                  <Link href="/login" onClick={handleNavigationClick}>Entrar</Link>
-                </Button>
-                <Button asChild>
-                  <Link href="/register" onClick={handleNavigationClick}>Registrar</Link>
-                </Button>
-              </div>
-            </div>
+            </>
           )}
-          </nav>
-          </div>
         </div>
       </header>
 
-      {/* Tarja de Índices do Mercado - Entre Header e Search Bar */}
-      <MarketTickerBar position="top" />
-
-      {/* Global Search Bar - Below Market Ticker (ocultar em /analisar-acoes) */}
-      {pathname !== '/analisar-acoes' && <GlobalSearchBar />}
-
-      {/* Mobile Navigation Drawer */}
-      <MobileNav 
-        isOpen={mobileMenuOpen} 
-        setIsOpen={setMobileMenuOpen}
-      />
+      {!minimal && (
+        <>
+          <GlobalSearchBar />
+          <MobileNav />
+        </>
+      )}
     </>
   )
 }

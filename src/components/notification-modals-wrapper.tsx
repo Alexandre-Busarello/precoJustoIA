@@ -1,73 +1,77 @@
 "use client"
 
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { NotificationModal } from './notification-modal'
 import { QuizModal } from './quiz-modal'
+import { useOnboardingStatus } from './onboarding-provider'
 import { useNotificationModal } from '@/hooks/use-notification-modal'
 import { useQuiz } from '@/hooks/use-quiz'
-import { useQueryClient } from '@tanstack/react-query'
+import { claimModalSlot, releaseModalSlot } from '@/lib/interruptions'
 
+const SLOT_ID = 'notification'
+
+/**
+ * Comunicados (MODAL) e pesquisas (QUIZ) pendentes no dashboard.
+ * Respeita a política de interrupções: espera o onboarding (que tem prioridade), só abre se o slot
+ * da página estiver livre e nunca abre um segundo modal na mesma visualização.
+ * Comunicados abertos pelo sino (`manuallyOpened`) são pedido do usuário e não passam pelo slot.
+ */
 export function NotificationModalsWrapper() {
-  const { notification: modalNotification } = useNotificationModal()
-  const [quizCampaignId, setQuizCampaignId] = useState<string | undefined>()
-  const [isManualOpen, setIsManualOpen] = useState(false) // Indica se foi aberto manualmente (sininho)
-  const { quiz, markAsViewed } = useQuiz(quizCampaignId)
+  const { notification, markAsViewed } = useNotificationModal()
+  const onboarding = useOnboardingStatus()
   const queryClient = useQueryClient()
+  const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null)
 
+  const manuallyOpened = Boolean(notification && (notification as { manuallyOpened?: boolean }).manuallyOpened)
+  const quizCampaignId =
+    notification?.displayType === 'QUIZ' && notification.campaignId === activeCampaignId ? activeCampaignId : undefined
+  const { quiz, markAsViewed: markQuizAsViewed } = useQuiz(quizCampaignId)
 
   useEffect(() => {
-    // Se modalNotification for um quiz, definir campaignId para abrir quiz modal automaticamente
-    // (apenas quando está na dashboard, não quando acessado pelo sininho)
-    if (modalNotification && modalNotification.displayType === 'QUIZ' && modalNotification.campaignId) {
-      setQuizCampaignId(modalNotification.campaignId)
-      setIsManualOpen(false) // Abertura automática na dashboard
-    } else {
-      // Se não é quiz, limpar quizCampaignId
-      setQuizCampaignId(undefined)
-      setIsManualOpen(false)
+    if (!notification) {
+      setActiveCampaignId(null)
+      return
     }
-  }, [modalNotification])
+    if (activeCampaignId === notification.campaignId) return
+    if (manuallyOpened) {
+      setActiveCampaignId(notification.campaignId)
+      return
+    }
+    // Onboarding primeiro: não abrir enquanto ele estiver pendente ou aberto
+    if (onboarding.pending || onboarding.shouldShowOnboarding) return
+    if (claimModalSlot(SLOT_ID)) setActiveCampaignId(notification.campaignId)
+  }, [notification, manuallyOpened, activeCampaignId, onboarding.pending, onboarding.shouldShowOnboarding])
+
+  const finish = () => {
+    setActiveCampaignId(null)
+    if (!manuallyOpened) releaseModalSlot(SLOT_ID)
+  }
+
+  const handleNotificationClose = (dismissed: boolean) => {
+    if (!notification) return
+    if (manuallyOpened) {
+      queryClient.setQueryData(['notifications', 'modal'], { notification: null })
+    } else {
+      markAsViewed(notification.campaignId, dismissed)
+    }
+    finish()
+  }
 
   const handleQuizClose = () => {
-    // Se foi abertura automática (não manual), marcar como visto ao fechar
-    if (!isManualOpen && quizCampaignId && markAsViewed) {
-      markAsViewed(quizCampaignId)
-    }
-    setQuizCampaignId(undefined)
-    setIsManualOpen(false)
-    
-    // Invalidar query de onboarding para permitir que apareça após fechar notificação
-    queryClient.invalidateQueries({ queryKey: ['user-onboarding-status'] })
+    if (!manuallyOpened && quizCampaignId) markQuizAsViewed?.(quizCampaignId)
+    finish()
   }
-  
-  // Quando não há mais notificações modais pendentes, invalidar query de onboarding
-  // para permitir que o onboarding apareça se necessário
-  useEffect(() => {
-    if (!modalNotification && !quizCampaignId) {
-      // Aguardar um pouco para garantir que a modal foi completamente fechada
-      const timer = setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['user-onboarding-status'] })
-      }, 500)
-      
-      return () => clearTimeout(timer)
-    }
-  }, [modalNotification, quizCampaignId, queryClient])
 
-  return (
-    <>
-      {/* Modal de notificação normal - automático */}
-      {modalNotification && modalNotification.displayType === 'MODAL' && (
-        <NotificationModal key={modalNotification.campaignId} />
-      )}
-      
-      {/* Modal de quiz - aparece automaticamente quando há quiz pendente OU quando aberto manualmente */}
-      {quiz && quizCampaignId && (
-        <QuizModal
-          campaignId={quizCampaignId}
-          onClose={handleQuizClose}
-        />
-      )}
-    </>
-  )
+  if (!notification || activeCampaignId !== notification.campaignId) return null
+
+  if (notification.displayType === 'MODAL') {
+    return <NotificationModal key={notification.campaignId} notification={notification} open onClose={handleNotificationClose} />
+  }
+
+  if (notification.displayType === 'QUIZ' && quiz && quizCampaignId) {
+    return <QuizModal key={quizCampaignId} campaignId={quizCampaignId} onClose={handleQuizClose} />
+  }
+
+  return null
 }
-

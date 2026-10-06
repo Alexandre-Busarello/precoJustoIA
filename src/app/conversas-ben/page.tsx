@@ -1,23 +1,19 @@
 'use client'
 
 /**
- * Página de Gerenciamento de Conversas com Ben
+ * Conversas com o Ben: lista pesquisável, abrir no chat, renomear e excluir.
  */
 
-import { useState, useMemo, useEffect } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table'
 import {
   Dialog,
   DialogContent,
@@ -42,410 +38,278 @@ import {
   useUpdateBenConversationTitle,
   useDeleteBenConversation,
 } from '@/hooks/use-ben-chat'
-import {
-  MessageSquare,
-  Search,
-  Edit2,
-  Trash2,
-  ArrowLeft,
-  Plus,
-  Loader2,
-  Calendar,
-  FileText,
-} from 'lucide-react'
-import Link from 'next/link'
 import { useToast } from '@/hooks/use-toast'
 import { BenChatSidebar } from '@/components/ben-chat-sidebar'
-import { cn } from '@/lib/utils'
+import { formatDate, formatNumber } from '@/lib/format'
+
+type Conversation = NonNullable<ReturnType<typeof useBenConversations>['data']>[number]
+
+const SEARCH_DEBOUNCE_MS = 300
+
+/** Prévia em texto simples da última mensagem (sem marcações de markdown). */
+function plainPreview(markdown: string): string {
+  return markdown
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[#*_`>|~]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 export default function ConversasBenPage() {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
   const { toast } = useToast()
+
+  const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [sortBy, setSortBy] = useState<'updatedAt' | 'createdAt' | 'title'>('updatedAt')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editTitle, setEditTitle] = useState('')
+  const [renaming, setRenaming] = useState<Conversation | null>(null)
+  const [renameTitle, setRenameTitle] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [forceNewConversation, setForceNewConversation] = useState(false)
 
-  // Usar busca se houver query, senão usar lista normal
-  const { data: searchResults, isLoading: isSearching } = useSearchBenConversations(
-    searchQuery,
-    sortBy,
-    sortOrder
-  )
-  const { data: allConversations, isLoading: isLoadingAll } = useBenConversations()
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
-  const conversations = useMemo(() => {
-    if (searchQuery.trim().length > 0) {
-      return searchResults || []
-    }
-    // Aplicar ordenação localmente se não estiver buscando
-    if (!allConversations) return []
-    
-    const sorted = [...allConversations].sort((a, b) => {
-      let aValue: any
-      let bValue: any
-      
-      if (sortBy === 'title') {
-        aValue = a.title || ''
-        bValue = b.title || ''
-      } else if (sortBy === 'createdAt') {
-        aValue = new Date(a.createdAt).getTime()
-        bValue = new Date(b.createdAt).getTime()
-      } else {
-        aValue = new Date(a.updatedAt).getTime()
-        bValue = new Date(b.updatedAt).getTime()
-      }
-      
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0
-      } else {
-        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0
-      }
-    })
-    
-    return sorted
-  }, [searchQuery, searchResults, allConversations, sortBy, sortOrder])
+  useEffect(() => {
+    if (status === 'unauthenticated') router.replace('/login?callbackUrl=/conversas-ben')
+  }, [status, router])
+
+  const searching = searchQuery.length > 0
+  const { data: searchResults, isLoading: isSearching } = useSearchBenConversations(searchQuery)
+  const { data: allConversations, isLoading: isLoadingAll } = useBenConversations()
+  const conversations = (searching ? searchResults : allConversations) ?? []
+  const isLoading = status === 'loading' || (searching ? isSearching : isLoadingAll)
 
   const updateTitle = useUpdateBenConversationTitle()
   const deleteConversation = useDeleteBenConversation()
 
-  const isLoading = searchQuery.trim().length > 0 ? isSearching : isLoadingAll
-
-  const handleEditClick = (conversation: any) => {
-    setEditingId(conversation.id)
-    setEditTitle(conversation.title || '')
-  }
-
-  const handleSaveEdit = async () => {
-    if (!editingId || !editTitle.trim()) return
-
-    try {
-      await updateTitle.mutateAsync({
-        conversationId: editingId,
-        title: editTitle.trim()
-      })
-      setEditingId(null)
-      setEditTitle('')
-      toast({
-        title: 'Título atualizado',
-        description: 'O título da conversa foi atualizado com sucesso.'
-      })
-    } catch (error) {
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível atualizar o título.',
-        variant: 'destructive'
-      })
-    }
-  }
-
-  const handleDeleteClick = (conversationId: string) => {
-    setDeletingId(conversationId)
-  }
-
-  const handleConfirmDelete = async () => {
-    if (!deletingId) return
-
-    try {
-      await deleteConversation.mutateAsync(deletingId)
-      setDeletingId(null)
-      toast({
-        title: 'Conversa deletada',
-        description: 'A conversa foi deletada com sucesso.'
-      })
-    } catch (error) {
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível deletar a conversa.',
-        variant: 'destructive'
-      })
-    }
-  }
-
-  const handleConversationClick = (conversationId: string) => {
+  const openConversation = (conversationId: string) => {
+    setForceNewConversation(false)
     setSelectedConversationId(conversationId)
     setIsChatOpen(true)
   }
 
   const handleNewConversation = () => {
-    setSelectedConversationId(null) // Limpar conversa selecionada
-    setForceNewConversation(true) // Forçar criação de nova conversa
-    setIsChatOpen(true) // Abrir chat
+    setSelectedConversationId(null)
+    setForceNewConversation(true)
+    setIsChatOpen(true)
   }
-  
-  // Resetar flag quando chat fechar
-  const handleChatClose = (open: boolean) => {
+
+  const handleChatOpenChange = (open: boolean) => {
     setIsChatOpen(open)
-    if (!open) {
-      setForceNewConversation(false)
+    if (!open) setForceNewConversation(false)
+  }
+
+  const startRename = (conversation: Conversation) => {
+    setRenaming(conversation)
+    setRenameTitle(conversation.title || '')
+  }
+
+  const handleRename = async (e: FormEvent) => {
+    e.preventDefault()
+    const title = renameTitle.trim()
+    if (!renaming || !title) return
+    try {
+      await updateTitle.mutateAsync({ conversationId: renaming.id, title })
+      setRenaming(null)
+      toast({ title: 'Título atualizado' })
+    } catch {
+      toast({ title: 'Não foi possível renomear', description: 'Tente novamente em instantes.', variant: 'destructive' })
     }
   }
 
-  if (status === 'loading') {
-    return (
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    )
+  const handleConfirmDelete = async () => {
+    if (!deletingId) return
+    try {
+      await deleteConversation.mutateAsync(deletingId)
+      setDeletingId(null)
+      toast({ title: 'Conversa excluída' })
+    } catch {
+      toast({ title: 'Não foi possível excluir', description: 'Tente novamente em instantes.', variant: 'destructive' })
+    }
   }
 
-  if (!session) {
-    router.push('/login')
-    return null
-  }
+  const columns: DataTableColumn<Conversation>[] = [
+    {
+      key: 'title',
+      header: 'Conversa',
+      sortable: true,
+      sortValue: (c) => c.title || '',
+      className: 'max-w-[11rem] py-2.5 min-[400px]:max-w-[13rem] sm:max-w-md',
+      cell: (c) => (
+        <div className="min-w-0 space-y-0.5">
+          <p className="truncate font-medium text-foreground">{c.title || 'Sem título'}</p>
+          {(c.shareToken || c.lastMessage) && (
+            <div className="flex min-w-0 items-center gap-2">
+              {c.shareToken && <Badge variant="neutral">Compartilhada</Badge>}
+              {c.lastMessage && <p className="truncate text-xs text-muted-foreground">{plainPreview(c.lastMessage)}</p>}
+            </div>
+          )}
+          {/* No mobile, data e total de mensagens ficam aqui (as colunas somem abaixo de md) */}
+          <p className="truncate text-xs text-muted-foreground tabular-nums md:hidden">
+            {formatDate(c.updatedAt)} · {formatNumber(c.messageCount, { digits: 0 })}{' '}
+            {c.messageCount === 1 ? 'mensagem' : 'mensagens'}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: 'messageCount',
+      header: 'Mensagens',
+      align: 'right',
+      sortable: true,
+      className: 'hidden md:table-cell',
+      headerClassName: 'hidden md:table-cell',
+      cell: (c) => formatNumber(c.messageCount, { digits: 0 }),
+    },
+    {
+      key: 'updatedAt',
+      header: 'Atualizada',
+      align: 'right',
+      sortable: true,
+      sortValue: (c) => new Date(c.updatedAt).getTime(),
+      className: 'hidden whitespace-nowrap md:table-cell',
+      headerClassName: 'hidden md:table-cell',
+      cell: (c) => formatDate(c.updatedAt),
+    },
+    {
+      key: 'actions',
+      header: <span className="sr-only">Ações</span>,
+      align: 'right',
+      className: 'w-24',
+      cell: (c) => (
+        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <Button variant="ghost" size="icon" aria-label={`Renomear ${c.title || 'conversa'}`} onClick={() => startRename(c)}>
+            <Pencil className="size-4 text-muted-foreground" strokeWidth={1.75} />
+          </Button>
+          <Button variant="ghost" size="icon" aria-label={`Excluir ${c.title || 'conversa'}`} onClick={() => setDeletingId(c.id)}>
+            <Trash2 className="size-4 text-muted-foreground" strokeWidth={1.75} />
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
+  if (status === 'unauthenticated') return null
 
   return (
     <>
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Header */}
-        <div className="mb-6">
-          <Button variant="ghost" asChild className="mb-4">
-            <Link href="/dashboard">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Voltar ao Dashboard
-            </Link>
-          </Button>
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="text-3xl font-bold flex items-center gap-2">
-                <MessageSquare className="w-8 h-8" />
-                Minhas Conversas com Ben
-              </h1>
-              <p className="text-muted-foreground mt-2">
-                Gerencie suas conversas, edite títulos e encontre conversas antigas
-              </p>
-            </div>
+      <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:py-8">
+        <PageHeader
+          breadcrumb={[{ label: 'Minha conta', href: '/perfil' }, { label: 'Conversas com o Ben' }]}
+          title="Conversas com o Ben"
+          description="Retome, renomeie ou exclua suas conversas com o assistente."
+          actions={
             <Button onClick={handleNewConversation}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Conversa
+              <Plus className="size-4" strokeWidth={1.75} />
+              Nova conversa
             </Button>
-          </div>
+          }
+        />
+
+        <div className="relative max-w-md">
+          <Label htmlFor="busca-conversas" className="sr-only">
+            Buscar conversas
+          </Label>
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+          <Input
+            id="busca-conversas"
+            type="search"
+            placeholder="Buscar por título ou conteúdo"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="pl-9"
+          />
         </div>
 
-        {/* Busca e Filtros */}
-        <Card className="mb-6">
-          <CardContent className="p-4">
-            <div className="flex flex-col gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                <Input
-                  placeholder="Buscar conversas por título ou conteúdo..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-full"
-                />
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue placeholder="Ordenar por" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="updatedAt">Mais Recente</SelectItem>
-                    <SelectItem value="createdAt">Data de Criação</SelectItem>
-                    <SelectItem value="title">Título</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sortOrder} onValueChange={(value: any) => setSortOrder(value)}>
-                  <SelectTrigger className="w-full sm:w-[120px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="desc">Desc</SelectItem>
-                    <SelectItem value="asc">Asc</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Lista de Conversas */}
-        {isLoading ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : conversations.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <MessageSquare className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">
-                {searchQuery ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa ainda'}
-              </h3>
-              <p className="text-muted-foreground mb-6">
-                {searchQuery
-                  ? 'Tente buscar com outros termos'
-                  : 'Comece uma nova conversa com o Ben para ver suas conversas aqui'}
-              </p>
-              {!searchQuery && (
-                <Button onClick={handleNewConversation}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Iniciar Conversa
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {conversations.map((conversation) => (
-              <Card
-                key={conversation.id}
-                className={cn(
-                  'hover:shadow-lg transition-shadow cursor-pointer',
-                  'touch-manipulation', // Melhorar toque em mobile
-                  editingId === conversation.id && 'ring-2 ring-primary'
-                )}
-                onClick={() => editingId !== conversation.id && handleConversationClick(conversation.id)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    {editingId === conversation.id ? (
-                      <Input
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleSaveEdit()
-                          } else if (e.key === 'Escape') {
-                            setEditingId(null)
-                            setEditTitle('')
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex-1"
-                        autoFocus
-                      />
-                    ) : (
-                      <h3 className="font-semibold text-lg flex-1 line-clamp-2">
-                        {conversation.title || 'Sem título'}
-                      </h3>
-                    )}
-                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                      {editingId === conversation.id ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={handleSaveEdit}
-                            disabled={updateTitle.isPending}
-                          >
-                            {updateTitle.isPending ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              'Salvar'
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingId(null)
-                              setEditTitle('')
-                            }}
-                          >
-                            Cancelar
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleEditClick(conversation)}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleDeleteClick(conversation.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {conversation.lastMessage && (
-                    <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                      {conversation.lastMessage}
-                    </p>
-                  )}
-
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-3 h-3" />
-                      <span>{conversation.messageCount} mensagens</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      <span>
-                        {new Date(conversation.updatedAt).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric'
-                        })}
-                      </span>
-                    </div>
-                  </div>
-
-                  {conversation.shareToken && (
-                    <Badge variant="secondary" className="mt-2">
-                      Compartilhada
-                    </Badge>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        <DataTable
+          caption="Conversas com o Ben"
+          columns={columns}
+          rows={conversations}
+          getRowId={(c) => c.id}
+          loading={isLoading}
+          stickyFirstColumn
+          defaultSort={{ key: 'updatedAt', direction: 'desc' }}
+          onRowClick={(c) => openConversation(c.id)}
+          empty={
+            searching
+              ? { title: 'Nenhuma conversa encontrada', description: 'Tente outros termos.' }
+              : {
+                  title: 'Nenhuma conversa ainda',
+                  description: 'As conversas com o Ben aparecem aqui.',
+                  action: (
+                    <Button variant="outline" onClick={handleNewConversation}>
+                      Iniciar conversa
+                    </Button>
+                  ),
+                }
+          }
+        />
       </div>
 
-      {/* Dialog de Confirmação de Deleção */}
-      <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
+      <Dialog open={renaming !== null} onOpenChange={(open) => !open && setRenaming(null)}>
+        <DialogContent>
+          <form onSubmit={handleRename} className="grid min-w-0 gap-4">
+            <DialogHeader>
+              <DialogTitle>Renomear conversa</DialogTitle>
+              <DialogDescription>O novo título aparece na lista e no chat.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-1.5">
+              <Label htmlFor="titulo-conversa">Título</Label>
+              <Input id="titulo-conversa" value={renameTitle} onChange={(e) => setRenameTitle(e.target.value)} autoFocus required />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={!renameTitle.trim() || updateTitle.isPending}>
+                {updateTitle.isPending && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />}
+                Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deletingId !== null} onOpenChange={(open) => !open && setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Deletar conversa?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. Todas as mensagens desta conversa serão permanentemente deletadas.
+              Todas as mensagens desta conversa serão apagadas. Não é possível desfazer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault()
+                handleConfirmDelete()
+              }}
+              disabled={deleteConversation.isPending}
+              className="bg-destructive text-primary-foreground hover:bg-destructive/90"
             >
-              {deleteConversation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Deletando...
-                </>
-              ) : (
-                'Deletar'
-              )}
+              {deleteConversation.isPending && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />}
+              Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Chat Sidebar */}
       <BenChatSidebar
         open={isChatOpen}
-        onOpenChange={handleChatClose}
-        initialConversationId={selectedConversationId || undefined}
+        onOpenChange={handleChatOpenChange}
+        initialConversationId={selectedConversationId ?? undefined}
         forceNewConversation={forceNewConversation}
       />
     </>
   )
 }
-

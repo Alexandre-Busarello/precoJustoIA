@@ -2,28 +2,28 @@
 
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { TrendingUp, TrendingDown, History } from "lucide-react";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { SectionHeader } from "@/components/ui/section-header";
+import { toast as sonnerToast } from "sonner";
+import { formatBRL, formatDate, formatDeltaPct } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { moneyToneClass, returnToneClass } from "@/components/portfolio-page-shell";
+import { AssetCell, assetHref } from "@/components/asset/asset-cell";
 
 interface ClosedPosition {
   ticker: string;
+  companyName?: string | null;
+  logoUrl?: string | null;
+  assetType?: string | null;
   averagePrice: number;
   totalInvested: number;
   totalSold: number;
   realizedReturn: number;
+  /** Fração. */
   realizedReturnPercentage: number;
   totalDividends: number;
   totalReturn: number;
+  /** Fração. */
   totalReturnPercentage: number;
   closedDate: string;
 }
@@ -32,242 +32,112 @@ interface PortfolioClosedPositionsTableProps {
   portfolioId: string;
 }
 
-export function PortfolioClosedPositionsTable({
-  portfolioId,
-}: PortfolioClosedPositionsTableProps) {
-  const { toast } = useToast();
+function ResultCell({ fraction, amount }: { fraction: number; amount: number }) {
+  return (
+    <div className="flex flex-col items-end leading-tight">
+      <span className={cn("font-medium", returnToneClass(fraction))}>{formatDeltaPct(fraction)}</span>
+      <span className={cn("text-xs", moneyToneClass(amount))}>{formatBRL(amount)}</span>
+    </div>
+  );
+}
+
+const columns: DataTableColumn<ClosedPosition>[] = [
+  {
+    key: "ticker",
+    header: "Ativo",
+    sortable: true,
+    cell: (p) => <AssetCell href={assetHref(p.ticker, p.assetType)} ticker={p.ticker} name={p.companyName} logoUrl={p.logoUrl} />,
+  },
+  { key: "averagePrice", header: "Preço médio", align: "right", cell: (p) => formatBRL(p.averagePrice) },
+  { key: "totalInvested", header: "Investido", align: "right", sortable: true, cell: (p) => formatBRL(p.totalInvested) },
+  { key: "totalSold", header: "Vendido", align: "right", sortable: true, cell: (p) => formatBRL(p.totalSold) },
+  {
+    key: "realizedReturnPercentage",
+    header: "Resultado realizado",
+    align: "right",
+    sortable: true,
+    cell: (p) => <ResultCell fraction={p.realizedReturnPercentage} amount={p.realizedReturn} />,
+  },
+  { key: "totalDividends", header: "Dividendos", align: "right", sortable: true, cell: (p) => formatBRL(p.totalDividends) },
+  {
+    key: "totalReturnPercentage",
+    header: "Resultado total",
+    align: "right",
+    sortable: true,
+    hint: "Resultado realizado mais os dividendos recebidos enquanto a posição existia.",
+    cell: (p) => <ResultCell fraction={p.totalReturnPercentage} amount={p.totalReturn} />,
+  },
+  {
+    key: "closedDate",
+    header: "Encerramento",
+    align: "right",
+    sortable: true,
+    sortValue: (p) => new Date(p.closedDate).getTime(),
+    cell: (p) => <span className="text-muted-foreground">{formatDate(p.closedDate)}</span>,
+  },
+];
+
+/** Ativos que já saíram da carteira, com resultado realizado e dividendos. */
+export function PortfolioClosedPositionsTable({ portfolioId }: PortfolioClosedPositionsTableProps) {
   const queryClient = useQueryClient();
-
-  // Query for loading closed positions
-  const fetchClosedPositions = async () => {
-    const response = await fetch(`/api/portfolio/${portfolioId}/closed-positions`);
-
-    if (!response.ok) {
-      throw new Error("Erro ao carregar posições encerradas");
-    }
-
-    const data = await response.json();
-    return data.closedPositions || [];
-  };
 
   const {
     data: closedPositions = [],
     isLoading: loading,
-    error: closedPositionsError
-  } = useQuery({
-    queryKey: ['portfolio-closed-positions', portfolioId],
-    queryFn: fetchClosedPositions,
+    error: closedPositionsError,
+  } = useQuery<ClosedPosition[]>({
+    queryKey: ["portfolio-closed-positions", portfolioId],
+    queryFn: async () => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/closed-positions`);
+      if (!response.ok) throw new Error("Erro ao carregar posições encerradas");
+      const data = await response.json();
+      return data.closedPositions || [];
+    },
   });
 
-  // Show error toast if query fails
   useEffect(() => {
-    if (closedPositionsError) {
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as posições encerradas",
-        variant: "destructive",
-      });
-    }
-  }, [closedPositionsError, toast]);
+    // toast do sonner direto: o de useToast muda a cada render e repetiria o aviso.
+    if (closedPositionsError) sonnerToast.error("Erro", { description: "Não foi possível carregar as posições encerradas" });
+  }, [closedPositionsError]);
 
-  // Invalidate cache when transactions change
   useEffect(() => {
     const handleTransactionUpdate = () => {
-      // Small delay to ensure backend has processed the transaction
       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['portfolio-closed-positions', portfolioId] });
+        queryClient.invalidateQueries({ queryKey: ["portfolio-closed-positions", portfolioId] });
       }, 500);
     };
-
-    // Listen for transaction updates
-    window.addEventListener('transaction-updated', handleTransactionUpdate);
-    window.addEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
-
+    window.addEventListener("transaction-updated", handleTransactionUpdate);
+    window.addEventListener("transaction-cash-flow-changed", handleTransactionUpdate);
     return () => {
-      window.removeEventListener('transaction-updated', handleTransactionUpdate);
-      window.removeEventListener('transaction-cash-flow-changed', handleTransactionUpdate);
+      window.removeEventListener("transaction-updated", handleTransactionUpdate);
+      window.removeEventListener("transaction-cash-flow-changed", handleTransactionUpdate);
     };
   }, [portfolioId, queryClient]);
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value);
-  };
-
-  const formatPercent = (value: number) => {
-    return `${(value * 100).toFixed(2)}%`;
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(date);
-  };
-
-  const isPositive = (value: number) => value >= 0;
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  if (closedPositions.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="text-center text-muted-foreground">
-            <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>Nenhuma posição encerrada encontrada</p>
-            <p className="text-sm mt-1">
-              Ativos que saíram da carteira aparecerão aqui
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
-            <History className="h-5 w-5" />
-            Posições Encerradas
-          </CardTitle>
-          <Badge variant="secondary" className="text-xs">
-            {closedPositions.length} {closedPositions.length === 1 ? 'ativo' : 'ativos'}
-          </Badge>
+    <section aria-labelledby="closed-positions-title" className="space-y-4">
+      <SectionHeader
+        id="closed-positions-title"
+        title="Posições encerradas"
+        description="Ativos que já passaram pela carteira, com resultado realizado e dividendos recebidos."
+      />
+      {!loading && closedPositions.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+          <p className="text-sm font-medium text-foreground">Nenhuma posição encerrada</p>
+          <p className="mt-1 text-sm text-muted-foreground">Ativos vendidos por completo aparecem aqui.</p>
         </div>
-      </CardHeader>
-      <CardContent>
-        <div className="border rounded-lg overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ativo</TableHead>
-                <TableHead className="text-right">Preço Médio</TableHead>
-                <TableHead className="text-right">Investido</TableHead>
-                <TableHead className="text-right">Vendido</TableHead>
-                <TableHead className="text-right">Retorno Realizado</TableHead>
-                <TableHead className="text-right">Dividendos</TableHead>
-                <TableHead className="text-right">Retorno Total</TableHead>
-                <TableHead className="text-right">Data Encerramento</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {closedPositions.map((position: ClosedPosition) => (
-                <TableRow key={position.ticker}>
-                  <TableCell className="font-medium">
-                    {position.ticker}
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    {formatCurrency(position.averagePrice)}
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    {formatCurrency(position.totalInvested)}
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    {formatCurrency(position.totalSold)}
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    <div
-                      className={`flex flex-col items-end ${
-                        isPositive(position.realizedReturn)
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1">
-                        {isPositive(position.realizedReturn) ? (
-                          <TrendingUp className="h-3 w-3" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3" />
-                        )}
-                        <span className="font-medium">
-                          {formatPercent(position.realizedReturnPercentage)}
-                        </span>
-                      </div>
-                      <span className="text-xs">
-                        {formatCurrency(position.realizedReturn)}
-                      </span>
-                    </div>
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    {position.totalDividends > 0 ? (
-                      <span className="text-green-600 font-medium">
-                        {formatCurrency(position.totalDividends)}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">
-                        R$ 0,00
-                      </span>
-                    )}
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    <div
-                      className={`flex flex-col items-end ${
-                        isPositive(position.totalReturn)
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1">
-                        {isPositive(position.totalReturn) ? (
-                          <TrendingUp className="h-3 w-3" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3" />
-                        )}
-                        <span className="font-medium">
-                          {formatPercent(position.totalReturnPercentage)}
-                        </span>
-                      </div>
-                      <span className="text-xs">
-                        {formatCurrency(position.totalReturn)}
-                      </span>
-                    </div>
-                  </TableCell>
-
-                  <TableCell className="text-right text-sm text-muted-foreground">
-                    {formatDate(position.closedDate)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-
-        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg">
-          <div className="flex flex-col sm:flex-row items-start gap-3">
-            <History className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                Histórico Completo da Carteira
-              </p>
-              <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                Esta seção mostra todos os ativos que já passaram pela sua carteira,
-                incluindo rentabilidade realizada e dividendos recebidos (mesmo após
-                sair da posição).
-              </p>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      ) : (
+        <DataTable
+          caption="Posições encerradas"
+          columns={columns}
+          rows={closedPositions}
+          getRowId={(p) => `${p.ticker}-${p.closedDate}`}
+          stickyFirstColumn
+          loading={loading}
+          loadingRows={2}
+          defaultSort={{ key: "closedDate", direction: "desc" }}
+        />
+      )}
+    </section>
   );
 }
-

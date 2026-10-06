@@ -8,17 +8,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { getServerSession } from 'next-auth';
+import { z } from 'zod';
 import { authOptions } from '@/lib/auth';
-import { getCurrentUser, isUserPremium } from '@/lib/user-service';
+import { getCurrentUser } from '@/lib/user-service';
 import { prisma } from '@/lib/prisma';
-import { TriggerConfig } from '@/lib/custom-trigger-service';
+import {
+  checkMonitorLimit,
+  mergeTriggerConfigs,
+  monitorLimitMessage,
+  parseTriggerConfig,
+  triggerConfigToJson,
+} from '@/lib/custom-trigger-service';
 import { clearQueryCache } from '@/lib/prisma-wrapper';
+
+const createMonitorSchema = z.object({
+  companyId: z.number().int().positive(),
+  triggerConfig: z.unknown(),
+});
 
 /**
  * GET /api/user-asset-monitor
  * Lista todos os gatilhos customizados do usuário
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -57,8 +69,7 @@ export async function GET(request: NextRequest) {
 
     // Verificar status Premium e calcular limites
     const isPremium = user.isPremium;
-    const activeMonitorsCount = monitors.filter(m => m.isActive).length;
-    const maxMonitors = isPremium ? null : 1; // null = ilimitado
+    const { current, max } = checkMonitorLimit(isPremium, monitors.filter(m => m.isActive).length);
 
     return NextResponse.json({
       success: true,
@@ -74,8 +85,8 @@ export async function GET(request: NextRequest) {
         lastTriggeredAt: m.lastTriggeredAt,
       })),
       limits: {
-        current: activeMonitorsCount,
-        max: maxMonitors,
+        current,
+        max, // null = ilimitado
         isPremium,
       },
     });
@@ -113,44 +124,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
-    const { companyId, triggerConfig } = body;
-
-    if (!companyId || !triggerConfig) {
+    const body = createMonitorSchema.safeParse(await request.json().catch(() => null));
+    if (!body.success) {
       return NextResponse.json(
         { error: 'companyId e triggerConfig são obrigatórios' },
         { status: 400 }
       );
     }
-
-    // Verificar se usuário é Premium
-    const isPremium = user.isPremium;
-
-    // Se não for Premium, verificar limite de 1 monitor
-    if (!isPremium) {
-      const activeMonitorsCount = await prisma.userAssetMonitor.count({
-        where: {
-          userId: user.id,
-          isActive: true,
-        },
-      });
-
-      if (activeMonitorsCount >= 1) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'LIMIT_REACHED',
-            message: 'Você atingiu o limite de 1 monitoramento no plano gratuito. Faça upgrade para Premium e crie monitores ilimitados.',
-            limits: {
-              current: activeMonitorsCount,
-              max: 1,
-              isPremium: false,
-            },
-          },
-          { status: 403 }
-        );
-      }
+    const { companyId } = body.data;
+    const parsedConfig = parseTriggerConfig(body.data.triggerConfig);
+    if (!parsedConfig.success) {
+      return NextResponse.json({ error: parsedConfig.error }, { status: 400 });
     }
+    const triggerConfig = parsedConfig.config;
 
     // Validar que a empresa existe
     const company = await prisma.company.findUnique({
@@ -165,7 +151,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar se já existe gatilho ativo para esta empresa
+    // Verificar se já existe gatilho ativo para esta empresa (atualizar não conta no limite)
     const existingMonitor = await prisma.userAssetMonitor.findFirst({
       where: {
         userId: user.id,
@@ -174,12 +160,41 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Limite do plano gratuito: só ao criar um novo monitoramento ativo
+    if (!existingMonitor) {
+      const activeMonitorsCount = await prisma.userAssetMonitor.count({
+        where: {
+          userId: user.id,
+          isActive: true,
+        },
+      });
+      const limit = checkMonitorLimit(user.isPremium, activeMonitorsCount);
+
+      if (!limit.allowed && limit.max !== null) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'LIMIT_REACHED',
+            message: monitorLimitMessage(limit.max),
+            limits: {
+              current: limit.current,
+              max: limit.max,
+              isPremium: false,
+            },
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     if (existingMonitor) {
-      // Atualizar existente ao invés de criar novo
+      // Já existe monitoramento ativo para o ativo: soma os novos critérios aos atuais (nunca apaga critérios).
+      // Remover critérios é feito pela edição (PATCH /api/user-asset-monitor/[id]).
+      const mergedConfig = mergeTriggerConfigs(existingMonitor.triggerConfig, triggerConfig);
       const updated = await prisma.userAssetMonitor.update({
         where: { id: existingMonitor.id },
         data: {
-          triggerConfig: triggerConfig as any,
+          triggerConfig: triggerConfigToJson(mergedConfig),
         },
       });
 
@@ -198,7 +213,8 @@ export async function POST(request: NextRequest) {
           isActive: updated.isActive,
           createdAt: updated.createdAt,
         },
-        message: 'Gatilho atualizado com sucesso',
+        merged: true,
+        message: 'Os critérios foram adicionados ao monitoramento que você já tinha para este ativo',
       });
     }
 
@@ -207,7 +223,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId: user.id,
         companyId,
-        triggerConfig: triggerConfig as any,
+        triggerConfig: triggerConfigToJson(triggerConfig),
         isActive: true,
       },
       include: {

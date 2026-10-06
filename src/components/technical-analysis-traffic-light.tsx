@@ -1,21 +1,52 @@
 'use client'
 
+import { useSyncExternalStore } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Card, CardContent } from '@/components/ui/card'
-import { useCompanyAnalysis } from '@/hooks/use-company-data'
-import { getTechnicalTrafficLightStatus } from '@/lib/radar-service'
-import { TechnicalAnalysisData } from '@/lib/technical-analysis-service'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import { formatBRL } from '@/lib/format'
+import type { TechnicalAnalysisData } from '@/lib/technical-analysis-service'
 
 interface TechnicalAnalysisTrafficLightProps {
   ticker: string
   currentPrice: number
-  compact?: boolean // Versão compacta para header
+  compact?: boolean // Versão compacta (bloco da página de ativo)
 }
-
-// TechnicalAnalysisData é importado de @/lib/technical-analysis-service
 
 interface ApiResponse {
   analysis: TechnicalAnalysisData
+}
+
+type Tone = 'positive' | 'warning' | 'negative'
+
+const subscribeNoop = () => () => {}
+
+const DOT: Record<Tone, string> = {
+  positive: 'bg-positive',
+  warning: 'bg-warning',
+  negative: 'bg-negative',
+}
+
+/**
+ * Posição do preço em relação à faixa estimada pela análise técnica (sem linguagem de compra/venda).
+ * Dentro da faixa e abaixo do preço justo técnico = positivo; acima da faixa = negativo; demais = atenção.
+ */
+export function technicalPosition(
+  analysis: Pick<TechnicalAnalysisData, 'aiFairEntryPrice' | 'aiMinPrice' | 'aiMaxPrice'>,
+  price: number
+): { tone: Tone; label: string } | null {
+  const fair = analysis.aiFairEntryPrice
+  if (!fair || price <= 0) return null
+  const { aiMinPrice: min, aiMaxPrice: max } = analysis
+  if (min && max) {
+    if (price < min) return { tone: 'warning', label: 'Técnica: abaixo da faixa estimada' }
+    if (price > max) return { tone: 'negative', label: 'Técnica: acima da faixa estimada' }
+    return { tone: price <= fair ? 'positive' : 'warning', label: 'Técnica: dentro da faixa estimada' }
+  }
+  const diff = price / fair - 1
+  if (diff <= 0) return { tone: 'positive', label: 'Técnica: abaixo do preço justo técnico' }
+  if (diff <= 0.1) return { tone: 'warning', label: 'Técnica: próximo do preço justo técnico' }
+  return { tone: 'negative', label: 'Técnica: acima do preço justo técnico' }
 }
 
 export default function TechnicalAnalysisTrafficLight({
@@ -23,7 +54,7 @@ export default function TechnicalAnalysisTrafficLight({
   currentPrice,
   compact = false
 }: TechnicalAnalysisTrafficLightProps) {
-  const { data, isLoading } = useQuery<ApiResponse>({
+  const { data, isLoading } = useQuery<ApiResponse | null>({
     queryKey: ['technical-analysis-traffic-light', ticker],
     queryFn: async () => {
       const response = await fetch(`/api/technical-analysis/${ticker}`)
@@ -36,121 +67,61 @@ export default function TechnicalAnalysisTrafficLight({
     retry: false
   })
 
-  // Query para obter overallScore (necessário para o TrafficLight)
-  const { data: companyAnalysisData } = useCompanyAnalysis(ticker)
-  const overallScore = companyAnalysisData?.overallScore?.score ?? null
+  // Servidor e hidratação renderizam o esqueleto; o estado real só depois de montar (evita divergência)
+  const hydrated = useSyncExternalStore(subscribeNoop, () => true, () => false)
 
-  if (isLoading || !data?.analysis?.aiFairEntryPrice) {
-    return null
+  const analysis = data?.analysis
+  const position = analysis ? technicalPosition(analysis, currentPrice) : null
+  const boxClass = cn('rounded-lg border border-border bg-card', compact ? 'p-3' : 'p-4 sm:p-5')
+
+  if (!hydrated || isLoading) {
+    return (
+      <div className={boxClass} aria-busy="true">
+        <Skeleton className="h-4 w-56 max-w-full" />
+        <Skeleton className="mt-3 h-4 w-72 max-w-full" />
+      </div>
+    )
   }
 
-  const analysis = data.analysis as TechnicalAnalysisData
-  
-  // Usar função centralizada para calcular status do semáforo
-  const trafficLightStatus = getTechnicalTrafficLightStatus(
-    analysis,
-    currentPrice,
-    overallScore // Passar overallScore obtido do hook useCompanyAnalysis
-  )
-
-  const trafficLightColor = trafficLightStatus.status
-  const trafficLightLabel = trafficLightStatus.label
-  const trafficLightDescription = trafficLightStatus.description
-  const minPrice = analysis.aiMinPrice
-  const maxPrice = analysis.aiMaxPrice
-
-  // Versão compacta para header
-  if (compact) {
+  if (!analysis || !position) {
     return (
-      <div className={`flex flex-col gap-2 px-3 py-2 rounded-lg border ${
-        trafficLightColor === 'green' ? 'border-green-500 bg-green-50 dark:bg-green-950' :
-        trafficLightColor === 'yellow' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
-        'border-red-500 bg-red-50 dark:bg-red-950'
-      }`}>
-        <div className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full animate-pulse ${
-            trafficLightColor === 'green' ? 'bg-green-500' :
-            trafficLightColor === 'yellow' ? 'bg-yellow-500' :
-            'bg-red-500'
-          }`} />
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium ${
-              trafficLightColor === 'green' ? 'text-green-700 dark:text-green-300' :
-              trafficLightColor === 'yellow' ? 'text-yellow-700 dark:text-yellow-300' :
-              'text-red-700 dark:text-red-300'
-            }`}>
-              {trafficLightLabel}
-            </p>
-          </div>
-          {analysis.aiFairEntryPrice && (
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">Preço Justo</p>
-              <p className="text-sm font-semibold">R$ {analysis.aiFairEntryPrice.toFixed(2)}</p>
-            </div>
-          )}
-        </div>
-        <p className={`text-xs ${
-          trafficLightColor === 'green' ? 'text-green-600 dark:text-green-400' :
-          trafficLightColor === 'yellow' ? 'text-yellow-600 dark:text-yellow-400' :
-          'text-red-600 dark:text-red-400'
-        }`}>
-          {trafficLightDescription}
+      <div className={boxClass}>
+        <p className="text-sm font-medium text-foreground">Faixa técnica indisponível no momento</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Ainda não há uma faixa estimada para {ticker}. A análise completa mostra os indicadores técnicos disponíveis.
         </p>
       </div>
     )
   }
 
-  // Versão completa (card)
+  const hasRange = Boolean(analysis.aiMinPrice && analysis.aiMaxPrice)
+
   return (
-    <Card className={`border-2 ${
-      trafficLightColor === 'green' ? 'border-green-500 bg-green-50 dark:bg-green-950' :
-      trafficLightColor === 'yellow' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
-      'border-red-500 bg-red-50 dark:bg-red-950'
-    }`}>
-      <CardContent className="pt-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center space-x-4">
-              <div className={`w-4 h-4 rounded-full animate-pulse ${
-                trafficLightColor === 'green' ? 'bg-green-500' :
-                trafficLightColor === 'yellow' ? 'bg-yellow-500' :
-                'bg-red-500'
-              }`} />
-              <div>
-                <p className="font-semibold text-lg">
-                  Preço Atual: R$ {currentPrice.toFixed(2)}
-                </p>
-                <p className={`text-sm font-medium ${
-                  trafficLightColor === 'green' ? 'text-green-700 dark:text-green-300' :
-                  trafficLightColor === 'yellow' ? 'text-yellow-700 dark:text-yellow-300' :
-                  'text-red-700 dark:text-red-300'
-                }`}>
-                  {trafficLightLabel}
-                </p>
-              </div>
-            </div>
-            {analysis.aiFairEntryPrice && (
-              <div className="text-right">
-                <p className="text-sm text-muted-foreground">Preço Justo de Entrada</p>
-                <p className="font-semibold text-lg">R$ {analysis.aiFairEntryPrice.toFixed(2)}</p>
-              </div>
-            )}
+    <div className={boxClass}>
+      <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+        <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', DOT[position.tone])} />
+        {position.label}
+      </p>
+      <dl className={cn('mt-2 grid gap-x-6 gap-y-1 text-sm', hasRange ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1')}>
+        {hasRange && (
+          <div className="flex flex-wrap items-baseline gap-x-1.5">
+            <dt className="text-muted-foreground">Faixa estimada (30 dias)</dt>
+            <dd className="font-medium tabular-nums text-foreground">
+              {formatBRL(analysis.aiMinPrice)} – {formatBRL(analysis.aiMaxPrice)}
+            </dd>
           </div>
-          <div className={`text-sm pt-2 border-t ${
-            trafficLightColor === 'green' ? 'border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' :
-            trafficLightColor === 'yellow' ? 'border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300' :
-            'border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
-          }`}>
-            {trafficLightDescription}
-          </div>
-          {minPrice && maxPrice && (
-            <div className="text-xs text-muted-foreground pt-2">
-              Faixa prevista: R$ {minPrice.toFixed(2)} - R$ {maxPrice.toFixed(2)}
-            </div>
-          )}
+        )}
+        <div className="flex flex-wrap items-baseline gap-x-1.5">
+          <dt className="text-muted-foreground">Preço justo técnico</dt>
+          <dd className="font-medium tabular-nums text-foreground">{formatBRL(analysis.aiFairEntryPrice)}</dd>
         </div>
-      </CardContent>
-    </Card>
+        {!compact && (
+          <div className="flex flex-wrap items-baseline gap-x-1.5">
+            <dt className="text-muted-foreground">Preço atual</dt>
+            <dd className="font-medium tabular-nums text-foreground">{formatBRL(currentPrice)}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
   )
 }
-

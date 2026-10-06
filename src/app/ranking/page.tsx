@@ -1,373 +1,139 @@
-"use client"
-
-import { useSession } from "next-auth/react"
-import { Suspense, useState } from "react"
-import { RankingWizard } from "@/components/ranking-wizard"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  BarChart3,
-  Target,
-  TrendingUp,
-  Brain,
-  Calculator,
-  DollarSign,
-  PieChart,
-  CheckCircle2,
-  Lightbulb,
-  Crown,
-  AlertCircle,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react"
+import type { Metadata } from "next"
 import Link from "next/link"
-import Head from "next/head"
+import { Suspense } from "react"
+import { ChevronDown, Loader2 } from "lucide-react"
+import { PageHeader } from "@/components/page-header"
+import { SectionHeader } from "@/components/ui/section-header"
+import { RANKING_MODELS } from "@/lib/ranking-models"
+import { RankingClient } from "./ranking-client"
 
-// FAQs para SEO
-const faqs = [
-  {
-    question: 'O que são rankings de ações?',
-    answer: 'Rankings de ações são listas ordenadas de empresas segundo critérios específicos de análise fundamentalista. Usamos algoritmos que avaliam indicadores como P/L, ROE, dividend yield, crescimento e qualidade da empresa para identificar as melhores oportunidades de investimento na B3.'
-  },
-  {
-    question: 'Quais modelos de análise estão disponíveis?',
-    answer: 'Oferecemos 8 modelos: Fórmula de Graham (gratuito), Value Investing, Fórmula Mágica, Dividend Yield Anti-Trap, Fórmula de Gordon, Fluxo de Caixa Descontado (FCD), Fundamentalista 3+1 e Análise Preditiva com IA. Modelos premium requerem assinatura.'
-  },
-  {
-    question: 'Como funciona a Análise Preditiva com IA?',
-    answer: 'Nossa IA analisa TODAS as estratégias disponíveis para cada empresa, processa indicadores fundamentalistas, técnicos e históricos, e cria um ranking preditivo personalizado. Usa machine learning para identificar padrões e oportunidades que análises tradicionais podem não detectar.'
-  },
-  {
-    question: 'O histórico de rankings é salvo?',
-    answer: 'Sim! Para usuários logados, todos os rankings gerados são salvos automaticamente com seus parâmetros e resultados. Você pode acessar rankings anteriores a qualquer momento e até reprocessá-los com novos dados do mercado.'
-  },
-  {
-    question: 'Qual a diferença entre modelos gratuitos e premium?',
-    answer: 'O modelo gratuito (Fórmula de Graham) oferece análise fundamentalista sólida para começar. Modelos premium incluem estratégias avançadas como FCD, análise com IA, múltiplas estratégias de dividendos, e acesso a indicadores exclusivos como médias históricas e análise técnica integrada.'
-  },
-  {
-    question: 'Como escolher o melhor modelo para mim?',
-    answer: 'Depende do seu perfil: Value Investing e Graham para conservadores, Dividend Yield para foco em renda passiva, FCD e Fundamentalista 3+1 para análise profunda, Fórmula Mágica para equilíbrio, e IA para quem quer aproveitar todas as estratégias simultaneamente com tecnologia preditiva.'
-  }
-]
+const TITLE = "Rankings de ações da B3 por estratégia"
+const DESCRIPTION =
+  "Rankings de ações da B3, BDRs, FIIs e ETFs por modelo de valuation: Número de Graham (grátis), Fórmula Mágica, fluxo de caixa descontado, Gordon, Barsi e outros, com preço justo e margem de segurança."
 
-const modelDetails = [
-  {
-    id: 'graham',
-    name: 'Fórmula de Graham',
-    icon: Target,
-    color: 'from-blue-500 to-cyan-500',
-    description: 'Método clássico criado por Benjamin Graham, o pai do value investing',
-    features: ['Identifica ações subvalorizadas', 'Foco em empresas sólidas e lucrativas', 'Margem de segurança incorporada', 'Ideal para investidores conservadores'],
-    isFree: true
+export const metadata: Metadata = {
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/ranking" },
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    type: "website",
+    url: "/ranking",
+    siteName: "Preço Justo AI",
   },
-  {
-    id: 'ai',
-    name: 'Análise Preditiva com IA',
-    icon: Brain,
-    color: 'from-purple-500 to-pink-500',
-    description: 'Inteligência Artificial que combina TODAS as estratégias',
-    features: ['Analisa todas as estratégias simultaneamente', 'Machine learning para padrões complexos', 'Ranking preditivo personalizado', 'Considera análise técnica e fundamentalista'],
-    isFree: false,
-    isHot: true
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
   },
-  {
-    id: 'fcd',
-    name: 'Fluxo de Caixa Descontado',
-    icon: Calculator,
-    color: 'from-orange-500 to-red-500',
-    description: 'Avaliação intrínseca por DCF com projeções sofisticadas',
-    features: ['Valor intrínseco calculado', 'Projeções de fluxo de caixa', 'Taxa de desconto ajustável', 'Margem de segurança configurável'],
-    isFree: false,
-    isHot: true
-  },
-  {
-    id: 'dividendYield',
-    name: 'Dividend Yield Anti-Trap',
-    icon: DollarSign,
-    color: 'from-green-600 to-teal-600',
-    description: 'Renda passiva sustentável com filtros anti-armadilha',
-    features: ['Evita dividend traps', 'Analisa sustentabilidade do payout', 'Histórico de pagamentos', 'Ideal para renda passiva'],
-    isFree: false
-  },
-  {
-    id: 'magicFormula',
-    name: 'Fórmula Mágica',
-    icon: PieChart,
-    color: 'from-yellow-500 to-orange-500',
-    description: 'Método de Joel Greenblatt que combina qualidade e preço',
-    features: ['Retorno sobre capital', 'Earnings yield', 'Equilíbrio entre qualidade e preço', 'Estratégia comprovada'],
-    isFree: false
-  },
-  {
-    id: 'lowPE',
-    name: 'Value Investing',
-    icon: BarChart3,
-    color: 'from-indigo-500 to-purple-500',
-    description: 'P/L baixo combinado com qualidade comprovada',
-    features: ['Foco em P/L atrativo', 'Indicadores de qualidade', 'Médias históricas', 'Value investing clássico'],
-    isFree: false,
-    isHot: true
-  }
-]
-
-function RankingInfoSection() {
-  const [expanded, setExpanded] = useState(false)
-
-  return (
-    <div className="mt-12 border-t pt-8">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors mx-auto"
-      >
-        {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        {expanded ? 'Ocultar informações' : 'Saiba mais sobre os modelos e como funciona'}
-      </button>
-
-      {expanded && (
-        <div className="mt-8 space-y-12">
-          {/* Modelos */}
-          <div>
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                Modelos de Análise Disponíveis
-              </h2>
-              <p className="text-slate-600 dark:text-slate-400">
-                Escolha entre estratégias comprovadas de investimento
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {modelDetails.map((model) => {
-                const Icon = model.icon
-                return (
-                  <Card key={model.id} className="relative hover:shadow-xl transition-all border-2 hover:border-blue-300 dark:hover:border-blue-700">
-                    {model.isHot && (
-                      <div className="absolute -top-2 -right-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg animate-pulse">
-                        HOT
-                      </div>
-                    )}
-                    <CardHeader className="pb-3">
-                      <div className={`w-12 h-12 bg-gradient-to-br ${model.color} rounded-xl flex items-center justify-center mb-3`}>
-                        <Icon className="w-6 h-6 text-white" />
-                      </div>
-                      <CardTitle className="text-base flex items-center justify-between gap-2">
-                        <span>{model.name}</span>
-                        {!model.isFree && <Crown className="w-4 h-4 text-yellow-500" />}
-                      </CardTitle>
-                      <Badge variant={model.isFree ? "secondary" : "outline"} className="w-fit text-xs">
-                        {model.isFree ? 'Gratuito' : 'Premium'}
-                      </Badge>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground mb-4">{model.description}</p>
-                      <ul className="space-y-2">
-                        {model.features.map((feature, idx) => (
-                          <li key={idx} className="flex items-start gap-2 text-xs">
-                            <CheckCircle2 className="w-3 h-3 mt-0.5 flex-shrink-0 text-green-500" />
-                            <span>{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      {!model.isFree && (
-                        <div className="mt-4 pt-4 border-t">
-                          <Button asChild size="sm" variant="outline" className="w-full">
-                            <Link href="/checkout">
-                              <Crown className="w-3 h-3 mr-2" />
-                              Desbloquear
-                            </Link>
-                          </Button>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Como funciona */}
-          <Card className="border-2">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950/30">
-              <CardTitle className="flex items-center space-x-2 text-xl">
-                <Lightbulb className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <span>Como Usar os Rankings</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-8">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {[
-                  { num: 1, color: 'from-blue-500 to-blue-600', title: 'Escolha o Modelo', desc: 'Selecione a estratégia que melhor se encaixa no seu perfil: conservador, agressivo, foco em dividendos ou análise completa com IA.' },
-                  { num: 2, color: 'from-green-500 to-green-600', title: 'Ajuste Parâmetros', desc: 'Configure critérios como margem de segurança, P/L máximo, ROE mínimo e outros filtros específicos de cada estratégia.' },
-                  { num: 3, color: 'from-purple-500 to-purple-600', title: 'Analise Resultados', desc: 'Receba ranking ordenado com preços justos, upside potencial e análise detalhada de cada ação. Rankings são salvos automaticamente.' },
-                ].map((step) => (
-                  <div key={step.num} className="text-center">
-                    <div className={`w-14 h-14 bg-gradient-to-br ${step.color} rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg`}>
-                      <span className="text-xl font-bold text-white">{step.num}</span>
-                    </div>
-                    <h4 className="font-bold text-base mb-2">{step.title}</h4>
-                    <p className="text-sm text-muted-foreground">{step.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* FAQs */}
-          <div>
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                Perguntas Frequentes
-              </h2>
-            </div>
-            <div className="max-w-4xl mx-auto space-y-4">
-              {faqs.map((faq, index) => (
-                <Card key={index} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-start gap-3">
-                      <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
-                        <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <span>{faq.question}</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed pl-10 text-sm">
-                      {faq.answer}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+  robots: { index: true, follow: true },
 }
 
-function RankingContent() {
-  const { data: session } = useSession()
-  const isLoggedIn = !!session
+const freeModels = RANKING_MODELS.filter((m) => m.plan === "free" && m.assetType !== "etf").map((m) => m.label)
+const stockModels = RANKING_MODELS.filter((m) => m.assetType === "stock").map((m) => m.label)
 
+const FAQS = [
+  {
+    question: "O que são os rankings de ações?",
+    answer:
+      "São listas de empresas ordenadas por critérios de análise fundamentalista. Cada modelo calcula um preço justo ou uma pontuação a partir de indicadores como P/L, ROE, dividend yield e endividamento, usando médias de até 7 anos quando há histórico.",
+  },
+  {
+    question: "Quais modelos estão disponíveis?",
+    answer: `Para ações e BDRs: ${stockModels.join(", ")}. Também há rankings de FIIs (dividend yield e score PJ-FII) e de ETFs. Os modelos premium exigem assinatura.`,
+  },
+  {
+    question: "O que é a margem de segurança?",
+    answer:
+      "É a distância entre o preço atual e o preço justo estimado pelo modelo: 1 − preço ÷ preço justo. Uma margem de 25% significa que o preço está 25% abaixo da estimativa; uma margem negativa indica preço acima dela.",
+  },
+  {
+    question: "O histórico de rankings fica salvo?",
+    answer:
+      "Sim. Com uma conta, cada ranking que você gera fica salvo com os parâmetros e os resultados, e pode ser aberto de novo na aba Histórico.",
+  },
+  {
+    question: "O que o plano gratuito inclui?",
+    answer: `O plano gratuito inclui ${freeModels.join(" e ")}, além dos rankings de ETFs (10 primeiros). O Premium libera os demais modelos, com parâmetros editáveis.`,
+  },
+  {
+    question: "O ranking substitui uma análise pessoal?",
+    answer:
+      "Não. Os rankings são estimativas de modelos quantitativos com dados públicos e não consideram o seu perfil. Não é recomendação de investimento; as fórmulas e premissas estão na página de metodologia.",
+  },
+]
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQS.map((faq) => ({
+      "@type": "Question",
+      name: faq.question,
+      acceptedAnswer: { "@type": "Answer", text: faq.answer },
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Início", item: "https://precojusto.ai" },
+      { "@type": "ListItem", position: 2, name: "Rankings de ações", item: "https://precojusto.ai/ranking" },
+    ],
+  },
+]
+
+function RankingFallback() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-background dark:via-background dark:to-background">
-      <Head>
-        <title>Rankings de Ações B3 - 8 Modelos de Análise Fundamentalista | Preço Justo AI</title>
-        <meta name="description" content="Rankings de ações B3 com 8 modelos de análise fundamentalista: Fórmula de Graham (grátis), Value Investing, Fórmula Mágica, Dividend Yield, FCD, Gordon, Fundamentalista 3+1 e Análise Preditiva com IA. Encontre as melhores ações da Bolsa brasileira e BDRs." />
-        <meta name="keywords" content="rankings ações, ranking ações B3, análise fundamentalista ações, fórmula graham, value investing, fórmula mágica greenblatt, dividend yield, fluxo de caixa descontado, análise ações, ranking ações bolsa, melhores ações B3, ações subvalorizadas, análise preditiva IA, screening ações, valuation ações, ROE ações, P/L ações" />
-        <meta property="og:title" content="Rankings de Ações B3 - 8 Modelos de Análise Fundamentalista | Preço Justo AI" />
-        <meta property="og:description" content="Encontre as melhores ações da B3 e BDRs com 8 modelos de análise fundamentalista. De Graham a Inteligência Artificial: escolha a estratégia ideal para seu perfil." />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://precojusto.ai/ranking" />
-        <meta property="og:site_name" content="Preço Justo AI" />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Rankings de Ações B3 - 8 Modelos de Análise Fundamentalista | Preço Justo AI" />
-        <meta name="twitter:description" content="Encontre as melhores ações da B3 e BDRs com 8 modelos de análise fundamentalista. De Graham a Inteligência Artificial." />
-        <link rel="canonical" href="https://precojusto.ai/ranking" />
-        <meta name="robots" content="index, follow" />
-      </Head>
-
-      {/* Hero compacto */}
-      <section className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 py-4 sm:py-6">
-        <div className="container mx-auto max-w-7xl">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
-                <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold leading-tight">
-                  Rankings de Ações
-                </h1>
-                <p className="text-xs sm:text-sm text-blue-100 hidden sm:block">
-                  8 modelos de análise fundamentalista
-                </p>
-              </div>
-            </div>
-            {!isLoggedIn && (
-              <Link
-                href="/register"
-                className="text-xs sm:text-sm bg-white text-blue-600 hover:bg-blue-50 font-semibold px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg transition-colors shrink-0"
-              >
-                Criar conta grátis
-              </Link>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Wizard */}
-      <div className="container mx-auto max-w-5xl px-4 py-6 sm:py-10">
-        <RankingWizard isLoggedIn={isLoggedIn} />
-
-        {/* Info colapsável abaixo do fold */}
-        <RankingInfoSection />
-      </div>
-
-      {/* Schema Markup SEO */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            "mainEntity": faqs.map(faq => ({
-              "@type": "Question",
-              "name": faq.question,
-              "acceptedAnswer": { "@type": "Answer", "text": faq.answer }
-            }))
-          })
-        }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "WebApplication",
-            "name": "Rankings de Ações B3 - Preço Justo AI",
-            "description": "Ferramenta de análise fundamentalista com 8 modelos para ranking de ações da B3",
-            "url": "https://precojusto.ai/ranking",
-            "applicationCategory": "FinanceApplication",
-            "operatingSystem": "Web",
-            "offers": {
-              "@type": "AggregateOffer",
-              "lowPrice": "0",
-              "highPrice": "39.90",
-              "priceCurrency": "BRL"
-            }
-          })
-        }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "BreadcrumbList",
-            "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": isLoggedIn ? "Dashboard" : "Início", "item": isLoggedIn ? "https://precojusto.ai/dashboard" : "https://precojusto.ai" },
-              { "@type": "ListItem", "position": 2, "name": "Rankings de Ações", "item": "https://precojusto.ai/ranking" }
-            ]
-          })
-        }}
-      />
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <Loader2 className="size-5 animate-spin text-muted-foreground" strokeWidth={1.75} aria-label="Carregando rankings" />
     </div>
   )
 }
 
 export default function RankingPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Carregando rankings...</p>
-        </div>
+    <div className="bg-background">
+      <div className="mx-auto max-w-6xl px-4 pt-6 pb-12 sm:px-6">
+        <PageHeader
+          title="Rankings de ações"
+          description="Modelos de valuation aplicados a ações da B3, BDRs, FIIs e ETFs. Escolha o modelo e ajuste os parâmetros."
+          className="mb-4"
+        />
+
+        <Suspense fallback={<RankingFallback />}>
+          <RankingClient />
+        </Suspense>
+
+        <section aria-labelledby="ranking-faq-title" className="mt-12 border-t border-border pt-8">
+          <SectionHeader id="ranking-faq-title" title="Perguntas frequentes" />
+          <div className="mt-4 max-w-3xl divide-y divide-border border-y border-border">
+            {FAQS.map((faq) => (
+              <details key={faq.question} className="group">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-3 text-sm font-medium text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+                  {faq.question}
+                  <ChevronDown
+                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                  />
+                </summary>
+                <p className="pb-4 text-sm leading-6 text-muted-foreground">{faq.answer}</p>
+              </details>
+            ))}
+          </div>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Fórmulas, premissas e fontes de dados na{" "}
+            <Link href="/metodologia" className="text-foreground underline underline-offset-4 hover:text-brand">
+              metodologia
+            </Link>
+            .
+          </p>
+        </section>
       </div>
-    }>
-      <RankingContent />
-    </Suspense>
+
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+    </div>
   )
 }

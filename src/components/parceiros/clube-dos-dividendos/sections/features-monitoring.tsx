@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { PreviewShell } from '../preview-shell'
 
@@ -28,7 +29,7 @@ const ACTIVE_MONITORS = [
 const CONDITION_GROUPS = [
   {
     label: 'Preço',
-    color: 'bg-blue-50 border-blue-200 text-blue-700',
+    color: 'bg-brand-subtle border-brand/40 text-brand',
     fields: [
       { name: 'Preço abaixo de', value: 'R$ 35,00' },
       { name: 'Preço acima de', value: '—' },
@@ -36,7 +37,7 @@ const CONDITION_GROUPS = [
   },
   {
     label: 'Valuation',
-    color: 'bg-violet-50 border-violet-200 text-violet-700',
+    color: 'bg-brand-subtle border-brand/40 text-brand',
     fields: [
       { name: 'P/L máx.', value: '10' },
       { name: 'P/VP máx.', value: '1,5' },
@@ -44,7 +45,7 @@ const CONDITION_GROUPS = [
   },
   {
     label: 'Dividendos',
-    color: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    color: 'bg-brand-subtle border-brand/40 text-brand',
     fields: [
       { name: 'DY mín.', value: '8%' },
       { name: 'Payout máx.', value: '60%' },
@@ -52,7 +53,7 @@ const CONDITION_GROUPS = [
   },
   {
     label: 'Score / Rentabilidade',
-    color: 'bg-amber-50 border-amber-200 text-amber-700',
+    color: 'bg-warning-subtle border-warning/40 text-warning',
     fields: [
       { name: 'Score mín.', value: '80' },
       { name: 'ROE mín.', value: '15%' },
@@ -62,34 +63,34 @@ const CONDITION_GROUPS = [
 
 export function FeaturesMonitoringSection() {
   return (
-    <section className="bg-white py-20 md:py-28">
+    <section className="bg-background py-20 md:py-28">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-10 lg:flex-row-reverse lg:items-start lg:gap-16">
 
           {/* Description */}
           <div className="lg:w-2/5">
-            <Badge className="mb-3 bg-orange-100 text-orange-700">Alertas Inteligentes</Badge>
-            <h2 className="text-3xl font-extrabold text-slate-900 md:text-4xl">
+            <Badge className="mb-3 bg-warning-subtle text-warning">Alertas inteligentes</Badge>
+            <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
               Alertas automáticos com os seus critérios
             </h2>
-            <p className="mt-4 text-slate-500">
+            <p className="mt-4 text-muted-foreground">
               Monte filtros exatamente como um screening — DY, P/L, P/VP, Score, ROE, Payout, Margem e muito mais — e receba um alerta por e-mail quando qualquer ativo atingir suas condições.
             </p>
             <ul className="mt-6 space-y-2">
               {[
                 'Combine múltiplos indicadores por ativo',
                 'Alertas por e-mail em tempo real',
-                'Monitoramentos ilimitados no PREMIUM',
+                'Monitoramentos ilimitados no Premium',
                 'Parâmetros de valuation, dividendos e rentabilidade',
               ].map((item) => (
-                <li key={item} className="flex items-start gap-2 text-sm text-slate-600">
-                  <span className="mt-0.5 shrink-0 text-emerald-500">✓</span>
+                <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Check className="size-4 shrink-0 mt-0.5 text-brand" strokeWidth={1.75} aria-hidden="true" />
                   {item}
                 </li>
               ))}
             </ul>
             <div className="mt-6">
-              <Badge className="bg-amber-100 text-amber-700">Exclusivo PREMIUM</Badge>
+              <Badge className="bg-warning-subtle text-warning">Exclusivo Premium</Badge>
             </div>
           </div>
 
@@ -98,40 +99,37 @@ export function FeaturesMonitoringSection() {
           <PreviewShell path="/dashboard/monitoramentos-customizados">
 
             {/* Create monitor form */}
-            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-base">
-                  🔔
-                </div>
-                <p className="font-semibold text-slate-800">Novo Monitoramento Customizado</p>
-                <span className="ml-auto rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">PREMIUM</span>
+            <div className="overflow-hidden rounded-lg border border-border shadow-sm">
+              <div className="flex items-center gap-3 border-b border-border bg-surface px-5 py-4">
+                <p className="font-semibold text-foreground">Novo Monitoramento Customizado</p>
+                <span className="ml-auto rounded-full bg-warning-subtle px-2.5 py-0.5 text-xs font-semibold text-warning">Premium</span>
               </div>
 
               <div className="p-5 space-y-4">
                 {/* Asset selected */}
                 <div>
-                  <p className="mb-1.5 text-xs font-semibold text-slate-500">Ativo monitorado</p>
-                  <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">TA</div>
+                  <p className="mb-1.5 text-xs font-semibold text-muted-foreground">Ativo monitorado</p>
+                  <div className="flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-sm font-semibold text-primary-foreground">TA</div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">TAEE11</p>
-                      <p className="text-xs text-slate-400">Transmissora Aliança de Energia</p>
+                      <p className="text-sm font-semibold text-foreground">TAEE11</p>
+                      <p className="text-xs text-muted-foreground">Transmissora Aliança de Energia</p>
                     </div>
-                    <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">Selecionado</span>
+                    <span className="ml-auto rounded-full bg-brand-subtle px-2 py-0.5 text-xs font-medium text-brand">Selecionado</span>
                   </div>
                 </div>
 
                 {/* Condition groups */}
                 <div>
-                  <p className="mb-2 text-xs font-semibold text-slate-500">Critérios de disparo</p>
+                  <p className="mb-2 text-xs font-semibold text-muted-foreground">Critérios de disparo</p>
                   <div className="grid grid-cols-2 gap-2">
                     {CONDITION_GROUPS.map((g) => (
-                      <div key={g.label} className={`rounded-xl border p-3 ${g.color}`}>
+                      <div key={g.label} className={`rounded-lg border p-3 ${g.color}`}>
                         <p className="mb-2 text-xs font-semibold">{g.label}</p>
                         {g.fields.map((f) => (
                           <div key={f.name} className="flex items-center justify-between text-xs">
-                            <span className="text-slate-500">{f.name}</span>
-                            <span className={`font-semibold ${f.value === '—' ? 'text-slate-300' : ''}`}>{f.value}</span>
+                            <span className="text-muted-foreground">{f.name}</span>
+                            <span className={`font-semibold ${f.value === '—' ? 'text-muted-foreground' : ''}`}>{f.value}</span>
                           </div>
                         ))}
                       </div>
@@ -139,49 +137,49 @@ export function FeaturesMonitoringSection() {
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-400">Disparará quando TAEE11 satisfizer <strong>todos</strong> os critérios acima.</p>
+                <p className="text-xs text-muted-foreground">Disparará quando TAEE11 satisfizer <strong>todos</strong> os critérios acima.</p>
               </div>
             </div>
 
             {/* Active monitors list */}
-            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
-              <div className="border-b border-slate-100 bg-slate-50 px-5 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Seus monitoramentos ativos</p>
+            <div className="overflow-hidden rounded-lg border border-border shadow-sm">
+              <div className="border-b border-border bg-surface px-5 py-3">
+                <p className="text-xs font-semibold text-muted-foreground">Seus monitoramentos ativos</p>
               </div>
-              <div className="divide-y divide-slate-100 bg-white">
+              <div className="divide-y divide-border bg-card">
                 {ACTIVE_MONITORS.map((m) => (
-                  <div key={m.ticker} className={`px-5 py-4 ${m.status === 'triggered' ? 'bg-emerald-50/50' : ''}`}>
+                  <div key={m.ticker} className={`px-5 py-4 ${m.status === 'triggered' ? 'bg-brand-subtle' : ''}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
                           {m.ticker.slice(0, 2)}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">{m.ticker}</p>
-                          <p className="text-xs text-slate-400">{m.name}</p>
+                          <p className="text-sm font-semibold text-foreground">{m.ticker}</p>
+                          <p className="text-xs text-muted-foreground">{m.name}</p>
                         </div>
                       </div>
                       <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                         m.status === 'triggered'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-slate-100 text-slate-500'
+                          ? 'bg-brand-subtle text-brand'
+                          : 'bg-muted text-muted-foreground'
                       }`}>
-                        {m.status === 'triggered' ? '🔔 Disparou' : 'Aguardando'}
+                        {m.status === 'triggered' ? 'Disparou' : 'Aguardando'}
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {m.conditions.map((c) => (
-                        <span key={c} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600">
+                        <span key={c} className="rounded-full border border-border bg-card px-2 py-0.5 text-xs text-muted-foreground">
                           {c}
                         </span>
                       ))}
                     </div>
-                    <p className="mt-1.5 text-xs text-slate-400">{m.lastTriggered}</p>
+                    <p className="mt-1.5 text-xs text-muted-foreground">{m.lastTriggered}</p>
                   </div>
                 ))}
               </div>
-              <div className="border-t border-slate-100 bg-slate-50 px-5 py-2 text-right text-xs text-slate-400">
-                Dados ilustrativos · PREMIUM
+              <div className="border-t border-border bg-surface px-5 py-2 text-right text-xs text-muted-foreground">
+                Dados ilustrativos · Premium
               </div>
             </div>
 

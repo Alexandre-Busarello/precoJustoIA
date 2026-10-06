@@ -1,52 +1,54 @@
 'use client'
 
 /**
- * Ben Chat Sidebar - Componente principal do chat do Ben
+ * Chat do Ben em painel lateral (Sheet). Tela cheia no mobile, 448 px no desktop.
+ * Mensagens do usuário em balão neutro; respostas do Ben sem balão, em markdown.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import Image from 'next/image'
+import { usePathname } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  BookOpen,
+  Copy,
+  Crosshair,
+  DollarSign,
+  FileText,
+  GitCompare,
+  Loader2,
+  Plus,
+  Radar,
+  Send,
+  Share2,
+  Sparkles,
+  Target,
+  TrendingUp,
+  X,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react'
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { 
-  useBenConversations, 
-  useCreateBenConversation, 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  useBenConversations,
+  useCreateBenConversation,
   useSendBenMessageStream,
   useBenMemory,
   useBenMessages,
   useShareBenConversation,
   useUnshareBenConversation
 } from '@/hooks/use-ben-chat'
-import { useQueryClient } from '@tanstack/react-query'
-import { usePremiumStatus } from '@/hooks/use-premium-status'
 import { useToast } from '@/hooks/use-toast'
-import { usePathname } from 'next/navigation'
-import { 
-  MessageSquare, 
-  Send, 
-  X, 
-  Loader2,
-  TrendingUp,
-  BookOpen,
-  Target,
-  Plus,
-  Share2,
-  DollarSign,
-  Radar,
-  Sparkles,
-  Activity,
-  BarChart3,
-  GitCompare,
-  Zap,
-  FileText,
-  AlertTriangle,
-  Crosshair
-} from 'lucide-react'
 import { cn } from '@/lib/utils'
-import Image from 'next/image'
+import { formatDate } from '@/lib/format'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { processBenMessageLinks } from '@/lib/ben-link-processor'
 
@@ -57,28 +59,37 @@ interface BenChatSidebarProps {
   forceNewConversation?: boolean // Flag para forçar criação de nova conversa
 }
 
-const ANALISE_FLASH_TEMPLATE = `Faça uma análise "Flash" de [TICKER] em formato de Tweet/Lista.
-Quero apenas os dados crus e diretos:
-1. 💰 Preço Atual vs. Preço Justo (Mostre o % de Upside)
-2. 📉 Status da Análise Técnica (Ex: Sobrecompra/Venda ou Neutro)
-3. 💸 Dividend Yield Projetado (12m)
-4. 🎯 Veredito Final: [COMPRA / AGUARDAR / VENDA]
-Sem textos longos. Use emojis e seja direto.`
+const ANALISE_FLASH_TEMPLATE = `Faça uma análise rápida de [TICKER] em formato de lista curta, só com os dados:
+1. Preço atual vs. preço justo estimado (com o % de diferença)
+2. Leitura da análise técnica (sobrecomprado, sobrevendido ou neutro)
+3. Dividend yield projetado (12m)
+4. Posição em relação ao preço justo: abaixo, dentro da faixa estimada ou acima
+Sem textos longos e sem emojis.`
 
-const RESUMO_EXECUTIVO_TEMPLATE = `Resumo executivo de [TICKER] em 5 bullet points: preço justo, upside, dividend yield, riscos principais, veredito. Seja direto.`
+const RESUMO_EXECUTIVO_TEMPLATE = `Resumo executivo de [TICKER] em 5 tópicos: preço justo estimado, diferença para o preço atual, dividend yield, riscos principais e posição em relação ao preço justo. Seja direto.`
 
 const RISCOS_OPORTUNIDADES_TEMPLATE = `Liste os 3 principais riscos e 3 principais oportunidades de [TICKER] de forma objetiva.`
 
-const SETUP_COMPRA_TEMPLATE = `Analise [TICKER] e indique: melhor ponto de entrada, alvos de preço e stop loss sugerido.`
+const NIVEIS_TECNICOS_TEMPLATE = `Analise [TICKER] e indique os principais suportes, resistências e a faixa de preço justo estimada.`
 
 const DIVIDENDOS_1MIN_TEMPLATE = `Resumo rápido dos dividendos de [TICKER]: yield projetado 12m, próximos pagamentos, sustentabilidade (1 parágrafo).`
 
 interface QuickAction {
   label: string
   prompt: string
-  icon: any
+  icon: LucideIcon
   requiresTicker?: boolean
   promptTemplate?: string
+}
+
+function tickerAction(label: string, template: string, icon: LucideIcon, ticker?: string): QuickAction {
+  return {
+    label,
+    prompt: ticker ? template.replace(/\[TICKER\]/g, ticker) : template,
+    icon,
+    requiresTicker: true,
+    promptTemplate: template,
+  }
 }
 
 /**
@@ -95,11 +106,11 @@ function generateQuickActions(
 
   // AÇÕES QUE PRECISAM DE TICKER - Prompts inteligentes (prioridade alta)
   const tickerDependentActions = (ticker?: string): QuickAction[] => [
-    { label: 'Análise Flash', prompt: (ticker ? ANALISE_FLASH_TEMPLATE.replace(/\[TICKER\]/g, ticker) : ANALISE_FLASH_TEMPLATE), icon: Zap, requiresTicker: true, promptTemplate: ANALISE_FLASH_TEMPLATE },
-    { label: 'Resumo Executivo', prompt: (ticker ? RESUMO_EXECUTIVO_TEMPLATE.replace(/\[TICKER\]/g, ticker) : RESUMO_EXECUTIVO_TEMPLATE), icon: FileText, requiresTicker: true, promptTemplate: RESUMO_EXECUTIVO_TEMPLATE },
-    { label: 'Riscos e Oportunidades', prompt: (ticker ? RISCOS_OPORTUNIDADES_TEMPLATE.replace(/\[TICKER\]/g, ticker) : RISCOS_OPORTUNIDADES_TEMPLATE), icon: AlertTriangle, requiresTicker: true, promptTemplate: RISCOS_OPORTUNIDADES_TEMPLATE },
-    { label: 'Setup de Compra', prompt: (ticker ? SETUP_COMPRA_TEMPLATE.replace(/\[TICKER\]/g, ticker) : SETUP_COMPRA_TEMPLATE), icon: Crosshair, requiresTicker: true, promptTemplate: SETUP_COMPRA_TEMPLATE },
-    { label: 'Dividendos em 1 min', prompt: (ticker ? DIVIDENDOS_1MIN_TEMPLATE.replace(/\[TICKER\]/g, ticker) : DIVIDENDOS_1MIN_TEMPLATE), icon: DollarSign, requiresTicker: true, promptTemplate: DIVIDENDOS_1MIN_TEMPLATE },
+    tickerAction('Análise rápida', ANALISE_FLASH_TEMPLATE, Zap, ticker),
+    tickerAction('Resumo executivo', RESUMO_EXECUTIVO_TEMPLATE, FileText, ticker),
+    tickerAction('Riscos e oportunidades', RISCOS_OPORTUNIDADES_TEMPLATE, AlertTriangle, ticker),
+    tickerAction('Níveis técnicos', NIVEIS_TECNICOS_TEMPLATE, Crosshair, ticker),
+    tickerAction('Dividendos em 1 min', DIVIDENDOS_1MIN_TEMPLATE, DollarSign, ticker),
   ]
 
   // Páginas com ticker: action, bdr, fii, etf, technical_analysis, dividend_radar
@@ -110,7 +121,7 @@ function generateQuickActions(
   if (hasTickerContext && tickerContext) {
     actions.push(...tickerDependentActions(tickerContext))
     actions.push(
-      { label: `Análise Técnica ${tickerContext}`, prompt: `Faça uma análise técnica completa da ${displayName} (${tickerContext})`, icon: TrendingUp },
+      { label: `Análise técnica ${tickerContext}`, prompt: `Faça uma análise técnica completa da ${displayName} (${tickerContext})`, icon: TrendingUp },
       { label: `Score ${tickerContext}`, prompt: `Qual é o score atual e os principais fundamentos da ${displayName} (${tickerContext})?`, icon: BarChart3 },
       { label: `Comparar ${tickerContext}`, prompt: `Compare a ${displayName} (${tickerContext}) com seus principais concorrentes do setor`, icon: GitCompare }
     )
@@ -119,17 +130,17 @@ function generateQuickActions(
   // Radar (sem ticker)
   if (pageContext?.pageType === 'radar') {
     actions.push(
-      { label: 'Meu Radar', prompt: 'Mostre uma análise consolidada das ações que estou monitorando no meu radar', icon: Radar },
-      { label: 'Oportunidades no Radar', prompt: 'Quais são as melhores oportunidades de investimento entre as ações do meu radar?', icon: Sparkles },
-      { label: 'Status do Radar', prompt: 'Como está o desempenho geral das ações do meu radar hoje?', icon: Activity }
+      { label: 'Meu radar', prompt: 'Mostre uma análise consolidada das ações que estou monitorando no meu radar', icon: Radar },
+      { label: 'Destaques do radar', prompt: 'Quais ações do meu radar estão mais abaixo do preço justo estimado?', icon: Sparkles },
+      { label: 'Status do radar', prompt: 'Como está o desempenho geral das ações do meu radar hoje?', icon: Activity }
     )
   }
 
   // Dashboard - pool de ações (IBOV, Sentimento + todas as tickerDependentActions)
   if (pageContext?.pageType === 'dashboard') {
     const dashboardPool: QuickAction[] = [
-      { label: 'Projeção IBOV', prompt: 'Qual é a projeção do IBOVESPA para esta semana e este mês?', icon: TrendingUp },
-      { label: 'Sentimento de Mercado', prompt: 'Como está o sentimento geral do mercado brasileiro hoje?', icon: BarChart3 },
+      { label: 'Projeção do IBOV', prompt: 'Qual é a projeção do IBOVESPA para esta semana e este mês?', icon: TrendingUp },
+      { label: 'Sentimento do mercado', prompt: 'Como está o sentimento geral do mercado brasileiro hoje?', icon: BarChart3 },
       ...tickerDependentActions()
     ]
     actions.push(...dashboardPool)
@@ -174,10 +185,10 @@ function generateQuickActions(
   // Ações padrão quando poucas ações
   if (actions.length < 2 && (!pageContext || !['action', 'bdr', 'fii', 'etf', 'radar'].includes(pageContext.pageType))) {
     return [
-      { label: 'Projeção IBOV', prompt: 'Qual é a projeção atual do IBOVESPA para esta semana e este mês?', icon: TrendingUp },
-      { label: 'Sentimento de Mercado', prompt: 'Como está o sentimento geral do mercado brasileiro?', icon: BarChart3 },
-      { label: 'Análise Flash', prompt: ANALISE_FLASH_TEMPLATE, icon: Zap, requiresTicker: true, promptTemplate: ANALISE_FLASH_TEMPLATE },
-      { label: 'Resumo Executivo', prompt: RESUMO_EXECUTIVO_TEMPLATE, icon: FileText, requiresTicker: true, promptTemplate: RESUMO_EXECUTIVO_TEMPLATE },
+      { label: 'Projeção do IBOV', prompt: 'Qual é a projeção atual do IBOVESPA para esta semana e este mês?', icon: TrendingUp },
+      { label: 'Sentimento do mercado', prompt: 'Como está o sentimento geral do mercado brasileiro?', icon: BarChart3 },
+      tickerAction('Análise rápida', ANALISE_FLASH_TEMPLATE, Zap),
+      tickerAction('Resumo executivo', RESUMO_EXECUTIVO_TEMPLATE, FileText),
       ...actions
     ]
   }
@@ -251,6 +262,10 @@ function extractBasicPageContext(pathname: string): { pageType: string; ticker?:
   return { pageType: 'other' }
 }
 
+function buildShareUrl(shareToken: string) {
+  return `${window.location.origin}/share/ben/${shareToken}`
+}
+
 export function BenChatSidebar({ open, onOpenChange, initialConversationId, forceNewConversation = false }: BenChatSidebarProps) {
   const pathname = usePathname()
   const queryClient = useQueryClient()
@@ -270,12 +285,11 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
   const unshareConversation = useUnshareBenConversation()
   const { data: memoryData } = useBenMemory(pathname)
   const { data: messages, refetch: refetchMessages } = useBenMessages(selectedConversationId)
-  const { isPremium } = usePremiumStatus()
   const { toast } = useToast()
   
-  // Estado para modal de compartilhamento
+  // Link público da conversa (painel de compartilhamento)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
-  const [showShareModal, setShowShareModal] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
   // Input de ticker para ações que precisam (inline na seção de quick actions)
   const [tickerInput, setTickerInput] = useState('')
@@ -291,19 +305,27 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
     }
   }, [pageContext?.ticker])
 
-  // Atualizar conversa selecionada quando initialConversationId mudar
+  // Se forceNewConversation é true MAS ainda não foi tratado (hasHandledForceNew=false), limpar selectedConversationId.
+  // Se já foi tratado (hasHandledForceNew=true), não limpar para evitar race condition após criar conversa.
   useEffect(() => {
-    // Se forceNewConversation é true MAS ainda não foi tratado (hasHandledForceNew=false), limpar selectedConversationId
-    // Se já foi tratado (hasHandledForceNew=true), não limpar para evitar race condition após criar conversa
     if (forceNewConversation && selectedConversationId && !hasHandledForceNew) {
       setSelectedConversationId(null)
+    }
+  }, [selectedConversationId, forceNewConversation, hasHandledForceNew])
+
+  // Aplica initialConversationId só quando o sheet abre ou quando o valor muda. Depois disso a escolha
+  // é do usuário (Select de conversas e botão '+'), sem voltar para a conversa inicial.
+  const appliedInitialConversationRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!open) {
+      appliedInitialConversationRef.current = null
       return
     }
-    
-    if (initialConversationId && initialConversationId !== selectedConversationId && !forceNewConversation) {
-      setSelectedConversationId(initialConversationId)
-    }
-  }, [initialConversationId, selectedConversationId, forceNewConversation, hasHandledForceNew])
+    if (!initialConversationId || forceNewConversation) return
+    if (appliedInitialConversationRef.current === initialConversationId) return
+    appliedInitialConversationRef.current = initialConversationId
+    setSelectedConversationId(initialConversationId)
+  }, [open, initialConversationId, forceNewConversation])
 
   // Resetar flag quando forceNewConversation mudar para false
   useEffect(() => {
@@ -320,13 +342,8 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
     // Não fazer nada se o sidebar não está aberto
     if (!open) return
 
-    // Se há initialConversationId e não é para forçar nova, usar o initialConversationId
-    if (initialConversationId !== undefined && !forceNewConversation) {
-      if (initialConversationId !== selectedConversationId) {
-        setSelectedConversationId(initialConversationId)
-      }
-      return
-    }
+    // Com initialConversationId, a seleção inicial vem do efeito acima; aqui não há nada a criar ou escolher
+    if (initialConversationId !== undefined && !forceNewConversation) return
     
     // Não fazer nada se já está criando
     if (isCreatingConversation) return
@@ -393,99 +410,70 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
     setIsStreaming(false)
     streamingMessageIdRef.current = null
     setMessage('')
+    setShareOpen(false)
   }, [selectedConversationId])
 
-  // Limpar mensagem temporária quando a mensagem final aparecer na lista
-  useEffect(() => {
-    if (!streamingMessage || !messages || !streamingMessageIdRef.current || isStreaming) return
+  const isBusy = !selectedConversationId || sendMessage.isPending || isStreaming
+  const isCreating = isCreatingConversation || createConversation.isPending
 
-    // Verificar se a mensagem final já está na lista
-    // Comparar pelo conteúdo (últimas 150 caracteres para melhor matching)
-    const lastMessage = messages[messages.length - 1]
-    if (lastMessage && lastMessage.role === 'ASSISTANT') {
-      // Normalizar ambos os textos para comparação (remover espaços extras, quebras de linha)
-      const normalizeText = (text: string) => text.replace(/\s+/g, ' ').trim().toLowerCase()
-      const streamingNormalized = normalizeText(streamingMessage)
-      const messageNormalized = normalizeText(lastMessage.content)
-      
-      // Verificar se pelo menos 80% do conteúdo da mensagem temporária está na mensagem final
-      const matchThreshold = Math.max(streamingNormalized.length * 0.8, 50)
-      const matchingLength = Math.min(streamingNormalized.length, messageNormalized.length)
-      
-      if (matchingLength >= matchThreshold && messageNormalized.includes(streamingNormalized.slice(0, matchingLength))) {
-        // Aguardar um pouco para garantir renderização completa
-        setTimeout(() => {
-          setStreamingMessage('')
-          setIsStreaming(false)
-          streamingMessageIdRef.current = null
-        }, 300)
-      }
-    }
-  }, [messages, streamingMessage, isStreaming])
+  /** Envia um texto para o Ben com streaming. `restoreOnError` devolve o texto ao campo se o envio falhar. */
+  const sendPrompt = (text: string, { restoreOnError = false }: { restoreOnError?: boolean } = {}) => {
+    if (!selectedConversationId) return
 
-  const handleSendMessage = () => {
-    if (!message.trim() || !selectedConversationId || sendMessage.isPending || isStreaming) return
-
-    const messageToSend = message.trim()
-    // Limpar input imediatamente
     setMessage('')
     setStreamingMessage('')
     setIsStreaming(true)
-    streamingMessageIdRef.current = `streaming-${Date.now()}`
+    const streamId = `streaming-${Date.now()}`
+    streamingMessageIdRef.current = streamId
+
+    // Só limpa se este ainda for o stream ativo (um envio novo não pode ser apagado pelo refetch do anterior)
+    const resetStreaming = () => {
+      if (streamingMessageIdRef.current !== streamId) return
+      setIsStreaming(false)
+      setStreamingMessage('')
+      streamingMessageIdRef.current = null
+    }
 
     sendMessage.mutate(
-      { 
-        conversationId: selectedConversationId, 
-        message: messageToSend,
+      {
+        conversationId: selectedConversationId,
+        message: text,
         pageContext,
         onChunk: (chunk) => {
           if (chunk.type === 'text' && chunk.data) {
-            // NOVA ABORDAGEM: chunks são strings simples controladas pelo backend
-            // Não precisamos mais de lógica complexa de espaçamento
+            // Os chunks chegam como texto pronto do backend
             const newChunk = String(chunk.data)
             flushSync(() => {
               setStreamingMessage(prev => prev + newChunk)
             })
-            // Scroll após renderização
             requestAnimationFrame(() => {
               messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
             })
           } else if (chunk.type === 'done') {
-            // Quando terminar, limpar mensagem de streaming imediatamente
-            // A mensagem final será exibida do banco após o refetch
-            setStreamingMessage('')
+            // Mantém a resposta na tela até a versão salva chegar pelo refetch; só então remove a temporária
             setIsStreaming(false)
-            streamingMessageIdRef.current = null
-            // Fazer refetch para carregar a mensagem final do banco
             setTimeout(() => {
-              refetchMessages()
+              void Promise.resolve(refetchMessages()).finally(resetStreaming)
             }, 100)
           } else if (chunk.type === 'error') {
-            setIsStreaming(false)
-            setStreamingMessage('')
-            streamingMessageIdRef.current = null
+            resetStreaming()
             console.error('Erro no streaming:', chunk.data)
           }
         }
       },
       {
         onSuccess: (result) => {
-          setMessage('')
-          // Se limite foi atingido, refetch mensagens para mostrar a resposta do Ben
+          // Se o limite foi atingido, a resposta do Ben já está salva
           if (result?.limitReached) {
             refetchMessages()
           }
         },
-        onError: (error: any) => {
-          setIsStreaming(false)
-          setStreamingMessage('')
-          streamingMessageIdRef.current = null
-          
-          // Se houver erro, restaurar a mensagem
-          setMessage(messageToSend)
+        onError: (error: unknown) => {
+          resetStreaming()
+          if (restoreOnError) setMessage(text)
           toast({
-            title: 'Erro',
-            description: error?.message || 'Erro ao enviar mensagem. Tente novamente.',
+            title: 'Não foi possível enviar',
+            description: error instanceof Error && error.message ? error.message : 'Tente novamente em instantes.',
             variant: 'destructive'
           })
         }
@@ -493,8 +481,14 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
     )
   }
 
+  const handleSendMessage = () => {
+    const text = message.trim()
+    if (!text || isBusy) return
+    sendPrompt(text, { restoreOnError: true })
+  }
+
   const handleQuickAction = (action: QuickAction) => {
-    if (!selectedConversationId || sendMessage.isPending || isStreaming) return
+    if (isBusy) return
 
     let promptToSend = action.prompt
     if (action.requiresTicker && action.promptTemplate) {
@@ -503,73 +497,30 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
         tickerInputRef.current?.focus()
         tickerInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
         toast({
-          title: 'Ticker necessário',
-          description: 'Informe o ticker acima (ex: PETR4, VALE3) para usar esta ação.',
+          title: 'Informe um ticker',
+          description: 'Digite o ticker no campo acima (ex.: PETR4, VALE3) para usar este atalho.',
           variant: 'destructive'
         })
         return
       }
       promptToSend = action.promptTemplate.replace(/\[TICKER\]/g, ticker)
     }
-    
-    // Limpar input antes de enviar
-    setMessage('')
-    setStreamingMessage('')
-    setIsStreaming(true)
-    streamingMessageIdRef.current = `streaming-${Date.now()}`
-    
-    // Enviar automaticamente com streaming
-    sendMessage.mutate(
-      { 
-        conversationId: selectedConversationId, 
-        message: promptToSend,
-        pageContext,
-        onChunk: (chunk) => {
-          if (chunk.type === 'text' && chunk.data) {
-            // NOVA ABORDAGEM: chunks são strings simples controladas pelo backend
-            // Não precisamos mais de lógica complexa de espaçamento
-            const newChunk = String(chunk.data)
-            flushSync(() => {
-              setStreamingMessage(prev => prev + newChunk)
-            })
-            requestAnimationFrame(() => {
-              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-            })
-          } else if (chunk.type === 'done') {
-            setIsStreaming(false)
-            refetchMessages()
-          } else if (chunk.type === 'error') {
-            setIsStreaming(false)
-            setStreamingMessage('')
-            streamingMessageIdRef.current = null
-          }
-        }
-      },
-      {
-        onSuccess: () => {
-          setMessage('')
-        }
-      }
-    )
+
+    sendPrompt(promptToSend)
   }
 
   const handleNewConversation = () => {
-    // Limpar todo o estado relacionado a mensagens e streaming
     const previousConversationId = selectedConversationId
-    
-    // Limpar estado de streaming
+
     setStreamingMessage('')
     setIsStreaming(false)
     streamingMessageIdRef.current = null
-    
-    // Limpar mensagem do input
     setMessage('')
-    
-    // Invalidar cache de mensagens da conversa anterior se houver
+
     if (previousConversationId) {
       queryClient.invalidateQueries({ queryKey: ['ben-messages', previousConversationId] })
     }
-    
+
     setIsCreatingConversation(true)
     createConversation.mutate(undefined, {
       onSuccess: (conversation) => {
@@ -582,43 +533,54 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
     })
   }
 
-  const handleShare = async () => {
-    if (!selectedConversationId) return
-    
+  /** Gera o link público (só na primeira vez). O painel já está aberto e mostra o estado de carregamento. */
+  const generateShareLink = async (conversationId: string) => {
     try {
-      const result = await shareConversation.mutateAsync(selectedConversationId)
-      setShareUrl(result.shareUrl)
-      setShowShareModal(true)
+      const result = await shareConversation.mutateAsync(conversationId)
+      // Monta o link com a origem atual (o shareUrl do servidor pode usar outra origem)
+      setShareUrl(buildShareUrl(result.shareToken))
     } catch (error) {
       console.error('Erro ao compartilhar:', error)
+      setShareOpen(false)
+      toast({ title: 'Não foi possível gerar o link', description: 'Tente novamente em instantes.', variant: 'destructive' })
+    }
+  }
+
+  const handleShareOpenChange = (nextOpen: boolean) => {
+    setShareOpen(nextOpen)
+    if (!nextOpen || !selectedConversationId) return
+    if (!selectedConversation?.shareToken && !shareConversation.isPending) {
+      void generateShareLink(selectedConversationId)
     }
   }
 
   const handleUnshare = async () => {
     if (!selectedConversationId) return
-    
     try {
       await unshareConversation.mutateAsync(selectedConversationId)
       setShareUrl(null)
-      setShowShareModal(false)
+      setShareOpen(false)
+      toast({ title: 'Link desativado', description: 'A conversa não está mais pública.' })
     } catch (error) {
       console.error('Erro ao descompartilhar:', error)
+      toast({ title: 'Não foi possível desativar o link', description: 'Tente novamente em instantes.', variant: 'destructive' })
     }
   }
 
-  const handleCopyLink = () => {
-    if (shareUrl) {
-      navigator.clipboard.writeText(shareUrl)
-      // TODO: Mostrar toast de sucesso
+  const handleCopyLink = async () => {
+    if (!shareUrl) return
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      toast({ title: 'Link copiado' })
+    } catch {
+      toast({ title: 'Não foi possível copiar', description: 'Selecione o link e copie manualmente.', variant: 'destructive' })
     }
   }
 
-  // Gerar Quick Actions baseadas na memória, mensagens da conversa e contexto da página
-  const baseQuickActions = memoryData?.memories && memoryData.memories.length > 0
-    ? generateQuickActions(memoryData.memories, messages || [], pageContext)
-    : generateQuickActions([], messages || [], pageContext)
+  // Atalhos baseados na memória, nas mensagens da conversa e no contexto da página
+  const baseQuickActions = generateQuickActions(memoryData?.memories ?? [], messages || [], pageContext)
 
-  // Dashboard: mostrar apenas 3 ações aleatórias para não poluir a tela
+  // Dashboard: só 3 atalhos sorteados para não poluir a tela
   const dashboardActionsRef = useRef<QuickAction[] | null>(null)
   const quickActions = (() => {
     if (pageContext?.pageType === 'dashboard' && baseQuickActions.length > 3) {
@@ -632,177 +594,181 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
     return baseQuickActions
   })()
 
-  // Resolver ticker para ações que precisam (input > pageContext > mensagens)
+  // Ticker para atalhos que precisam dele (campo > página > mensagens)
   const resolveTicker = (): string | null => {
     const fromInput = tickerInput?.trim().toUpperCase()
     if (fromInput) return fromInput
     if (pageContext?.ticker) return pageContext.ticker
-    const mentioned = (messages || []).filter(m => m.role === 'USER').flatMap(m => 
+    const mentioned = (messages || []).filter(m => m.role === 'USER').flatMap(m =>
       (m.content?.match(/\b([A-Z]{4}\d{1,2})\b/g) || [])
     )
     return mentioned[mentioned.length - 1] || null
   }
 
   const selectedConversation = conversations?.find(c => c.id === selectedConversationId)
-  
-  // Atualizar shareUrl quando selectedConversation mudar
+  const isShared = Boolean(selectedConversation?.shareToken)
+
   useEffect(() => {
     if (selectedConversation?.shareToken) {
-      const url = `${window.location.origin}/share/ben/${selectedConversation.shareToken}`
-      setShareUrl(url)
+      setShareUrl(buildShareUrl(selectedConversation.shareToken))
     } else {
       setShareUrl(null)
     }
   }, [selectedConversation?.shareToken])
 
+  const hasMessages = Boolean(messages && messages.length > 0)
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:w-[500px] p-0 flex flex-col">
-        <SheetHeader className="px-4 pt-4 pb-2 border-b">
-          <div className="flex items-center justify-between gap-2">
-            <SheetTitle className="flex items-center gap-2 flex-1 min-w-0">
-              <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-gradient-to-br from-blue-500 to-violet-500 p-0.5 flex-shrink-0">
-                <Image 
-                  src="/ben.png" 
-                  alt="Ben" 
-                  width={32} 
-                  height={32} 
-                  className="rounded-full w-full h-full object-cover"
-                />
-              </div>
-              <span className="truncate text-base sm:text-lg">Ben - Assistente IA</span>
-            </SheetTitle>
-            <div className="flex items-center gap-1 relative">
-              {selectedConversationId && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={selectedConversation?.shareToken ? handleUnshare : handleShare}
-                    disabled={shareConversation.isPending || unshareConversation.isPending}
-                    className={cn(
-                      "flex-shrink-0",
-                      selectedConversation?.shareToken && "text-violet-600 dark:text-violet-400"
-                    )}
-                    title={selectedConversation?.shareToken ? "Descompartilhar conversa" : "Compartilhar conversa"}
-                  >
-                    <Share2 className={cn("w-4 h-4", selectedConversation?.shareToken && "fill-current")} />
-                  </Button>
-                  {showShareModal && shareUrl && (
-                    <div className="absolute top-12 right-0 z-50 bg-background border rounded-lg shadow-lg p-4 min-w-[300px]">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-sm">Link compartilhado</h3>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setShowShareModal(false)}
-                          className="h-6 w-6"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <div className="flex gap-2">
-                        <Input
-                          value={shareUrl}
-                          readOnly
-                          className="flex-1 text-xs"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={handleCopyLink}
-                        >
-                          Copiar
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="w-full gap-0 p-0 sm:max-w-md"
+        // Com o painel do link aberto, o Esc fecha só o painel (e não o chat inteiro)
+        onEscapeKeyDown={(event) => {
+          if (!shareOpen) return
+          event.preventDefault()
+          setShareOpen(false)
+        }}
+      >
+        <SheetHeader className="flex-row items-center gap-3 border-b border-border px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3">
+          <BenAvatar />
+          <div className="min-w-0 flex-1">
+            <SheetTitle className="truncate text-base font-semibold">Ben</SheetTitle>
+            <SheetDescription className="truncate text-xs">Assistente de análise com IA</SheetDescription>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {selectedConversationId && (
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={handleNewConversation}
-                disabled={isCreatingConversation || createConversation.isPending}
-                className="flex-shrink-0"
-                title="Nova conversa"
+                onClick={() => handleShareOpenChange(!shareOpen)}
+                disabled={unshareConversation.isPending}
+                aria-expanded={shareOpen}
+                aria-controls="ben-share-panel"
+                aria-label={isShared ? 'Link público da conversa' : 'Compartilhar conversa'}
+                className={cn((isShared || shareOpen) && 'text-brand')}
               >
-                {isCreatingConversation || createConversation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Plus className="w-4 h-4" />
-                )}
+                <Share2 className="size-4" strokeWidth={1.75} />
               </Button>
-            </div>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleNewConversation}
+              disabled={isCreating}
+              aria-label="Nova conversa"
+              title="Nova conversa"
+            >
+              {isCreating ? (
+                <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
+              ) : (
+                <Plus className="size-4" strokeWidth={1.75} />
+              )}
+            </Button>
+            <SheetClose asChild>
+              <Button variant="ghost" size="icon" aria-label="Fechar">
+                <X className="size-5" strokeWidth={1.75} />
+              </Button>
+            </SheetClose>
           </div>
         </SheetHeader>
 
-        <div className="flex-1 flex flex-col min-h-0">
-          {/* Lista de conversas */}
-          {conversations && conversations.length > 0 && (
-            <div className="border-b px-4 py-2">
-              <div className="flex gap-2">
-                <select
-                  value={selectedConversationId || ''}
-                  onChange={(e) => {
-                    setSelectedConversationId(e.target.value)
-                    setMessage('') // Limpar input ao trocar de conversa
-                  }}
-                  className="flex-1 px-3 py-2 rounded-md border bg-background text-sm min-w-0"
-                >
-                  {conversations.map(conv => (
-                    <option key={conv.id} value={conv.id}>
-                      {conv.title} ({conv.messageCount} mensagens)
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleNewConversation}
-                  disabled={isCreatingConversation || createConversation.isPending}
-                  className="flex-shrink-0"
-                  title="Nova conversa"
-                >
-                  {isCreatingConversation || createConversation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Plus className="w-4 h-4" />
-                  )}
-                </Button>
+        {shareOpen && selectedConversationId && (
+          <section id="ben-share-panel" aria-label="Link público" className="space-y-3 border-b border-border bg-surface px-4 py-3">
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1 space-y-1">
+                <h2 className="text-sm font-medium text-foreground">Link público</h2>
+                <p className="text-xs text-muted-foreground">Qualquer pessoa com o link pode ler esta conversa.</p>
               </div>
+              <Button variant="ghost" size="icon" onClick={() => setShareOpen(false)} aria-label="Fechar link público" className="-mt-2 -mr-2 shrink-0">
+                <X className="size-4" strokeWidth={1.75} />
+              </Button>
+            </div>
+            {shareUrl ? (
+              <>
+                <div className="flex gap-2">
+                  <Input value={shareUrl} readOnly aria-label="Link da conversa" className="min-w-0 flex-1" onFocus={(e) => e.currentTarget.select()} />
+                  <Button size="sm" onClick={handleCopyLink} className="h-11 md:h-9">
+                    <Copy className="size-4" strokeWidth={1.75} />
+                    Copiar
+                  </Button>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleUnshare}
+                  disabled={unshareConversation.isPending}
+                  className="h-11 w-full text-muted-foreground md:h-9"
+                >
+                  Desativar link
+                </Button>
+              </>
+            ) : (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+                <Loader2 className="size-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />
+                Gerando link…
+              </p>
+            )}
+          </section>
+        )}
+
+        <div className="flex min-h-0 flex-1 flex-col">
+          {conversations && conversations.length > 0 && (
+            <div className="border-b border-border px-4 py-2">
+              <Select
+                value={selectedConversationId ?? undefined}
+                onValueChange={(value) => {
+                  setSelectedConversationId(value)
+                  setMessage('')
+                }}
+              >
+                <SelectTrigger aria-label="Conversa" className="w-full min-w-0 [&>span]:truncate">
+                  <SelectValue placeholder="Selecione uma conversa" />
+                </SelectTrigger>
+                <SelectContent className="max-w-[min(26rem,calc(100vw-2rem))]">
+                  {conversations.map(conv => (
+                    <SelectItem key={conv.id} value={conv.id} className="min-w-0">
+                      <span className="block min-w-0 truncate">
+                        {conv.title || 'Conversa sem título'} · {conv.messageCount}{' '}
+                        {conv.messageCount === 1 ? 'mensagem' : 'mensagens'}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 
-          {/* Quick Actions - sempre mostrar */}
-          <div className="px-4 py-2 border-b bg-muted/30">
-            <p className="text-xs text-muted-foreground mb-2 font-medium">Ações Rápidas</p>
-            {/* Input de ticker inline - para ações que precisam (Análise Flash, Resumo Executivo, etc) */}
-            <div className="flex items-center gap-2 mb-2">
-              <label htmlFor="quick-action-ticker" className="text-xs text-muted-foreground whitespace-nowrap">
-                Ticker:
+          <div className="space-y-2 border-b border-border px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <label htmlFor="quick-action-ticker" className="shrink-0 text-xs font-medium text-muted-foreground">
+                Atalhos para
               </label>
               <Input
                 ref={tickerInputRef}
                 id="quick-action-ticker"
-                placeholder="Ex: PETR4, VALE3"
+                placeholder="Ex.: PETR4"
                 value={tickerInput}
                 onChange={(e) => setTickerInput(e.target.value.toUpperCase())}
-                className="h-7 text-xs max-w-[120px]"
+                autoCapitalize="characters"
+                autoComplete="off"
+                className="w-40 placeholder:normal-case"
               />
             </div>
-            <div className="flex flex-wrap gap-2">
-              {quickActions.map((action, idx) => {
+            <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+              {quickActions.map((action) => {
                 const Icon = action.icon
                 return (
                   <Button
-                    key={idx}
+                    key={action.label}
                     variant="outline"
                     size="sm"
                     onClick={() => handleQuickAction(action)}
-                    className="text-xs"
-                    disabled={!selectedConversationId || sendMessage.isPending || isStreaming}
+                    disabled={isBusy}
+                    className="shrink-0 font-normal"
                   >
-                    <Icon className="w-3 h-3 mr-1" />
+                    <Icon className="size-4 text-muted-foreground" strokeWidth={1.75} />
                     {action.label}
                   </Button>
                 )
@@ -810,186 +776,132 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
             </div>
           </div>
 
-          {/* Área de mensagens */}
-          <ScrollArea className="flex-1 px-4 py-4">
-            <div className="space-y-4 min-w-0 w-full">
-              {/* Mostrar mensagem inicial e mensagens apenas se há conversa selecionada */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className="w-full min-w-0 space-y-5 px-4 py-4">
               {selectedConversationId && (
                 <>
-                  {/* Mensagem de boas-vindas (apenas se não houver mensagens) */}
-                  {(!messages || messages.length === 0) && (
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-blue-500 to-violet-500 p-0.5">
-                        <Image 
-                          src="/ben.png" 
-                          alt="Ben" 
-                          width={32} 
-                          height={32} 
-                          className="rounded-full w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <div className="bg-muted rounded-lg p-3">
-                          <p className="text-sm">
-                            Olá! Sou o Ben, seu assistente de análise fundamentalista. 
-                            Como posso ajudá-lo hoje?
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                  {!hasMessages && (
+                    <AssistantMessage>
+                      <p>
+                        Olá, sou o Ben, assistente de análise fundamentalista. Pergunte sobre um ativo, um indicador
+                        ou uma estratégia.
+                      </p>
+                    </AssistantMessage>
                   )}
 
-                  {/* Mensagens da conversa */}
-                  {messages && messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={cn(
-                        'flex items-start gap-3',
-                        msg.role === 'USER' && 'flex-row-reverse'
-                      )}
-                    >
-                      {msg.role === 'ASSISTANT' && (
-                        <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-blue-500 to-violet-500 p-0.5">
-                          <Image 
-                            src="/ben.png" 
-                            alt="Ben" 
-                            width={32} 
-                            height={32} 
-                            className="rounded-full w-full h-full object-cover"
-                          />
+                  {messages?.map((msg) =>
+                    msg.role === 'USER' ? (
+                      <div key={msg.id} className="flex flex-col items-end gap-1">
+                        <div className="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm leading-6 whitespace-pre-wrap break-words text-foreground">
+                          {msg.content}
                         </div>
-                      )}
-                      {msg.role === 'USER' && (
-                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                          <MessageSquare className="w-5 h-5" />
-                        </div>
-                      )}
-                      <div className={cn(
-                        'flex-1 min-w-0',
-                        msg.role === 'USER' && 'text-right'
-                      )}>
-                        <div className={cn(
-                          'rounded-lg p-3',
-                          msg.role === 'ASSISTANT' 
-                            ? 'bg-muted' 
-                            : 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-                        )}>
-                          {msg.role === 'ASSISTANT' ? (
-                            <div className="prose prose-sm max-w-none dark:prose-invert">
-                              <MarkdownRenderer 
-                                content={processBenMessageLinks(msg.content)} 
-                                className="prose-sm prose-headings:text-base prose-p:text-sm prose-strong:text-sm prose-ul:text-sm prose-ol:text-sm prose-li:text-sm"
-                              />
-                            </div>
-                          ) : (
-                            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(msg.createdAt).toLocaleTimeString('pt-BR', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
+                        <MessageTime value={msg.createdAt} />
                       </div>
-                    </div>
-                  ))}
+                    ) : (
+                      <AssistantMessage key={msg.id} time={msg.createdAt}>
+                        <MarkdownRenderer content={processBenMessageLinks(msg.content)} className="text-sm" />
+                      </AssistantMessage>
+                    )
+                  )}
 
-                  {/* Mensagem sendo streamada */}
                   {streamingMessage && (
-                    <div className="flex items-start gap-3" key={streamingMessageIdRef.current}>
-                      <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-blue-500 to-violet-500 p-0.5">
-                        <Image 
-                          src="/ben.png" 
-                          alt="Ben" 
-                          width={32} 
-                          height={32} 
-                          className="rounded-full w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="bg-muted rounded-lg p-3">
-                          <div className="prose prose-sm max-w-none dark:prose-invert">
-                            {/* Renderizar markdown com key estável baseada no hash do conteúdo */}
-                            {/* Isso garante que o markdown seja re-processado quando necessário, mas não a cada chunk */}
-                            <MarkdownRenderer 
-                              key={`streaming-${streamingMessage.length > 0 ? Math.floor(streamingMessage.length / 50) : 0}`}
-                              content={processBenMessageLinks(streamingMessage)} 
-                              className="prose-sm prose-headings:text-base prose-p:text-sm prose-strong:text-sm prose-ul:text-sm prose-ol:text-sm prose-li:text-sm"
-                            />
-                          </div>
-                          {isStreaming && (
-                            <span className="inline-block w-2 h-2 bg-current rounded-full ml-1 animate-pulse" />
-                          )}
-                        </div>
-                        {isStreaming && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Digitando...
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                    <AssistantMessage key={streamingMessageIdRef.current} status={isStreaming ? 'Escrevendo…' : undefined}>
+                      {/* A key muda a cada ~50 caracteres: reprocessa o markdown sem refazer a cada chunk */}
+                      <MarkdownRenderer
+                        key={`streaming-${Math.floor(streamingMessage.length / 50)}`}
+                        content={processBenMessageLinks(streamingMessage)}
+                        className="text-sm"
+                      />
+                    </AssistantMessage>
                   )}
                 </>
               )}
 
-              {sendMessage.isPending && (
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-blue-500 to-violet-500 p-0.5">
-                    <Image 
-                      src="/ben.png" 
-                      alt="Ben" 
-                      width={32} 
-                      height={32} 
-                      className="rounded-full w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <div className="bg-muted rounded-lg p-3">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    </div>
-                  </div>
-                </div>
+              {sendMessage.isPending && !streamingMessage && (
+                <AssistantMessage status="Pensando…">
+                  <Loader2 className="size-4 animate-spin text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                </AssistantMessage>
               )}
 
               <div ref={messagesEndRef} />
             </div>
-          </ScrollArea>
-
-          {/* Input de mensagem */}
-          <div className="border-t p-4">
-            <div className="flex gap-2 items-end">
-              <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSendMessage()
-                  }
-                }}
-                placeholder="Digite sua mensagem..."
-                disabled={!selectedConversationId || sendMessage.isPending || isStreaming}
-                className="flex-1 min-h-[60px] max-h-[120px] resize-none text-sm sm:min-h-[80px] sm:max-h-[160px]"
-                rows={2}
-              />
-              <Button
-                onClick={handleSendMessage}
-                disabled={!message.trim() || !selectedConversationId || sendMessage.isPending || isStreaming}
-                size="icon"
-                className="flex-shrink-0 h-[60px] sm:h-[80px]"
-              >
-                {sendMessage.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
           </div>
+
+          <form
+            className="flex items-end gap-2 border-t border-border p-3 sm:p-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleSendMessage()
+            }}
+          >
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSendMessage()
+                }
+              }}
+              placeholder="Pergunte ao Ben"
+              aria-label="Mensagem para o Ben"
+              disabled={isBusy}
+              className="max-h-40 min-h-11 flex-1 resize-none"
+              rows={2}
+            />
+            <Button
+              type="submit"
+              disabled={!message.trim() || isBusy}
+              size="icon"
+              aria-label="Enviar mensagem"
+            >
+              {sendMessage.isPending ? (
+                <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
+              ) : (
+                <Send className="size-4" strokeWidth={1.75} />
+              )}
+            </Button>
+          </form>
         </div>
       </SheetContent>
     </Sheet>
   )
 }
 
+function BenAvatar() {
+  return (
+    <Image
+      src="/ben.png"
+      alt=""
+      width={32}
+      height={32}
+      className="size-8 shrink-0 rounded-full border border-border object-cover"
+    />
+  )
+}
+
+
+function MessageTime({ value }: { value: Date | string }) {
+  return (
+    <time dateTime={new Date(value).toISOString()} className="text-xs text-muted-foreground tabular-nums">
+      {formatDate(value, { style: 'datetime' })}
+    </time>
+  )
+}
+
+/** Resposta do Ben: sem balão, com avatar pequeno à esquerda. */
+function AssistantMessage({ children, time, status }: { children: ReactNode; time?: Date | string; status?: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <BenAvatar />
+      <div className="min-w-0 flex-1 space-y-1 pt-1">
+        <div className="text-sm leading-6 break-words text-foreground">{children}</div>
+        {status ? (
+          <p className="text-xs text-muted-foreground" aria-live="polite">{status}</p>
+        ) : (
+          time && <MessageTime value={time} />
+        )}
+      </div>
+    </div>
+  )
+}

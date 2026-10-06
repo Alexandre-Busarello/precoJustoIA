@@ -2,9 +2,30 @@ import { GoogleGenAI } from '@google/genai';
 import { CompanyData, RankBuilderResult, AIParams, StrategyAnalysis } from './types';
 import { StrategyFactory } from './strategy-factory';
 import { AbstractStrategy, toNumber } from './base-strategy';
+import { median } from '../finance/utils';
+
+/** Modelos determinísticos que calculam preço justo; a IA só resume esses valores, nunca cria os seus. */
+const FAIR_VALUE_MODELS = ['graham', 'fcd', 'gordon', 'barsi'] as const;
+
+/**
+ * Preço justo de referência da síntese com IA: mediana dos preços justos dos modelos determinísticos
+ * (Graham, FCD, Gordon, Barsi) com valor positivo. Potencial em % (25 = 25%), como nas demais estratégias.
+ */
+export function medianModelFairValue(
+  strategies: Partial<Record<string, StrategyAnalysis | null>>,
+  currentPrice: number
+): { fairValue: number | null; upside: number | null } {
+  const values = FAIR_VALUE_MODELS
+    .map((key) => strategies[key]?.fairValue)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+  const fairValue = median(values);
+  if (fairValue === null) return { fairValue: null, upside: null };
+  const upside = Number.isFinite(currentPrice) && currentPrice > 0 ? (fairValue / currentPrice - 1) * 100 : null;
+  return { fairValue, upside };
+}
 
 export class AIStrategy extends AbstractStrategy<AIParams> {
-  name = 'Análise Preditiva com IA';
+  name = 'Síntese dos modelos com IA';
 
   // Método principal para análise individual (não suportado)
   runAnalysis(): StrategyAnalysis {
@@ -27,7 +48,7 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
   // Método principal para ranking (3 etapas)
   async runRanking(companies: CompanyData[], params: AIParams): Promise<RankBuilderResult[]> {
     const { includeBDRs = true } = params;
-    console.log(`🚀 [AI-STRATEGY] Iniciando análise preditiva com IA para ${companies.length} empresas`);
+    console.log(`🚀 [AI-STRATEGY] Iniciando síntese dos modelos com IA para ${companies.length} empresas`);
     console.log(`📊 [AI-STRATEGY] Parâmetros: ${JSON.stringify(params)}`);
     
     // ETAPA 0: Filtrar por tipo de ativo primeiro (b3, bdr, both)
@@ -70,7 +91,7 @@ export class AIStrategy extends AbstractStrategy<AIParams> {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.warn(`⚠️ [AI-STRATEGY] Falha na análise batch IA: ${errorMsg}. Usando ranking fallback.`);
       // Fallback já está implementado dentro de analyzeBatchWithAI, mas garantimos aqui também
-      finalResults = this.generateFallbackRanking(companiesWithStrategies, params);
+      finalResults = this.generateFallbackRanking(companiesWithStrategies);
       console.log(`🎯 [AI-STRATEGY] Ranking fallback gerado: ${finalResults.length} resultados`);
     }
     
@@ -366,7 +387,8 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
       }
       
       try {
-        const response = await this.callGeminiAPI(currentPrompt, 0, true); // COM Google Search na análise batch
+        // Sem busca na web: a síntese resume apenas os modelos calculados.
+        const response = await this.callGeminiAPI(currentPrompt, 0, false);
         console.log(`✅ [AI-STRATEGY] Resposta da análise batch recebida (${response.length} chars)`);
         
         results = this.parseBatchAnalysisResponse(response, companiesWithStrategies);
@@ -382,7 +404,7 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
           // Se faltam muitas empresas (>30%), usar fallback imediatamente para evitar timeout
           if (missing.length > companiesWithStrategies.length * 0.3) {
             console.warn(`⚠️ [AI-STRATEGY] Muitas empresas faltando (${missing.length}/${companiesWithStrategies.length}). Usando fallback.`);
-            return this.generateFallbackRanking(companiesWithStrategies, params);
+            return this.generateFallbackRanking(companiesWithStrategies);
           }
           
           // Se faltam poucas empresas, tentar novamente com orientação específica
@@ -419,12 +441,12 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
         if (isTimeout || (isCriticalError && attempts >= maxAttempts)) {
           console.warn(`⚠️ [AI-STRATEGY] Timeout ou erro crítico detectado. Usando fallback baseado em estratégias.`);
           // Usar fallback baseado nas estratégias
-          return this.generateFallbackRanking(companiesWithStrategies, params);
+          return this.generateFallbackRanking(companiesWithStrategies);
         }
         
         // Adicionar orientação específica para erros de parsing
         if (errorMsg.includes('JSON') || errorMsg.includes('parse')) {
-          previousErrors.push(`ERRO DE FORMATO: Retorne APENAS um JSON válido: {"results": [{"ticker": "TICKER1", "score": 85, "fairValue": 25.50, "upside": 15.2, "confidenceLevel": 0.8, "reasoning": "texto em português"}]}. NÃO adicione texto antes ou depois do JSON. NÃO use \`\`\`json. PARE após fechar a chave }.`);
+          previousErrors.push(`ERRO DE FORMATO: Retorne APENAS um JSON válido: {"results": [{"ticker": "TICKER1", "score": 85, "confidenceLevel": 0.8, "reasoning": "texto em português"}]}. NÃO adicione texto antes ou depois do JSON. NÃO use \`\`\`json. PARE após fechar a chave }.`);
         } else {
           previousErrors.push(`Erro técnico: ${errorMsg}. Simplifique a resposta e foque apenas no JSON solicitado.`);
         }
@@ -432,14 +454,14 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
         if (attempts >= maxAttempts) {
           console.warn(`⚠️ [AI-STRATEGY] Todas as tentativas falharam. Usando fallback baseado em estratégias.`);
           // Usar fallback baseado nas estratégias
-          return this.generateFallbackRanking(companiesWithStrategies, params);
+          return this.generateFallbackRanking(companiesWithStrategies);
         }
       }
     }
     
     if (results.length === 0) {
       console.warn(`⚠️ [AI-STRATEGY] Nenhum resultado obtido. Usando fallback baseado em estratégias.`);
-      return this.generateFallbackRanking(companiesWithStrategies, params);
+      return this.generateFallbackRanking(companiesWithStrategies);
     }
     
     return results;
@@ -477,12 +499,12 @@ ${previousErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')}
       `${company.ticker} (${company.name}) - Setor: ${company.sector} | Preço: R$ ${(company.currentPrice as number).toFixed(2)} | Market Cap: R$ ${((company.marketCap as number) / 1000000000).toFixed(1)}B | ROE: ${((company.roe as number) * 100).toFixed(1)}% | P/L: ${(company.pl as number).toFixed(1)} | DY: ${((company.dy as number) * 100).toFixed(1)}% | Liquidez: ${(company.liquidezCorrente as number).toFixed(2)} | Margem: ${((company.margemLiquida as number) * 100).toFixed(1)}%`
     ).join('\n');
 
-    return `# SELEÇÃO INTELIGENTE DE EMPRESAS PARA ANÁLISE PREDITIVA
+    return `# SELEÇÃO DE EMPRESAS PARA A SÍNTESE DOS MODELOS
 
 ## OBJETIVO
-Selecionar as ${targetCount} melhores empresas da B3 baseado nos critérios do investidor para análise preditiva detalhada.
+Selecionar ${targetCount} empresas da B3 que atendam aos parâmetros escolhidos pelo usuário, para a síntese dos modelos quantitativos.
 
-## PERFIL DO INVESTIDOR
+## PARÂMETROS ESCOLHIDOS PELO USUÁRIO
 - **Tolerância ao Risco**: ${params.riskTolerance || 'Moderado'}
 - **Horizonte**: ${params.timeHorizon || 'Longo Prazo'}  
 - **Foco**: ${params.focus || 'Crescimento e Valor'}
@@ -508,7 +530,7 @@ Monte um ranking DIVERSIFICADO similar à construção de uma carteira de invest
   * Priorize o ticker com MAIOR Market Cap (maior liquidez)
   * Empresas com nomes similares podem ser da mesma companhia
 - **Empresas sólidas**: Priorize empresas com fundamentos consistentes e Market Cap > R$ 1B
-- **Alinhamento com perfil**: Respeite rigorosamente os parâmetros do investidor
+- **Alinhamento com os parâmetros**: Respeite rigorosamente os parâmetros escolhidos
 
 ## RESPOSTA REQUERIDA
 **IMPORTANTE**: Seja DIRETO e OBJETIVO. NÃO repita análises ou explicações.
@@ -531,26 +553,32 @@ Retorne APENAS uma lista JSON com os tickers selecionados:
     companiesWithStrategies: Array<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}>, 
     params: AIParams
   ): string {
+    const fairValueLine = (label: string, analysis: StrategyAnalysis | undefined) =>
+      analysis?.fairValue ? `${label} R$ ${analysis.fairValue.toFixed(2)}` : `${label} não calculado`;
+
     const companiesAnalysis = companiesWithStrategies.map(({company, strategies}) => {
       const eligibleStrategies = Object.values(strategies).filter(s => s.isEligible).length;
-      
+      const reference = medianModelFairValue(strategies, company.currentPrice);
+
       return `**${company.ticker} (${company.name})**
 Setor: ${company.sector} | Preço: R$ ${company.currentPrice.toFixed(2)}
-Estratégias Elegíveis: ${eligibleStrategies}/7
-- Graham: ${strategies.graham.isEligible ? '✅' : '❌'} (Score: ${strategies.graham.score}) - ${strategies.graham.reasoning}
-- Dividend Yield: ${strategies.dividendYield.isEligible ? '✅' : '❌'} (Score: ${strategies.dividendYield.score}) - ${strategies.dividendYield.reasoning}
-- Low P/E: ${strategies.lowPE.isEligible ? '✅' : '❌'} (Score: ${strategies.lowPE.score}) - ${strategies.lowPE.reasoning}
-- Fórmula Mágica: ${strategies.magicFormula.isEligible ? '✅' : '❌'} (Score: ${strategies.magicFormula.score}) - ${strategies.magicFormula.reasoning}
-- FCD: ${strategies.fcd.isEligible ? '✅' : '❌'} (Score: ${strategies.fcd.score}) - ${strategies.fcd.reasoning}
-- Fundamentalista 3+1: ${strategies.fundamentalist.isEligible ? '✅' : '❌'} (Score: ${strategies.fundamentalist.score}) - ${strategies.fundamentalist.reasoning}
-- Método Barsi: ${strategies.barsi.isEligible ? '✅' : '❌'} (Score: ${strategies.barsi.score}) - ${strategies.barsi.reasoning}`;
+Estratégias aprovadas: ${eligibleStrategies}/7
+Preços justos calculados: ${fairValueLine('Graham', strategies.graham)} | ${fairValueLine('FCD', strategies.fcd)} | ${fairValueLine('Barsi', strategies.barsi)}
+Mediana dos modelos: ${reference.fairValue !== null ? `R$ ${reference.fairValue.toFixed(2)} (potencial ${reference.upside !== null ? `${reference.upside.toFixed(1)}%` : 'não calculado'})` : 'não calculada'}
+- Graham: ${strategies.graham.isEligible ? 'aprovada' : 'reprovada'} (Score: ${strategies.graham.score}) - ${strategies.graham.reasoning}
+- Dividend Yield: ${strategies.dividendYield.isEligible ? 'aprovada' : 'reprovada'} (Score: ${strategies.dividendYield.score}) - ${strategies.dividendYield.reasoning}
+- P/L baixo: ${strategies.lowPE.isEligible ? 'aprovada' : 'reprovada'} (Score: ${strategies.lowPE.score}) - ${strategies.lowPE.reasoning}
+- Fórmula Mágica: ${strategies.magicFormula.isEligible ? 'aprovada' : 'reprovada'} (Score: ${strategies.magicFormula.score}) - ${strategies.magicFormula.reasoning}
+- FCD: ${strategies.fcd.isEligible ? 'aprovada' : 'reprovada'} (Score: ${strategies.fcd.score}) - ${strategies.fcd.reasoning}
+- Fundamentalista 3+1: ${strategies.fundamentalist.isEligible ? 'aprovada' : 'reprovada'} (Score: ${strategies.fundamentalist.score}) - ${strategies.fundamentalist.reasoning}
+- Método Barsi: ${strategies.barsi.isEligible ? 'aprovada' : 'reprovada'} (Score: ${strategies.barsi.score}) - ${strategies.barsi.reasoning}`;
     }).join('\n\n');
 
     const tickersList = companiesWithStrategies.map(c => c.company.ticker).join(', ');
 
-    return `# ANÁLISE PREDITIVA BATCH - INTELIGÊNCIA ARTIFICIAL
+    return `# SÍNTESE DOS MODELOS QUANTITATIVOS - INTELIGÊNCIA ARTIFICIAL
 
-## PERFIL DO INVESTIDOR
+## PARÂMETROS ESCOLHIDOS PELO USUÁRIO
 - **Tolerância ao Risco**: ${params.riskTolerance || 'Moderado'}
 - **Horizonte**: ${params.timeHorizon || 'Longo Prazo'}
 - **Foco**: ${params.focus || 'Crescimento e Valor'}
@@ -560,15 +588,18 @@ Estratégias Elegíveis: ${eligibleStrategies}/7
 
 **EMPRESAS PRÉ-FILTRADAS**: Todas as empresas abaixo já foram filtradas por lucratividade (ROE > 0 e Margem Líquida > 0, exceto bancos/seguradoras que precisam apenas ROE > 0).
 
-Analise TODAS as empresas abaixo simultaneamente e crie um ranking preditivo considerando:
+**SEU PAPEL**: Resumir o que os modelos determinísticos abaixo já calcularam. Ordene as empresas considerando:
 
-1. **Consistência Estratégica**: Quantas estratégias aprovaram cada empresa
-2. **Qualidade dos Fundamentos**: ROE, margens, crescimento, endividamento  
-3. **Potencial de Valorização**: Baseado nos preços justos calculados
-4. **Adequação ao Perfil**: Alinhamento com tolerância ao risco e foco
-5. **Contexto Setorial**: Perspectivas do setor de cada empresa
+1. **Consistência entre modelos**: Quantas estratégias aprovaram cada empresa
+2. **Qualidade dos fundamentos**: ROE, margens, crescimento e endividamento descritos nos resultados dos modelos
+3. **Distância até a mediana dos preços justos calculados** (use somente os valores informados)
+4. **Aderência aos parâmetros escolhidos**
 
-**IMPORTANTE**: Você DEVE BUSCAR informações atualizadas na internet sobre cada empresa antes de analisar.
+**PROIBIDO**:
+- Calcular, estimar ou citar preço justo, preço-alvo ou potencial que não esteja na lista abaixo
+- Fazer previsões de preço ou de resultados futuros
+- Dizer se o investidor deve comprar, vender ou manter qualquer ativo
+- Usar informações que não estejam nesta mensagem
 
 ## EMPRESAS PARA ANÁLISE
 ${companiesAnalysis}
@@ -579,17 +610,15 @@ ${companiesAnalysis}
 **TICKERS ESPERADOS (EXATAMENTE ${companiesWithStrategies.length} empresas)**:
 ${tickersList}
 
-Retorne um JSON com o ranking de TODAS as empresas analisadas:
+Retorne um JSON com a ordenação de TODAS as empresas analisadas:
 
 {
   "results": [
     {
       "ticker": "TICKER1",
       "score": 85,
-      "fairValue": 25.50,
-      "upside": 15.2,
       "confidenceLevel": 0.8,
-      "reasoning": "Análise detalhada da empresa em PORTUGUÊS considerando estratégias, fundamentos e contexto atual. Exemplo: 'Oferece forte potencial de valorização baseado no FCD, suportado por dívida moderada, bom ROE e alto dividend yield.'"
+      "reasoning": "Resumo em PORTUGUÊS do que os modelos indicam. Exemplo: '5 de 7 modelos aprovaram a empresa; o preço está abaixo da mediana dos preços justos calculados (Graham e FCD), com dívida moderada e ROE alto.'"
     }
   ]
 }
@@ -598,8 +627,8 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 - Seja DIRETO e OBJETIVO, evite repetições
 - Ordene por score (0-100) decrescente
 - Inclua TODAS as ${companiesWithStrategies.length} empresas da lista acima
-- TODO o campo "reasoning" deve estar em PORTUGUÊS BRASILEIRO
-- Use termos financeiros em português (ex: "potencial de valorização", "fundamentos sólidos", "perspectivas positivas")
+- NÃO inclua campos de preço justo ou potencial no JSON
+- TODO o campo "reasoning" deve estar em PORTUGUÊS BRASILEIRO e descrever os modelos, sem dizer se o investidor deve comprar ou vender
 
 **FORMATO DE RESPOSTA OBRIGATÓRIO**:
 - Responda APENAS com o JSON válido, sem texto adicional antes ou depois
@@ -868,6 +897,8 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
         const companyData = companiesWithStrategies.find(c => c.company.ticker === result.ticker);
         if (companyData) {
           const eligibleStrategies = Object.values(companyData.strategies).filter((s: StrategyAnalysis) => s.isEligible).length;
+          // Preço justo e potencial nunca vêm da IA: só a mediana dos modelos determinísticos.
+          const reference = medianModelFairValue(companyData.strategies, companyData.company.currentPrice);
           
           // Incluir dados fundamentais básicos no key_metrics para que os filtros de ordenação funcionem
           const { financials } = companyData.company;
@@ -878,10 +909,10 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
             sector: companyData.company.sector,
             currentPrice: companyData.company.currentPrice,
             logoUrl: companyData.company.logoUrl,
-            fairValue: result.fairValue || null,
-            upside: result.upside || null,
+            fairValue: reference.fairValue,
+            upside: reference.upside,
             marginOfSafety: null,
-            rational: result.reasoning || 'Análise gerada por IA',
+            rational: result.reasoning || 'Síntese dos modelos gerada por IA',
             key_metrics: {
               // Métricas específicas da IA
               compositeScore: result.score || 0,
@@ -1036,19 +1067,17 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
   }
 
   generateRational(params: AIParams): string {
-    return `# ANÁLISE PREDITIVA COM INTELIGÊNCIA ARTIFICIAL - PREMIUM
+    return `# SÍNTESE DOS MODELOS COM INTELIGÊNCIA ARTIFICIAL - PREMIUM
 
-**Filosofia**: Utiliza Inteligência Artificial (Gemini) para analisar e sintetizar os resultados de todas as estratégias tradicionais, criando uma avaliação preditiva abrangente.
+**Filosofia**: A Inteligência Artificial (Gemini) resume os resultados dos modelos quantitativos tradicionais. Preço justo e potencial vêm sempre dos modelos determinísticos; a IA não calcula valores próprios.
 
 ## Metodologia Aplicada
 
-- **Seleção Inteligente com IA**: Primeira chamada LLM seleciona empresas baseada no perfil do investidor
-- **Análise Multiestrategica**: Executa Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD, Fundamentalista 3+1 e Método Barsi
-- **Pesquisa em Tempo Real**: IA busca notícias e dados atualizados na internet
-- **Processamento Batch**: Segunda chamada LLM analisa todas as empresas simultaneamente
-- **Síntese Inteligente**: IA analisa consistência e convergência entre estratégias
-- **Avaliação Preditiva**: Considera contexto macroeconômico e tendências setoriais
-- **Priorização Técnica**: Análise técnica complementar para otimizar timing de entrada (RSI, Estocástico)
+- **Seleção com IA**: Primeira chamada seleciona empresas que atendem aos parâmetros escolhidos
+- **Análise multiestratégica**: Executa Graham, Dividend Yield, P/L baixo, Fórmula Mágica, FCD, Fundamentalista 3+1 e Método Barsi
+- **Síntese**: Segunda chamada resume a consistência e a convergência entre os modelos
+- **Preço justo de referência**: Mediana dos preços justos de Graham, FCD, Gordon e Barsi
+- **Priorização técnica**: Análise técnica complementar (RSI, Estocástico) como critério de ordenação
 
 ## Parâmetros de Análise
 
@@ -1056,26 +1085,16 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 - **Horizonte**: ${params.timeHorizon || 'Longo Prazo'}
 - **Foco**: ${params.focus || 'Crescimento e Valor'}
 
-## Diferencial Premium
+## Filtros
 
-- **Filtro de Qualidade**: Remove automaticamente empresas sem lucro (ROE ≤ 0 ou Margem Líquida ≤ 0)
-- **Exceções Setoriais**: Bancos e seguradoras avaliados apenas por ROE (margem pode não se aplicar)
-- Seleção inteligente baseada no perfil específico do investidor
-- Análise de 7 estratégias simultaneamente para cada empresa selecionada (Graham, Dividend Yield, Low P/E, Fórmula Mágica, FCD, Fundamentalista 3+1 e Método Barsi)
-- Inteligência Artificial com acesso a dados da internet em tempo real
-- Processamento batch otimizado (mais rápido e eficiente)
-- Pesquisa automática de notícias e fatos relevantes recentes
-- Síntese preditiva considerando contexto atual do mercado
-- Avaliação de riscos e oportunidades específicas por empresa
-- Nível de confiança da análise baseado em múltiplas fontes
-- Consideração de fatores macroeconômicos e setoriais atualizados
-- **Análise Técnica Complementar**: Priorização por sobrevenda para otimizar timing de entrada
+- **Filtro de qualidade**: Remove automaticamente empresas sem lucro (ROE ≤ 0 ou Margem Líquida ≤ 0)
+- **Exceções setoriais**: Bancos e seguradoras avaliados apenas por ROE (margem pode não se aplicar)
+- Análise de 7 estratégias para cada empresa selecionada
+- Nível de confiança baseado na convergência entre os modelos
 
-> **IMPORTANTE**: Esta análise utiliza Inteligência Artificial e pode gerar resultados ligeiramente diferentes em novas execuções devido à natureza adaptativa do modelo.
+> **IMPORTANTE**: A síntese usa Inteligência Artificial e o texto pode variar entre execuções. Os números exibidos vêm dos modelos quantitativos. Não é recomendação de investimento.
 
-**Ideal Para**: Investidores que buscam uma análise abrangente e preditiva baseada em múltiplas metodologias.
-
-**Resultado**: Ranking preditivo personalizado com base no seu perfil de risco e objetivos de investimento.`;
+**Resultado**: Empresas ordenadas pela convergência dos modelos quantitativos, segundo os parâmetros escolhidos.`;
   }
 
   validateCompanyData(): boolean {
@@ -1116,8 +1135,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
 
   // FALLBACK: Gerar ranking baseado em estratégias quando IA falha
   private generateFallbackRanking(
-    companiesWithStrategies: Array<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}>, 
-    params: AIParams
+    companiesWithStrategies: Array<{company: CompanyData, strategies: Record<string, StrategyAnalysis>}>
   ): RankBuilderResult[] {
     console.log(`🔄 [AI-STRATEGY] Gerando ranking fallback baseado em estratégias para ${companiesWithStrategies.length} empresas`);
     
@@ -1162,26 +1180,11 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
       const consistencyBonus = Math.min(eligibleCount * 5, 20);
       compositeScore = Math.min(compositeScore + consistencyBonus, 100);
       
-      // Adicionar variação aleatória controlada (±5 pontos) para parecer mais "natural"
-      const randomVariation = (Math.random() - 0.5) * 10; // -5 a +5
-      compositeScore = Math.max(0, Math.min(100, compositeScore + randomVariation));
-      
-      // Calcular fairValue médio das estratégias que têm
-      const fairValues = eligibleStrategies
-        .map(s => s.fairValue)
-        .filter((fv): fv is number => fv !== null && fv !== undefined);
-      
-      const avgFairValue = fairValues.length > 0
-        ? fairValues.reduce((sum, fv) => sum + fv, 0) / fairValues.length
-        : null;
-      
-      // Calcular upside se temos fairValue
-      const upside = avgFairValue && company.currentPrice > 0
-        ? ((avgFairValue - company.currentPrice) / company.currentPrice) * 100
-        : null;
-      
-      // Gerar reasoning que pareça ter sido feito por IA
-      const reasoning = this.generateFallbackReasoning(company, strategies, eligibleCount, params);
+      // Preço justo de referência: mediana dos modelos determinísticos (mesma regra da síntese com IA).
+      const { fairValue, upside } = medianModelFairValue(strategies, company.currentPrice);
+
+      // Resumo determinístico dos modelos (usado quando a IA não responde).
+      const reasoning = this.generateFallbackReasoning(company, strategies, eligibleCount);
       
       // Calcular confidence level baseado em número de estratégias elegíveis
       const confidenceLevel = Math.min(0.5 + (eligibleCount / 7) * 0.4, 0.9);
@@ -1194,8 +1197,8 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
         sector: company.sector,
         currentPrice: company.currentPrice,
         logoUrl: company.logoUrl,
-        fairValue: avgFairValue,
-        upside: upside,
+        fairValue,
+        upside,
         marginOfSafety: null,
         rational: reasoning,
         key_metrics: {
@@ -1233,12 +1236,11 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
     return results;
   }
 
-  // Gerar reasoning que pareça ter sido feito por IA
+  // Resumo determinístico dos modelos quando a IA não responde
   private generateFallbackReasoning(
     company: CompanyData,
     strategies: Record<string, StrategyAnalysis>,
-    eligibleCount: number,
-    params: AIParams
+    eligibleCount: number
   ): string {
     const { financials, sector } = company;
     const roe = toNumber(financials.roe);
@@ -1247,18 +1249,7 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
     const margemLiquida = toNumber(financials.margemLiquida);
     const dividaLiquidaEbitda = toNumber(financials.dividaLiquidaEbitda);
     
-    // Frases de abertura variadas
-    const openings = [
-      `Análise preditiva indica`,
-      `Avaliação multiestratégica sugere`,
-      `Síntese de múltiplas metodologias aponta`,
-      `Análise integrada demonstra`,
-      `Avaliação abrangente revela`
-    ];
-    
-    const opening = openings[Math.floor(Math.random() * openings.length)];
-    
-    let reasoning = `${opening} que ${company.name} (${company.ticker}) apresenta `;
+    let reasoning = `Síntese dos modelos: ${company.name} (${company.ticker}) apresenta `;
     
     // Adicionar pontos fortes baseados nas estratégias elegíveis
     const strengths: string[] = [];
@@ -1304,16 +1295,8 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
       reasoning += 'características interessantes para análise';
     }
     
-    // Adicionar contexto setorial
     if (sector) {
-      reasoning += `. O setor de ${sector.toLowerCase()} `;
-      const sectorComments = [
-        'apresenta perspectivas favoráveis',
-        'demonstra resiliência',
-        'oferece oportunidades de crescimento',
-        'mantém fundamentos sólidos'
-      ];
-      reasoning += sectorComments[Math.floor(Math.random() * sectorComments.length)];
+      reasoning += `. Setor: ${sector}`;
     }
     
     // Adicionar métricas específicas
@@ -1329,22 +1312,11 @@ Retorne um JSON com o ranking de TODAS as empresas analisadas:
       reasoning += `. Endividamento controlado (Dívida Líquida/EBITDA de ${dividaLiquidaEbitda.toFixed(1)}x) oferece segurança`;
     }
     
-    // Adicionar conclusão baseada no perfil
-    const riskTolerance = params.riskTolerance || 'Moderado';
-    if (riskTolerance === 'Conservador') {
-      reasoning += '. Recomendada para investidores que buscam segurança e dividendos consistentes';
-    } else if (riskTolerance === 'Agressivo') {
-      reasoning += '. Apresenta potencial de crescimento alinhado com perfil de maior tolerância ao risco';
-    } else {
-      reasoning += '. Oferece equilíbrio entre crescimento e segurança, adequada para perfil moderado';
-    }
-    
-    // Adicionar nota sobre consistência das estratégias
     if (eligibleCount >= 4) {
-      reasoning += `. A convergência de ${eligibleCount} estratégias diferentes (incluindo Graham, Dividend Yield, FCD, Fundamentalista e Barsi) reforça a atratividade da empresa`;
+      reasoning += `. ${eligibleCount} de ${Object.keys(strategies).length} modelos aprovaram a empresa`;
     }
     
-    return reasoning + '.';
+    return reasoning + '. Não é recomendação de investimento.';
   }
 
   // Seleção fallback quando IA falha na primeira etapa

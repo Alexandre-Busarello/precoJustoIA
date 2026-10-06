@@ -1,20 +1,22 @@
 "use client"
 
-import { useState, useMemo, useRef, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+/**
+ * Calculadora de recuperação: quantas ações adicionar para empatar ou sair com lucro se o ativo subir X%.
+ * Formulário à esquerda e resultado à direita no desktop (empilhado em `compact`, usado na gaveta da carteira).
+ */
+
+import { useEffect, useMemo, useRef, useState } from "react"
+import { cn } from "@/lib/utils"
+import { formatBRL, formatDeltaPct, formatNumber, formatPct } from "@/lib/format"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
+import { Stat } from "@/components/ui/stat"
+import { MoneyInput } from "@/app/calculadoras/_components/money-input"
+import { parseBRL, toMaskedBRL } from "@/app/calculadoras/_components/money-mask"
 import {
-  TrendingDown,
-  Target,
-  AlertTriangle,
-  Calculator,
-} from "lucide-react"
-import {
-  calculateRecovery,
   calculateCurrentDrop,
   calculateLossInReais,
+  calculateRecovery,
   type RecoveryCalculation,
 } from "@/lib/recovery-calculator-utils"
 
@@ -31,92 +33,64 @@ interface RecoveryCalculatorProps {
   compact?: boolean
 }
 
-function parseNum(value: string): number {
-  const cleaned = value.replace(/[^\d,.-]/g, "").replace(",", ".")
-  return parseFloat(cleaned) || 0
+const PROFIT_PRESETS = [
+  { value: 0, label: "Empatar" },
+  { value: 5, label: "Lucro de 5%" },
+  { value: 10, label: "Lucro de 10%" },
+]
+
+/** Número digitado em pt-BR ("15,5" → 15.5). */
+function parsePlain(value: string): number {
+  const parsed = Number(value.replace(/\./g, "").replace(",", ".").replace(/[^\d.]/g, ""))
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
+/** Mantém dígitos e uma vírgula decimal; "." digitado vale como vírgula ("15.5" → "15,5"). */
+function keepDecimal(value: string): string {
+  const [integer, ...rest] = value.replace(/\./g, ",").replace(/[^\d,]/g, "").split(",")
+  return rest.length === 0 ? integer : `${integer},${rest.join("")}`
 }
 
-export function RecoveryCalculator({
-  initialValues,
-  onUsageRecord,
-  compact = false,
-}: RecoveryCalculatorProps) {
-  const [avgPrice, setAvgPrice] = useState(
-    initialValues?.avgPrice ? String(initialValues.avgPrice) : ""
-  )
-  const [currentQty, setCurrentQty] = useState(
-    initialValues?.currentQty ? String(initialValues.currentQty) : ""
-  )
-  const [currentPrice, setCurrentPrice] = useState(
-    initialValues?.currentPrice ? String(initialValues.currentPrice) : ""
-  )
+export function RecoveryCalculator({ initialValues, onUsageRecord, compact = false }: RecoveryCalculatorProps) {
+  const [avgPrice, setAvgPrice] = useState(toMaskedBRL(initialValues?.avgPrice))
+  const [currentQty, setCurrentQty] = useState(initialValues?.currentQty ? String(initialValues.currentQty) : "")
+  const [currentPrice, setCurrentPrice] = useState(toMaskedBRL(initialValues?.currentPrice))
   const [targetRise, setTargetRise] = useState("")
-  const [targetProfit, setTargetProfit] = useState("0")
+  const [targetProfit, setTargetProfit] = useState(0)
+  const [customProfit, setCustomProfit] = useState("")
   const lastRegisteredResultKeyRef = useRef<string | null>(null)
 
-  const avgPriceNum = parseNum(avgPrice)
-  const currentQtyNum = Math.floor(parseNum(currentQty)) || 0
-  const currentPriceNum = parseNum(currentPrice)
-  const targetRiseNum = parseNum(targetRise)
-  const targetProfitNum = parseNum(targetProfit)
+  const avgPriceNum = parseBRL(avgPrice) ?? 0
+  const currentQtyNum = Math.floor(parsePlain(currentQty))
+  const currentPriceNum = parseBRL(currentPrice) ?? 0
+  const targetRiseNum = parsePlain(targetRise)
 
-  const currentDrop = useMemo(() => {
-    if (avgPriceNum <= 0 || currentPriceNum <= 0) return 0
-    return calculateCurrentDrop(avgPriceNum, currentPriceNum)
-  }, [avgPriceNum, currentPriceNum])
-
-  const lossInReais = useMemo(() => {
-    return calculateLossInReais(currentQtyNum, avgPriceNum, currentPriceNum)
-  }, [currentQtyNum, avgPriceNum, currentPriceNum])
-
-  const suggestedTargetRise = currentDrop > 0 ? Math.abs(currentDrop) : 0
-
-  const allDiagnosisFieldsComplete =
-    avgPriceNum > 0 && currentQtyNum > 0 && currentPriceNum > 0 && currentPriceNum < avgPriceNum
+  const currentDrop = avgPriceNum > 0 && currentPriceNum > 0 ? calculateCurrentDrop(avgPriceNum, currentPriceNum) : 0
+  const lossInReais = calculateLossInReais(currentQtyNum, avgPriceNum, currentPriceNum)
+  const suggestedTargetRise = currentDrop > 0 ? currentDrop : 0
+  const isValidInput = currentQtyNum > 0 && avgPriceNum > 0 && currentPriceNum > 0
+  const inLoss = isValidInput && currentPriceNum < avgPriceNum
+  // Alta necessária para a posição atual voltar ao preço médio sem comprar mais (ex.: queda de 40% → 66,7%).
+  const breakEvenRise = inLoss ? (avgPriceNum / currentPriceNum - 1) * 100 : 0
 
   const handleDiagnosisBlur = () => {
-    if (allDiagnosisFieldsComplete && !targetRise && suggestedTargetRise > 0) {
-      setTargetRise(suggestedTargetRise.toFixed(1))
+    if (inLoss && !targetRise && suggestedTargetRise > 0) {
+      setTargetRise(formatNumber(suggestedTargetRise, { digits: 1 }))
     }
   }
 
   const result = useMemo((): RecoveryCalculation | null => {
-    if (
-      currentQtyNum <= 0 ||
-      avgPriceNum <= 0 ||
-      currentPriceNum <= 0 ||
-      targetRiseNum <= 0
-    ) {
-      return null
-    }
+    if (!isValidInput || targetRiseNum <= 0) return null
     return calculateRecovery({
       currentQty: currentQtyNum,
       avgPrice: avgPriceNum,
       currentPrice: currentPriceNum,
       targetRise: targetRiseNum,
-      targetProfit: targetProfitNum,
+      targetProfit,
     })
-  }, [
-    currentQtyNum,
-    avgPriceNum,
-    currentPriceNum,
-    targetRiseNum,
-    targetProfitNum,
-  ])
+  }, [isValidInput, currentQtyNum, avgPriceNum, currentPriceNum, targetRiseNum, targetProfit])
 
-  const targetPrice = useMemo(() => {
-    if (currentPriceNum <= 0 || targetRiseNum <= 0) return 0
-    return currentPriceNum * (1 + targetRiseNum / 100)
-  }, [currentPriceNum, targetRiseNum])
+  const targetPrice = currentPriceNum > 0 && targetRiseNum > 0 ? currentPriceNum * (1 + targetRiseNum / 100) : 0
 
   useEffect(() => {
     if (!result?.success || !onUsageRecord) return
@@ -126,30 +100,21 @@ export function RecoveryCalculator({
     onUsageRecord()
   }, [result, onUsageRecord])
 
-  const isValidInput =
-    currentQtyNum > 0 && avgPriceNum > 0 && currentPriceNum > 0
-
   return (
-    <div className="space-y-6">
-      {/* Seção A: Diagnóstico */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <TrendingDown className="w-5 h-5" />
-            Diagnóstico
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className={cn("grid items-start gap-6", !compact && "lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]")}>
+      <form className="space-y-5 rounded-lg border border-border bg-card p-4 sm:p-5" onSubmit={(e) => e.preventDefault()} noValidate>
+        <fieldset className="space-y-4">
+          <legend className="text-sm font-medium text-foreground">Sua posição hoje</legend>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="avgPrice">Preço Médio (R$)</Label>
-              <Input
+              <Label htmlFor="avgPrice">Preço médio</Label>
+              <MoneyInput
                 id="avgPrice"
-                type="text"
-                placeholder="Ex: 10,00"
+                placeholder="10,00"
                 value={avgPrice}
-                onChange={(e) => setAvgPrice(e.target.value)}
+                onValueChange={setAvgPrice}
                 onBlur={handleDiagnosisBlur}
+                enterKeyHint="next"
               />
             </div>
             <div className="space-y-2">
@@ -157,161 +122,155 @@ export function RecoveryCalculator({
               <Input
                 id="currentQty"
                 type="text"
-                placeholder="Ex: 100"
+                inputMode="numeric"
+                enterKeyHint="next"
+                autoComplete="off"
+                placeholder="100"
                 value={currentQty}
-                onChange={(e) => setCurrentQty(e.target.value)}
+                onChange={(e) => setCurrentQty(e.target.value.replace(/\D/g, ""))}
                 onBlur={handleDiagnosisBlur}
+                className="tabular-nums"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="currentPrice">Preço Atual (R$)</Label>
-              <Input
+              <Label htmlFor="currentPrice">Cotação atual</Label>
+              <MoneyInput
                 id="currentPrice"
-                type="text"
-                placeholder="Ex: 5,00"
+                placeholder="5,00"
                 value={currentPrice}
-                onChange={(e) => setCurrentPrice(e.target.value)}
+                onValueChange={setCurrentPrice}
                 onBlur={handleDiagnosisBlur}
+                enterKeyHint="next"
               />
             </div>
           </div>
-          {isValidInput && currentPriceNum < avgPriceNum && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
-              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
-              <span className="text-sm font-medium text-red-700 dark:text-red-300">
-                Queda: {currentDrop.toFixed(1)}% | {formatCurrency(lossInReais)}
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </fieldset>
 
-      {/* Seção B: Estratégia */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Target className="w-5 h-5" />
-            Estratégia
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <fieldset className="space-y-4 border-t border-border pt-5">
+          <legend className="sr-only">Estratégia</legend>
           <div className="space-y-2">
-            <Label htmlFor="targetRise">
-              Se o ativo subir... (%)
-            </Label>
+            <Label htmlFor="targetRise">Se o ativo subir (%)</Label>
             <Input
               id="targetRise"
               type="text"
-              placeholder={
-                allDiagnosisFieldsComplete && suggestedTargetRise > 0
-                  ? `Sugestão: ${suggestedTargetRise.toFixed(0)}%`
-                  : "Ex: 15"
-              }
+              inputMode="decimal"
+              enterKeyHint="go"
+              autoComplete="off"
+              placeholder={inLoss && suggestedTargetRise > 0 ? `Sugestão: ${formatNumber(suggestedTargetRise, { digits: 0 })}` : "15"}
               value={targetRise}
-              onChange={(e) => setTargetRise(e.target.value)}
+              onChange={(e) => setTargetRise(keepDecimal(e.target.value))}
+              className="tabular-nums"
             />
-            {targetRiseNum > 0 && (
+            {targetPrice > 0 && (
               <p className="text-xs text-muted-foreground">
-                Vai para {formatCurrency(targetPrice)}
+                A cotação iria para <span className="tabular-nums">{formatBRL(targetPrice)}</span>
+              </p>
+            )}
+            {breakEvenRise > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Sem comprar mais, a cotação precisaria subir{" "}
+                <span className="tabular-nums">{formatPct(breakEvenRise / 100)}</span> para voltar ao preço médio.
               </p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="targetProfit">E eu quiser sair com... (%)</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant={targetProfitNum === 0 ? "default" : "outline"}
-                size="sm"
-                onClick={() => setTargetProfit("0")}
-              >
-                Empatar (0%)
-              </Button>
-              <Button
-                type="button"
-                variant={targetProfitNum === 5 ? "default" : "outline"}
-                size="sm"
-                onClick={() => setTargetProfit("5")}
-              >
-                Lucrar 5%
-              </Button>
-              <Button
-                type="button"
-                variant={targetProfitNum === 10 ? "default" : "outline"}
-                size="sm"
-                onClick={() => setTargetProfit("10")}
-              >
-                Lucrar 10%
-              </Button>
-              <Input
-                id="targetProfit"
-                type="text"
-                placeholder="Outro"
-                value={[0, 5, 10].includes(targetProfitNum) ? "" : targetProfit}
-                onChange={(e) => setTargetProfit(e.target.value || "0")}
-                className="w-20"
-              />
-              <span className="text-sm text-muted-foreground">%</span>
+            <span id="target-profit-label" className="text-sm font-medium leading-none text-foreground">
+              Objetivo
+            </span>
+            <div role="group" aria-labelledby="target-profit-label" className="flex flex-wrap items-center gap-2">
+              {PROFIT_PRESETS.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  aria-pressed={customProfit === "" && targetProfit === preset.value}
+                  onClick={() => {
+                    setCustomProfit("")
+                    setTargetProfit(preset.value)
+                  }}
+                  className="min-h-11 rounded-md border border-border px-3 text-sm text-foreground transition-colors hover:bg-muted aria-pressed:border-brand aria-pressed:bg-brand-subtle aria-pressed:text-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring md:min-h-9"
+                >
+                  {preset.label}
+                </button>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <Input
+                  id="targetProfit"
+                  type="text"
+                  inputMode="decimal"
+                  enterKeyHint="go"
+                  autoComplete="off"
+                  aria-label="Outro lucro desejado, em %"
+                  placeholder="Outro"
+                  value={customProfit}
+                  onChange={(e) => {
+                    const value = keepDecimal(e.target.value)
+                    setCustomProfit(value)
+                    setTargetProfit(value ? parsePlain(value) : 0)
+                  }}
+                  className="w-24 tabular-nums"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </fieldset>
+      </form>
 
-      {/* Seção C: Plano de Ação */}
-      {result && (
-        <Card
-          className={
-            result.success
-              ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
-              : "bg-slate-50 dark:bg-slate-900/50"
-          }
-        >
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Calculator className="w-5 h-5" />
-              Plano de Ação
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      <div className="min-w-0 space-y-4" aria-live="polite">
+        {isValidInput && (
+          <section aria-label="Situação atual" className="grid grid-cols-2 gap-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+            <Stat
+              label="Variação desde o preço médio"
+              value={formatDeltaPct(-currentDrop / 100)}
+              tone={currentDrop > 0 ? "negative" : currentDrop < 0 ? "positive" : "default"}
+            />
+            <Stat
+              label={lossInReais >= 0 ? "Prejuízo atual" : "Lucro atual"}
+              value={formatBRL(Math.abs(lossInReais))}
+              tone={lossInReais > 0 ? "negative" : lossInReais < 0 ? "positive" : "default"}
+            />
+          </section>
+        )}
+
+        {result ? (
+          <section aria-label="Resultado" className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+            <h2 className="text-sm font-medium text-foreground">Resultado da simulação</h2>
             {result.success ? (
               <>
-                <div className="text-2xl font-bold">
-                  Compre <span className="text-emerald-600 dark:text-emerald-400">{result.qtyToBuy}</span> ações agora.
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <Stat
+                    label="Ações a adicionar"
+                    value={formatNumber(result.qtyToBuy, { digits: 0 })}
+                    className="col-span-2 sm:col-span-1"
+                  />
+                  <Stat label="Aporte necessário" value={formatBRL(result.investmentRequired)} />
+                  <Stat label="Novo preço médio" value={formatBRL(result.newAvgPrice)} />
                 </div>
-                <div className="space-y-1 text-sm">
-                  <p>
-                    <span className="text-muted-foreground">Investimento Necessário:</span>{" "}
-                    <strong>{formatCurrency(result.investmentRequired)}</strong>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Novo Preço Médio:</span>{" "}
-                    <strong>{formatCurrency(result.newAvgPrice)}</strong>
-                  </p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {targetProfitNum === 0 ? (
-                    <>
-                      Fazendo isso, você elimina seu prejuízo totalmente se o ativo subir{" "}
-                      <strong>{targetRiseNum.toFixed(0)}%</strong>.
-                    </>
-                  ) : (
-                    <>
-                      Fazendo isso, se o ativo subir <strong>{targetRiseNum.toFixed(0)}%</strong>,
-                      você recupera tudo e ainda sai com <strong>{targetProfitNum}%</strong> de
-                      lucro no bolso ({formatCurrency(result.profitInReais)}).
-                    </>
-                  )}
+                <p className="text-sm leading-6 text-muted-foreground">
+                  {targetProfit === 0
+                    ? `Com esse aporte, uma alta de ${formatNumber(targetRiseNum, { digits: 1 })}% zera o prejuízo da posição.`
+                    : `Com esse aporte, uma alta de ${formatNumber(targetRiseNum, { digits: 1 })}% recupera o prejuízo e deixa ${formatNumber(targetProfit, { digits: 1 })}% de lucro (${formatBRL(result.profitInReais)}).`}
                 </p>
               </>
             ) : (
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm">{result.message}</p>
-              </div>
+              <p className="rounded-lg bg-warning-subtle p-3 text-sm text-foreground">{result.message}</p>
             )}
-          </CardContent>
-        </Card>
-      )}
+            <p className="text-xs leading-5 text-muted-foreground">
+              Simulação matemática. Não é recomendação de investimento: aumentar a posição em um ativo em queda também
+              aumenta o risco.
+            </p>
+          </section>
+        ) : (
+          !compact && (
+            <div className="flex min-h-48 flex-col justify-center rounded-lg border border-dashed border-border p-6 text-center lg:min-h-64">
+              <p className="text-sm font-medium text-foreground">O resultado aparece aqui</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Preencha preço médio, quantidade, cotação atual e a alta esperada.
+              </p>
+            </div>
+          )
+        )}
+      </div>
     </div>
   )
 }

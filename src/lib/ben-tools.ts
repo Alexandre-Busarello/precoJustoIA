@@ -17,6 +17,7 @@ import { getRadarStatusColor, getTechnicalEntryStatus, getSentimentStatus, getVa
 import { calculateUpside } from './index-strategy-integration'
 import { getUserMemory } from './ben-memory-service'
 import { PortfolioMetricsService } from './portfolio-metrics-service'
+import { VALUATION_MODELS_LABEL } from './site-constants'
 
 /**
  * Obtém métricas completas de uma empresa
@@ -1941,21 +1942,21 @@ const PLATFORM_FEATURES: PlatformFeature[] = [
     examples: ['Ações baratas com qualidade', 'Estratégia de P/L baixo', 'Value investing com qualidade']
   },
   {
-    name: 'Análise Preditiva com IA',
-    description: 'Google Gemini AI analisando todos os 7 modelos simultaneamente. Inclui análise de demonstrações financeiras, busca de notícias, contexto macroeconômico, ranking preditivo personalizado e insights qualitativos.',
+    name: 'Síntese dos modelos com IA',
+    description: 'Ranking em que o Google Gemini seleciona e ordena empresas a partir dos resultados dos modelos determinísticos, com score, nível de confiança e justificativa. O preço justo exibido é a mediana dos modelos (Graham, FCD, Gordon, Barsi); a IA não cria valores próprios. É análise gerada por IA e não é recomendação.',
     url: '/ranking',
     category: 'valuation',
     plan: 'premium',
     steps: [
       'Acesse a página de Rankings (/ranking)',
-      'Selecione o modelo "Análise Preditiva com IA"',
+      'Selecione o modelo "Síntese com IA"',
       'Aguarde a análise completa da IA (pode levar alguns segundos)',
-      'Visualize o ranking preditivo personalizado',
+      'Visualize o ranking com score, confiança e justificativa de cada empresa',
       'Leia os insights qualitativos fornecidos pela IA',
-      'Analise as empresas recomendadas'
+      'Confira os modelos e os indicadores de cada empresa listada'
     ],
     whenToUse: 'Use quando quiser a análise mais completa e avançada, combinando todos os modelos com inteligência artificial, notícias e contexto macroeconômico.',
-    examples: ['Análise completa com IA', 'Ranking preditivo personalizado', 'Insights qualitativos de investimento']
+    examples: ['Análise completa com IA', 'Ranking com síntese dos modelos', 'Insights qualitativos sobre empresas']
   },
   // FERRAMENTAS DE ANÁLISE
   {
@@ -1977,7 +1978,7 @@ const PLATFORM_FEATURES: PlatformFeature[] = [
   },
   {
     name: 'Rankings Avançados',
-    description: 'Página completa de rankings com todos os 8 modelos disponíveis. Filtros avançados por setor e tamanho de empresa, histórico de rankings salvos, exportação de resultados e comparação lado a lado.',
+    description: `Página completa de rankings com ${VALUATION_MODELS_LABEL}, além da síntese com IA. Filtros avançados por setor e tamanho de empresa, histórico de rankings salvos, exportação de resultados e comparação lado a lado.`,
     url: '/ranking',
     category: 'análise',
     plan: 'gratuito',
@@ -2068,7 +2069,7 @@ const PLATFORM_FEATURES: PlatformFeature[] = [
   },
   {
     name: 'Radar de Dividendos',
-    description: 'Projeções de dividendos com IA. Projeções dos próximos 12 meses, calendário completo de proventos, empresas pagadoras de altos dividendos, análise de sustentabilidade de dividendos e histórico de pagamentos.',
+    description: 'Projeções estatísticas de dividendos (mediana sazonal dos últimos 3 anos, sem IA). Projeções dos próximos meses, calendário completo de proventos, empresas pagadoras de altos dividendos, análise de sustentabilidade de dividendos e histórico de pagamentos.',
     url: '/radar-dividendos',
     category: 'análise',
     plan: 'gratuito',
@@ -2086,14 +2087,14 @@ const PLATFORM_FEATURES: PlatformFeature[] = [
   },
   {
     name: 'Análise Individual de Ação',
-    description: 'Página completa de análise por empresa. Todos os 8 modelos aplicados, score geral ponderado, 65+ indicadores fundamentalistas, histórico de preços (5+ anos), análise com IA (premium), análise técnica (premium), relatórios em PDF (premium), comparação com setor e gráficos interativos.',
+    description: 'Página completa de análise por empresa. Os modelos de valuation aplicáveis (até 10, incluindo P/VP justo para bancos), score geral ponderado, 65+ indicadores fundamentalistas, histórico de preços (5+ anos), análise com IA (premium), análise técnica (premium), relatórios em PDF (premium), comparação com setor e gráficos interativos.',
     url: '/acao',
     category: 'análise',
     plan: 'gratuito',
     steps: [
       'Acesse a página de análise individual (/acao/[ticker])',
       'Visualize o score geral da empresa',
-      'Analise todos os 8 modelos de valuation aplicados',
+      'Analise os modelos de valuation aplicados',
       'Consulte os 65+ indicadores fundamentalistas',
       'Veja o histórico de preços (5+ anos)',
       'Acesse análise com IA se for premium',
@@ -2201,7 +2202,7 @@ const PLATFORM_FEATURES: PlatformFeature[] = [
   // OUTRAS FEATURES
   {
     name: 'Análise Técnica',
-    description: 'Complemento à análise fundamentalista. Gráficos, indicadores técnicos (RSI, MACD, Bollinger Bands), suporte/resistência e sinais de compra/venda.',
+    description: 'Complemento à análise fundamentalista. Gráficos, indicadores técnicos (RSI, MACD, Bollinger Bands), suporte/resistência e faixas de preço estimadas pela IA.',
     url: '/acao',
     category: 'outros',
     plan: 'premium',
@@ -2211,7 +2212,7 @@ const PLATFORM_FEATURES: PlatformFeature[] = [
       'Visualize os gráficos interativos',
       'Analise os indicadores técnicos',
       'Veja os níveis de suporte e resistência',
-      'Consulte os sinais de compra/venda'
+      'Consulte as faixas de preço estimadas pela IA'
     ],
     whenToUse: 'Use quando quiser complementar a análise fundamentalista com análise técnica e gráficos.',
     examples: ['Análise técnica de PETR4', 'Gráficos e indicadores técnicos', 'Suporte e resistência']

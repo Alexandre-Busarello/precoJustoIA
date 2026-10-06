@@ -65,7 +65,7 @@ export function ToolsDropdown({ isPremium }: ToolsDropdownProps) {
       href: '/radar-dividendos',
       icon: <DollarSign className="w-4 h-4" />,
       title: 'Radar de Dividendos',
-      description: 'Projeções de dividendos com IA',
+      description: 'Proventos confirmados e projeções estatísticas',
       isPremium: false,
       isNew: true
     },

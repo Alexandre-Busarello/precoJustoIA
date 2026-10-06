@@ -11,6 +11,10 @@ interface PageProps {
   }>
 }
 
+// Só os slugs dos presets existem: qualquer outro responde 404 de verdade (antes o notFound() dentro do
+// Suspense chegava depois do streaming começar e a resposta saía com HTTP 200).
+export const dynamicParams = false
+
 export async function generateStaticParams() {
   const slugs = getAllPresetSlugs()
   return slugs.map((slug) => ({
@@ -23,16 +27,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const preset = getPresetBySlug(resolvedParams.slug)
 
   if (!preset) {
-    return {
-      title: 'Screening de Ações - Preço Justo AI',
-    }
+    notFound()
   }
 
   const baseUrl = 'https://precojusto.ai'
   const url = `${baseUrl}/screening-acoes/${preset.slug}`
 
   return {
-    title: `${preset.title} | Preço Justo AI`,
+    title: preset.title,
     description: preset.description,
     keywords: preset.keywords.join(', '),
     alternates: {
@@ -69,12 +71,15 @@ function ScreeningConversionContent({ slug }: { slug: string }) {
 
 export default async function ScreeningConversionPageRoute({ params }: PageProps) {
   const resolvedParams = await params
+  if (!getPresetBySlug(resolvedParams.slug)) {
+    notFound()
+  }
 
   return (
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <Loader2 className="size-5 animate-spin text-muted-foreground" strokeWidth={1.75} aria-label="Carregando" />
         </div>
       }
     >

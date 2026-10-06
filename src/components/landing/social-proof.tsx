@@ -1,136 +1,69 @@
-'use client'
-
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { 
-  Star, 
-  TrendingUp, 
-  Users, 
-  CheckCircle,
-  Building2,
-  BarChart3,
-  Shield,
-  Brain,
-  LucideIcon
-} from "lucide-react"
 import { ReactNode } from "react"
-
-// Mapa de ícones disponíveis
-const iconMap: Record<string, LucideIcon> = {
-  Building2,
-  BarChart3,
-  TrendingUp,
-  Shield,
-  CheckCircle,
-  Brain,
-  Star,
-  Users,
-}
+import { cn } from "@/lib/utils"
 
 interface SocialProofProps {
+  /** Números verificáveis (ex.: quantidade de empresas cobertas). Nunca estatísticas sem fonte. */
   stats?: Array<{
     value: string | number
     label: string
-    iconName?: string // Nome do ícone ao invés do componente
-    icon?: ReactNode // Mantido para compatibilidade, mas preferir iconName
+    /** @deprecated Ícones não são mais exibidos. */
+    iconName?: string
+    /** @deprecated Ícones não são mais exibidos. */
+    icon?: ReactNode
   }>
+  /** Depoimentos reais, identificados e com permissão de uso. Sem nota em estrelas. */
   testimonials?: Array<{
     name: string
     role?: string
     content: string
-    rating?: number
   }>
+  /** Fatos curtos exibidos como texto. */
   badges?: Array<{
     text: string
-    iconName?: string // Nome do ícone ao invés do componente
-    icon?: ReactNode // Mantido para compatibilidade, mas preferir iconName
+    /** @deprecated Ícones não são mais exibidos. */
+    iconName?: string
+    /** @deprecated Ícones não são mais exibidos. */
+    icon?: ReactNode
   }>
   className?: string
 }
 
-export function SocialProof({
-  stats,
-  testimonials,
-  badges,
-  className = ''
-}: SocialProofProps) {
+/** Prova social sóbria: números verificáveis, fatos em texto e depoimentos reais identificados. */
+export function SocialProof({ stats, testimonials, badges, className }: SocialProofProps) {
   return (
-    <section className={`py-12 sm:py-16 lg:py-20 bg-gradient-to-b from-gray-50 to-white dark:from-background/50 dark:to-background ${className}`}>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Stats */}
+    <section className={cn("border-y border-border bg-surface py-12 sm:py-16", className)}>
+      <div className="container mx-auto space-y-10 px-4 sm:px-6 lg:px-8">
         {stats && stats.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
-            {stats.map((stat, index) => {
-              const IconComponent = stat.iconName ? iconMap[stat.iconName] : null
-              return (
-                <div key={index} className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    {stat.icon || (IconComponent && <IconComponent className="w-6 h-6 text-blue-600" />)}
-                    <div className="text-3xl sm:text-4xl font-bold text-blue-600">
-                      {stat.value}
-                    </div>
-                  </div>
-                  <div className="text-sm sm:text-base text-muted-foreground">
-                    {stat.label}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <dl className="grid grid-cols-2 gap-6 md:grid-cols-4">
+            {stats.map((stat) => (
+              <div key={stat.label}>
+                <dt className="text-xs text-muted-foreground">{stat.label}</dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{stat.value}</dd>
+              </div>
+            ))}
+          </dl>
         )}
 
-        {/* Badges */}
         {badges && badges.length > 0 && (
-          <div className="flex flex-wrap justify-center gap-4 mb-12">
-            {badges.map((badge, index) => {
-              const IconComponent = badge.iconName ? iconMap[badge.iconName] : null
-              return (
-                <Badge 
-                  key={index} 
-                  variant="outline" 
-                  className="px-4 py-2 text-sm border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300"
-                >
-                  {badge.icon || (IconComponent && <IconComponent className="w-4 h-4 mr-2" />)}
-                  {badge.text}
-                </Badge>
-              )
-            })}
-          </div>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            {badges.map((badge) => (
+              <li key={badge.text} className="flex items-center">
+                {badge.text}
+              </li>
+            ))}
+          </ul>
         )}
 
-        {/* Testimonials */}
         {testimonials && testimonials.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-            {testimonials.map((testimonial, index) => (
-              <Card key={index} className="border-0 shadow-lg">
-                <CardContent className="p-6">
-                  {testimonial.rating && (
-                    <div className="flex items-center gap-1 mb-4">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`w-4 h-4 ${
-                            i < testimonial.rating!
-                              ? 'fill-yellow-400 text-yellow-400'
-                              : 'text-gray-300'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  <p className="text-muted-foreground mb-4 leading-relaxed">
-                    &ldquo;{testimonial.content}&rdquo;
-                  </p>
-                  <div>
-                    <div className="font-semibold">{testimonial.name}</div>
-                    {testimonial.role && (
-                      <div className="text-sm text-muted-foreground">
-                        {testimonial.role}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+          <div className="grid gap-4 md:grid-cols-3">
+            {testimonials.map((testimonial) => (
+              <figure key={testimonial.name} className="rounded-lg border border-border bg-card p-5">
+                <blockquote className="text-sm leading-6 text-foreground">&ldquo;{testimonial.content}&rdquo;</blockquote>
+                <figcaption className="mt-4 text-sm">
+                  <span className="font-medium text-foreground">{testimonial.name}</span>
+                  {testimonial.role && <span className="block text-muted-foreground">{testimonial.role}</span>}
+                </figcaption>
+              </figure>
             ))}
           </div>
         )}
@@ -138,4 +71,3 @@ export function SocialProof({
     </section>
   )
 }
-

@@ -27,7 +27,8 @@ function buildEtfRational(etf: EtfRankingItem): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { preset } = body as { preset: string; limit?: number };
+    // preview: abertura automática da página; não entra no histórico do usuário.
+    const { preset, preview } = body as { preset: string; limit?: number; preview?: boolean };
 
     if (!preset || !(preset in ETF_PRESETS)) {
       return NextResponse.json({ error: 'Preset inválido' }, { status: 400 });
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     const results = await runEtfRanking(prisma, preset as EtfPresetSlug, limit);
 
     // Salva histórico no formato RankBuilderResult (compatível com QuickRanker)
-    if (currentUser?.id) {
+    if (currentUser?.id && !preview) {
       // Busca preços atuais para todos os ETFs
       const tickers = results.map((r) => r.ticker);
       const priceRows = await prisma.dailyQuote.findMany({

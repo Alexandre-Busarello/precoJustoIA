@@ -6,21 +6,16 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
 import { prisma } from '@/lib/prisma'
-import { CompanyLogo } from '@/components/company-logo'
-import { CompanySizeBadge } from '@/components/company-size-badge'
-import StrategicAnalysisClient from '@/components/strategic-analysis-client'
-import HeaderScoreWrapper from '@/components/header-score-wrapper'
+import { getCompanySizeInfo } from '@/components/company-size-badge'
+import StrategicAnalysisClient, { StatementsAnalysisSection, StockSummaryHeader } from '@/components/strategic-analysis-client'
 import { PageCacheIndicator } from '@/components/page-cache-indicator'
 import AIAnalysisDual from '@/components/ai-analysis-dual'
 import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisLink from '@/components/technical-analysis-link'
 import MarketSentimentSection from '@/components/market-sentiment-section'
-import { AddToBacktestButton } from '@/components/add-to-backtest-button'
-import AssetSubscriptionButton from '@/components/asset-subscription-button'
 import { AutoSubscribeHandler } from '@/components/auto-subscribe-handler'
 import { RelatedCompanies } from '@/components/related-companies'
-import { Footer } from '@/components/footer'
 import { TrackingAssetView } from '@/components/tracking-asset-view'
 import { getComprehensiveFinancialData } from '@/lib/financial-data-service'
 import { cache } from '@/lib/cache-service'
@@ -33,33 +28,18 @@ import { StrategyFactory } from '@/lib/strategies/strategy-factory'
 import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config'
 import type { CompanyData } from '@/lib/strategies/types'
 import Link from 'next/link'
-import { EmailCaptureModal } from '@/components/email-capture-modal'
 import { CompanyFlagBanner } from '@/components/company-flag-banner'
-import { BenChatFAB } from '@/components/ben-chat-fab'
 import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
 import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
 import { AnonLimitCTA } from '@/components/anon-limit-cta'
-
-// Shadcn UI Components
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { FollowAssetCard } from '@/components/asset/follow-asset-card'
+import { AssetSectionNav, type AssetSection } from '@/components/asset/asset-section-nav'
+import { SectionHeader } from '@/components/ui/section-header'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-
-// Lucide Icons
-import {
-  Building2,
-  PieChart,
-  Eye,
-  User,
-  GitCompare,
-  ChevronDown,
-  Info,
-  FileText,
-  Calculator,
-  TrendingUp,
-  ArrowRight
-} from 'lucide-react'
+import { formatBRL, formatBRLCompact, formatDeltaPct, formatMultiple, formatNumber, formatPct } from '@/lib/format'
+import { marginOfSafety, valuationStatusLabel } from '@/lib/valuation-metrics'
+import { InfoHint } from '@/components/ui/info-hint'
+import { getLiquidityFlag, type LiquidityFlag } from '@/lib/rank-builder-service'
 
 interface PageProps {
   params: {
@@ -87,19 +67,20 @@ function toNumber(value: PrismaDecimal | Date | string | null): number | null {
   return parseFloat(String(value))
 }
 
-// Funções de formatação
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return 'N/A'
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  }).format(value)
+const SECTIONS: AssetSection[] = [
+  { id: 'valuation', label: 'Valuation' },
+  { id: 'indicadores', label: 'Indicadores' },
+  { id: 'dividendos', label: 'Dividendos' },
+  { id: 'demonstracoes', label: 'Demonstrações' },
+  { id: 'analise-ia', label: 'Análise IA' },
+  { id: 'tecnica', label: 'Técnica' },
+]
+
+/** Preço justo pelo Número de Graham (√(22,5 × LPA × VPA)); `null` sem LPA e VPA positivos. */
+function grahamFairValue(lpa: number | null, vpa: number | null): number | null {
+  if (!lpa || !vpa || lpa <= 0 || vpa <= 0) return null
+  return Math.sqrt(22.5 * lpa * vpa)
 }
-
-
-
-
-
 
 // Gerar metadata dinâmico para SEO
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -108,7 +89,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const ticker = tickerParam.toUpperCase() // Converter para maiúsculo apenas para consulta no BD
   
   // Verificar cache primeiro
-  const cacheKey = `metadata-${ticker}`
+  const cacheKey = `metadata-v2-${ticker}`
   const cached = await cache.get<any>(cacheKey, {
     prefix: 'companies',
     ttl: METADATA_CACHE_TTL
@@ -157,7 +138,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     if (!company) {
       return {
-        title: `${ticker} - Ticker Não Encontrado | Análise Fácil`,
+        title: `${ticker}: ticker não encontrado`,
         description: `O ticker ${ticker} não foi encontrado em nossa base de dados de análise de ações.`
       }
     }
@@ -215,25 +196,30 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       // Ignorar erro silenciosamente - não bloquear metadata
     }
     
-    const title = `${ticker} (${company.name}): Preço Justo e Potencial ${anoAtual} | Preço Justo AI`
+    const title = `${ticker} (${company.name}): Preço Justo e Potencial ${anoAtual}`
     
-    // Incluir descrição da empresa no SEO quando disponível
-    let baseDescription = `Análise fundamentalista completa da ação ${company.name} (${ticker}). Preço atual R$ ${currentPrice.toFixed(2)}`
-    
+    // Descrição para SEO com números em pt-BR; campos ausentes são omitidos
+    const pl = toNumber(latestFinancials?.pl ?? null)
+    const roe = toNumber(latestFinancials?.roe ?? null)
+    let baseDescription = `Análise fundamentalista da ação ${company.name} (${ticker}). Preço atual ${formatBRL(currentPrice)}`
     if (fairPrice && fairPrice > 0) {
-      baseDescription += `, Preço Justo calculado em R$ ${fairPrice.toFixed(2)}`
+      baseDescription += `, preço justo estimado em ${formatBRL(fairPrice)} pelo Número de Graham`
       if (upside !== null) {
-        baseDescription += `, com potencial de ${upside > 0 ? '+' : ''}${upside.toFixed(2)}%`
+        baseDescription += ` (potencial de ${formatDeltaPct(upside / 100)})`
       }
     }
-    
-    baseDescription += `. P/L: ${latestFinancials?.pl ? toNumber(latestFinancials.pl)?.toFixed(1) : 'N/A'}, ROE: ${latestFinancials?.roe ? (toNumber(latestFinancials.roe)! * 100).toFixed(1) + '%' : 'N/A'}. Setor ${company.sector || 'N/A'}.`
-    
+    const extras = [
+      pl !== null ? `P/L ${formatMultiple(pl)}` : null,
+      roe !== null ? `ROE ${formatPct(roe)}` : null,
+      company.sector ? `setor ${company.sector}` : null,
+    ].filter(Boolean)
+    baseDescription += extras.length > 0 ? `. ${extras.join(', ')}.` : '.'
+
     const companyInfo = company.description 
       ? ` ${company.description.substring(0, 80)}...` 
       : ''
     
-    const description = `${baseDescription}${companyInfo} Veja o Score de Qualidade atualizado e análise com IA.`
+    const description = `${baseDescription}${companyInfo} Veja o score atualizado e a análise com IA.`
 
     const metadata = {
       title,
@@ -291,13 +277,23 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return metadata
   } catch {
     return {
-      title: `${ticker} - Análise de Ação | Preço Justo AI`,
+      title: `${ticker}: análise da ação`,
       description: `Análise fundamentalista completa da ação ${ticker} com indicadores financeiros, valuation e estratégias de investimento. Descubra se ${ticker} está subvalorizada ou sobrevalorizada.`,
       alternates: {
         canonical: `/acao/${tickerParam.toLowerCase()}`,
       }
     }
   }
+}
+
+/** Volume médio diário com a ajuda do badge "Baixa liquidez" do cabeçalho. */
+function LiquidityNote({ flag }: { flag: LiquidityFlag }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="tabular-nums">Volume médio: {flag.value === null ? 'sem dado' : `${formatBRLCompact(flag.value)}/dia`}</span>
+      <InfoHint label="Sobre a baixa liquidez" content={flag.hint} />
+    </span>
+  )
 }
 
 export default async function TickerPage({ params }: PageProps) {
@@ -395,7 +391,7 @@ export default async function TickerPage({ params }: PageProps) {
         },
         dailyQuotes: {
           orderBy: { date: 'desc' },
-          take: 1
+          take: 2 // Último pregão e o anterior (variação do dia)
         }
       }
     }),
@@ -446,7 +442,10 @@ export default async function TickerPage({ params }: PageProps) {
 
   const latestFinancials = companyData.financialData[0]
   const latestQuote = companyData.dailyQuotes[0]
-  const currentPrice = toNumber(latestQuote?.price) || toNumber(latestFinancials?.lpa) || 0
+  const previousQuote = companyData.dailyQuotes[1]
+  const currentPrice = toNumber(latestQuote?.price) || 0
+  const previousPrice = toNumber(previousQuote?.price)
+  const dayChange = currentPrice > 0 && previousPrice && previousPrice > 0 ? currentPrice / previousPrice - 1 : null
 
   // Buscar concorrentes inteligentes para comparador premium
   const currentMarketCap = toNumber(latestFinancials?.marketCap)
@@ -472,7 +471,38 @@ export default async function TickerPage({ params }: PageProps) {
     ? `/compara-acoes/${ticker}/${competitors.map(c => c.ticker).join('/')}`
     : null
 
-  // As análises estratégicas agora são feitas no componente cliente
+  // Dados das empresas relacionadas para a tabela (preço, Graham e score só para quem pode ver)
+  const isLoggedIn = !!session?.user?.id
+  const canSeeGraham = isLoggedIn || canViewFullContent
+  const relatedSlice = relatedCompanies.slice(0, 5)
+  const relatedDetails = relatedSlice.length > 0
+    ? await prisma.company.findMany({
+        where: { ticker: { in: relatedSlice.map((c) => c.ticker) } },
+        select: {
+          ticker: true,
+          dailyQuotes: { orderBy: { date: 'desc' }, take: 1, select: { price: true } },
+          financialData: { orderBy: { year: 'desc' }, take: 1, select: { lpa: true, vpa: true } },
+          snapshots: { where: { isLatest: true }, orderBy: { createdAt: 'desc' }, take: 1, select: { overallScore: true } },
+        },
+      })
+    : []
+  const relatedByTicker = new Map(relatedDetails.map((detail) => [detail.ticker, detail]))
+  const relatedRows = relatedSlice.map((comp) => {
+    const detail = relatedByTicker.get(comp.ticker)
+    const financials = detail?.financialData[0]
+    return {
+      ticker: comp.ticker,
+      name: comp.name,
+      sector: comp.sector,
+      logoUrl: comp.logoUrl || null,
+      marketCap: toNumber(comp.marketCap ?? null),
+      assetType: 'STOCK', // Empresas relacionadas são sempre ações na página de ações
+      price: toNumber(detail?.dailyQuotes[0]?.price ?? null),
+      fairValue: canSeeGraham ? grahamFairValue(toNumber(financials?.lpa ?? null), toNumber(financials?.vpa ?? null)) : null,
+      score: canViewFullContent ? toNumber(detail?.snapshots[0]?.overallScore ?? null) : null,
+    }
+  })
+
 
   // Converter dados financeiros para números (evitar erro Decimal do Prisma)
   const serializedFinancials = latestFinancials ? Object.fromEntries(
@@ -543,11 +573,12 @@ export default async function TickerPage({ params }: PageProps) {
       // Executar análise Graham para obter preço justo
       const grahamAnalysis = StrategyFactory.runGrahamAnalysis(companyAnalysisData, STRATEGY_CONFIG.graham)
       const fairPrice = grahamAnalysis.fairValue
-      const upside = grahamAnalysis.upside
       const anoAtual = new Date().getFullYear()
-      const recommendation = upside && upside > 0 ? "compra" : "aguardar"
 
-      if (!fairPrice || fairPrice <= 0) return null
+      if (!fairPrice || fairPrice <= 0 || currentPrice <= 0) return null
+
+      const margin = marginOfSafety(currentPrice, fairPrice)
+      const statusLabel = valuationStatusLabel(margin)?.toLowerCase()
 
       const faqs = [
         {
@@ -555,7 +586,7 @@ export default async function TickerPage({ params }: PageProps) {
           "name": `Qual é o preço justo de ${ticker} (${companyData.name})?`,
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": `De acordo com o método de Graham/Bazin, o preço justo estimado para ${ticker} é de R$ ${fairPrice.toFixed(2)}, o que representa um potencial de ${upside ? upside.toFixed(2) : 'N/A'}% em relação ao preço atual de R$ ${currentPrice.toFixed(2)}.`
+            "text": `Entre os modelos de valuation do Preço Justo AI, como Graham e Barsi, o Número de Graham estima o preço justo de ${ticker} em ${formatBRL(fairPrice)}, uma margem de segurança de ${formatDeltaPct(margin)} em relação ao preço atual de ${formatBRL(currentPrice)}.`
           }
         },
         {
@@ -563,7 +594,7 @@ export default async function TickerPage({ params }: PageProps) {
           "name": `Vale a pena investir em ${ticker} em ${anoAtual}?`,
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": `Com base nos fundamentos atuais, o ativo apresenta uma margem de segurança que sugere ${recommendation}. O preço justo calculado é de R$ ${fairPrice.toFixed(2)} e o preço atual é R$ ${currentPrice.toFixed(2)}. Veja a análise completa no Preço Justo AI.`
+            "text": `Este conteúdo não é recomendação de investimento. Pelo Número de Graham, o preço atual de ${formatBRL(currentPrice)} está ${statusLabel ?? 'sem comparação com o preço justo'} (estimativa de ${formatBRL(fairPrice)}). Compare os demais modelos, o score e os indicadores na análise completa.`
           }
         }
       ]
@@ -646,12 +677,57 @@ export default async function TickerPage({ params }: PageProps) {
     }
   }
 
+  const marketCap = toNumber(latestFinancials?.marketCap ?? null)
+  const sizeInfo = getCompanySizeInfo(marketCap)
+  const liquidityFlag: LiquidityFlag | null = await getLiquidityFlag(companyData.id, companyData.assetType).catch(() => null)
+  const dividendYield = toNumber(latestFinancials?.dy ?? null)
+  const location = [companyData.city, companyData.state].filter(Boolean).join(', ')
+  const aboutItems = [
+    companyData.sector ? { label: 'Setor', value: companyData.sector } : null,
+    companyData.industry ? { label: 'Subsetor', value: companyData.industry } : null,
+    location ? { label: 'Sede', value: location } : null,
+    companyData.fullTimeEmployees
+      ? { label: 'Funcionários', value: formatNumber(companyData.fullTimeEmployees, { digits: 0 }) }
+      : null,
+  ].filter((item): item is { label: string; value: string } => item !== null)
+
   return (
     <>
       <TrackingAssetView ticker={ticker} assetType={companyData.assetType} />
 
-      <div className="container mx-auto py-8 px-4">
-        {/* Banner de Flag */}
+      <div className="mx-auto max-w-6xl space-y-8 px-4 pt-6 pb-12">
+        <div className="space-y-3">
+          <StockSummaryHeader
+            ticker={ticker}
+            name={companyData.name}
+            subtitle={companyData.sector ? `Ação · ${companyData.sector}` : 'Ação'}
+            logoUrl={companyData.logoUrl}
+            price={currentPrice > 0 ? currentPrice : null}
+            dayChange={dayChange}
+            updatedAt={latestFinancials?.updatedAt ?? null}
+            badges={[
+              ...(sizeInfo ? [{ label: sizeInfo.label, variant: 'neutral' as const }] : []),
+              ...(liquidityFlag?.isLow ? [{ label: 'Baixa liquidez', variant: 'warning' as const }] : []),
+            ]}
+            sector={companyData.sector}
+            industry={companyData.industry}
+            canViewFullContent={canViewFullContent}
+            isLoggedIn={isLoggedIn}
+            compareHref={smartComparatorUrl ?? `/comparador?tickers=${ticker}`}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <Link
+              href={`/acao/${ticker.toLowerCase()}/entendendo-score`}
+              prefetch={false}
+              className="inline-flex min-h-11 items-center text-xs font-medium text-brand underline-offset-4 hover:underline md:min-h-0"
+            >
+              Como o score é calculado
+            </Link>
+            {liquidityFlag?.isLow && <LiquidityNote flag={liquidityFlag} />}
+            <PageCacheIndicator ticker={ticker} isPremium={canViewFullContent} className="text-xs text-muted-foreground" />
+          </div>
+        </div>
+
         {activeFlag && (
           <CompanyFlagBanner
             flag={{
@@ -663,381 +739,154 @@ export default async function TickerPage({ params }: PageProps) {
             isPremium={canViewFullContent}
           />
         )}
-        {/* Layout Responsivo: 2 Cards Separados */}
-        <div className="mb-8">
-          {/* Desktop: Cards lado a lado (a partir de 1024px) */}
-          <div className="lg:flex lg:space-x-6 space-y-6 lg:space-y-0">
-            
-            {/* Card do Header da Empresa */}
-            <Card className="flex-1">
-              <CardContent className="p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-start space-y-4 sm:space-y-0 sm:space-x-4 lg:space-x-6">
-                  {/* Logo da empresa com fallback */}
-                  <div className="flex-shrink-0 self-center sm:self-start">
-                    <CompanyLogo
-                      logoUrl={companyData.logoUrl}
-                      companyName={companyData.name}
-                      ticker={ticker}
-                      size={80}
-                    />
-                  </div>
 
-                  {/* Informações básicas */}
-                  <div className="flex-1 min-w-0">
-                    {/* Header: Ticker + Preço (Responsivo) */}
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between mb-3">
-                      {/* Ticker e Setor */}
-                      <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 mb-3 lg:mb-0">
-                        <h1 className="text-2xl sm:text-3xl font-bold truncate">{ticker}</h1>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary" className="text-sm w-fit">
-                            {companyData.sector || 'N/A'}
-                          </Badge>
-                          <CompanySizeBadge 
-                            marketCap={toNumber(latestFinancials?.marketCap)} 
-                            size="md"
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Preço - Mobile: abaixo do ticker, Desktop: ao lado direito */}
-                      <div className="lg:text-right lg:flex-shrink-0">
-                        <p className="text-sm text-muted-foreground">Preço Atual</p>
-                        <p className="text-xl sm:text-2xl font-bold text-green-600">
-                          {formatCurrency(currentPrice)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Último dado disponível
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <h2 className="text-lg sm:text-xl text-muted-foreground mb-4 truncate">
-                      Análise da Ação {companyData.name}
-                    </h2>
+        {shouldShowAnonLimitCTA && <AnonLimitCTA />}
 
-                    {/* Descrição da Empresa - Collapsible para SEO */}
-                    {companyData.description && (
-                      <div className="mb-4">
-                        <Collapsible>
-                          <CollapsibleTrigger className="flex items-center space-x-2 text-left p-0 hover:no-underline">
-                            <Info className="w-4 h-4 text-muted-foreground" />
-                            <span className="font-medium text-muted-foreground">
-                              Sobre a {companyData.name}
-                            </span>
-                            <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform duration-200" />
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="mt-3">
-                            <div className="p-4 bg-muted/50 rounded-lg border">
-                              <p className="text-sm leading-relaxed text-muted-foreground">
-                                {companyData.description}
-                              </p>
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      </div>
-                    )}
+        {latestFinancials ? (
+          <>
+            <AssetSectionNav sections={SECTIONS} />
 
-                    {/* Card de Notificações - Destacado (apenas quando cards estão empilhados, até 1024px) */}
-                    <div className="mb-6 lg:hidden">
-                      <AssetSubscriptionButton
-                        ticker={ticker}
-                        companyId={companyData.id}
-                        variant="card"
-                        size="default"
-                        showLabel={true}
-                      />
-                    </div>
-
-                    {/* Botões de Ação */}
-                    <div className="mb-4 flex flex-wrap gap-2">
-                      {smartComparatorUrl && (
-                        <Button asChild>
-                          <Link href={smartComparatorUrl} prefetch={false}>
-                            <GitCompare className="w-4 h-4 mr-2" />
-                            Comparador Inteligente
-                          </Link>
-                        </Button>
-                      )}
-                      
-                      <AddToBacktestButton
-                        asset={{
-                          ticker: companyData.ticker,
-                          companyName: companyData.name,
-                          sector: companyData.sector || undefined,
-                          currentPrice: companyData.dailyQuotes?.[0]?.price ? Number(companyData.dailyQuotes[0].price) : undefined
-                        }}
-                        variant="outline"
-                        size="default"
-                        showLabel={true}
-                      />
-
-                      {reportsCount > 0 && (
-                        <Button asChild variant="outline" size="default">
-                          <Link href={`/acao/${ticker.toLowerCase()}/relatorios`} prefetch={false}>
-                            <FileText className="w-4 h-4 mr-2" />
-                            Relatórios ({reportsCount})
-                          </Link>
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Banner Calculadora de Dividend Yield - Desktop (dentro do card principal) */}
-                    {latestFinancials?.dy && Number(latestFinancials.dy) > 0 && (
-                      <div className="hidden lg:block mb-4">
-                        <Card className="border-2 border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/50 dark:from-green-950/20 dark:via-background dark:to-emerald-950/20">
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30 flex-shrink-0">
-                                  <Calculator className="w-5 h-5 text-green-600 dark:text-green-400" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="font-semibold text-base mb-1">Calcule sua Renda Passiva</h3>
-                                  <p className="text-xs text-muted-foreground">
-                                    Dividend Yield: <span className="font-semibold text-green-600">
-                                      {(Number(latestFinancials.dy) * 100).toFixed(2)}%
-                                    </span>
-                                  </p>
-                                </div>
-                              </div>
-                              <Button 
-                                asChild 
-                                size="sm"
-                                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white flex-shrink-0"
-                              >
-                                <Link href={`/calculadoras/dividend-yield?ticker=${ticker}`} prefetch={false}>
-                                  Calcular
-                                  <ArrowRight className="w-4 h-4 ml-1.5" />
-                                </Link>
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm mb-4">
-                      {companyData.industry && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <PieChart className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">{companyData.industry}</span>
-                        </div>
-                      )}
-                      
-                      {companyData.website && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Eye className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <Link 
-                            href={companyData.website} 
-                            prefetch={false}
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline truncate"
-                          >
-                            Site oficial
-                          </Link>
-                        </div>
-                      )}
-                      
-                      {(companyData.city || companyData.state) && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">
-                            {[companyData.city, companyData.state].filter(Boolean).join(', ')}
-                          </span>
-                        </div>
-                      )}
-
-                      {companyData.fullTimeEmployees && (
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">{companyData.fullTimeEmployees.toLocaleString()} funcionários</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Card do Score - Separado */}
-            <div className="lg:flex-shrink-0">
-              <PageCacheIndicator ticker={ticker} />
-              <HeaderScoreWrapper ticker={ticker} canViewFullContent={canViewFullContent} />
-              
-              {/* Card de Notificações - Destacado (apenas quando cards estão lado a lado, >= 1024px) */}
-              <div className="hidden lg:block mt-4 lg:w-80">
-                <AssetSubscriptionButton
+            <section id="valuation" className="scroll-mt-28">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+                <StrategicAnalysisClient
+                  ticker={ticker}
+                  currentPrice={currentPrice}
+                  latestFinancials={serializedFinancials}
+                  userIsPremium={canViewFullContent}
+                  sector={companyData.sector}
+                  industry={companyData.industry}
+                />
+                <FollowAssetCard
                   ticker={ticker}
                   companyId={companyData.id}
-                  variant="card"
-                  size="default"
-                  showLabel={true}
-                  compact={true}
+                  isLoggedIn={isLoggedIn}
+                  className="lg:sticky lg:top-32"
                 />
               </div>
-            </div>
-          </div>
-        </div>
+            </section>
 
-
-        {latestFinancials && (
-          <>
-            {shouldShowAnonLimitCTA && (
-              <div className="mb-8">
-                <AnonLimitCTA />
-              </div>
-            )}
-            {/* Análises Estratégicas - Usando componente cliente */}
-            {latestFinancials && (
-              <StrategicAnalysisClient 
+            <section id="indicadores" className="scroll-mt-28 space-y-4">
+              <SectionHeader title="Indicadores" description="Valores atuais e médias históricas dos principais indicadores." />
+              <FinancialIndicators
                 ticker={ticker}
-                currentPrice={currentPrice}
                 latestFinancials={serializedFinancials}
+                comprehensiveData={comprehensiveData}
+              />
+            </section>
+
+            <section id="dividendos" className="scroll-mt-28">
+              <DividendRadarCompact ticker={ticker} companyName={companyData.name} dividendYield={dividendYield} />
+            </section>
+
+            <section id="demonstracoes" className="scroll-mt-28 space-y-4">
+              <SectionHeader
+                title="Demonstrações financeiras"
+                description="Dados anuais dos últimos 7 anos completos, para acompanhar tendências de resultado."
+              />
+              {comprehensiveData ? (
+                <ComprehensiveFinancialView data={comprehensiveData} />
+              ) : (
+                <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+                  Demonstrações anuais indisponíveis para {ticker}.
+                </p>
+              )}
+              <StatementsAnalysisSection ticker={ticker} userIsPremium={canViewFullContent} />
+            </section>
+
+            <section id="analise-ia" className="scroll-mt-28 space-y-8">
+              <div className="space-y-4">
+                <SectionHeader
+                  title="Análise com IA"
+                  description="Relatório gerado por IA a partir dos dados públicos da empresa."
+                  actions={
+                    reportsCount > 0 ? (
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/acao/${ticker.toLowerCase()}/relatorios`} prefetch={false}>
+                          Relatórios ({reportsCount})
+                        </Link>
+                      </Button>
+                    ) : undefined
+                  }
+                />
+                <AIAnalysisDual
+                  ticker={ticker}
+                  name={companyData.name}
+                  sector={companyData.sector}
+                  currentPrice={currentPrice}
+                  financials={serializedFinancials}
+                  userIsPremium={canViewFullContent}
+                  companyId={companyData.id}
+                />
+              </div>
+              <MarketSentimentSection
+                ticker={ticker}
+                youtubeAnalysis={serializedYoutubeAnalysis}
                 userIsPremium={canViewFullContent}
               />
-            )}
+            </section>
 
-            {/* Análise de Sentimento de Mercado - YouTube */}
-            <MarketSentimentSection
-              ticker={ticker}
-              youtubeAnalysis={serializedYoutubeAnalysis}
-              userIsPremium={canViewFullContent}
-            />
-
-            {/* Link para Análise Técnica - Logo após as análises fundamentalistas */}
-            <TechnicalAnalysisLink 
-              ticker={ticker} 
-              userIsPremium={canViewFullContent}
-              currentPrice={currentPrice}
-            />
-
-            {/* Radar de Dividendos */}
-            <div className="mb-6">
-              <DividendRadarCompact 
-                ticker={ticker}
-                companyName={companyData.name}
-              />
-            </div>
-
-            {/* Card de Calculadora de Dividend Yield - Mobile/Tablet (versão completa) */}
-            {latestFinancials?.dy && Number(latestFinancials.dy) > 0 && (
-              <Card className="mb-6 lg:hidden border-2 border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/50 dark:from-green-950/20 dark:via-background dark:to-emerald-950/20">
-                <CardContent className="p-6">
-                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                          <Calculator className="w-5 h-5 text-green-600 dark:text-green-400" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-lg">Calcule sua Renda Passiva</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Descubra quanto você pode ganhar mensalmente com dividendos de {ticker}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex items-center gap-2 text-sm">
-                        <TrendingUp className="w-4 h-4 text-green-600" />
-                        <span className="text-muted-foreground">
-                          Dividend Yield atual: <span className="font-semibold text-green-600">
-                            {(Number(latestFinancials.dy) * 100).toFixed(2)}%
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-                    <Button 
-                      asChild 
-                      size="lg"
-                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
-                    >
-                      <Link href={`/calculadoras/dividend-yield?ticker=${ticker}`} prefetch={false}>
-                        Calcular Agora
-                        <ArrowRight className="w-4 h-4 ml-2" />
-                      </Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Indicadores Financeiros com Gráficos */}
-            <FinancialIndicators 
-              ticker={ticker}
-              latestFinancials={serializedFinancials}
-              comprehensiveData={comprehensiveData}
-            />
-
-            {/* Análise com IA */}
-            <AIAnalysisDual
-              ticker={ticker}
-              name={companyData.name}
-              sector={companyData.sector}
-              currentPrice={currentPrice}
-              financials={serializedFinancials}
-              userIsPremium={canViewFullContent}
-              companyId={companyData.id}
-            />
-
-            {/* Dados Financeiros Completos */}
-            {comprehensiveData && (
-              <div className="mt-8">
-                <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-                      Dados Financeiros Detalhados
-                    </h3>
-                  </div>
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    Esta seção apresenta <strong>dados anuais</strong> detalhados dos últimos 7 anos completos, 
-                    complementando os indicadores mostrados acima. Ideal para análise de tendências 
-                    e performance histórica da empresa.
-                  </p>
-                </div>
-                <ComprehensiveFinancialView data={comprehensiveData} />
-              </div>
-            )}
-
-            {/* Footer com data da atualização */}
-            <div className="mt-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Dados financeiros atualizados em: {' '}
-                {latestFinancials.updatedAt 
-                  ? new Date(latestFinancials.updatedAt).toLocaleDateString('pt-BR')
-                  : 'N/A'
-                }
-              </p>
-            </div>
+            <section id="tecnica" className="scroll-mt-28">
+              <TechnicalAnalysisLink ticker={ticker} userIsPremium={canViewFullContent} currentPrice={currentPrice} />
+            </section>
           </>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+            <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+              Ainda não há dados financeiros processados para {ticker}. Os modelos de valuation aparecem assim que os
+              demonstrativos forem importados.
+            </p>
+            <FollowAssetCard ticker={ticker} companyId={companyData.id} isLoggedIn={isLoggedIn} />
+          </div>
+        )}
+
+        {(companyData.description || aboutItems.length > 0 || companyData.website) && (
+          <section aria-labelledby="sobre-empresa" className="space-y-4">
+            <SectionHeader id="sobre-empresa" title={`Sobre a ${companyData.name}`} />
+            {companyData.description && (
+              <p className="max-w-[68ch] text-sm leading-6 text-muted-foreground">{companyData.description}</p>
+            )}
+            {(aboutItems.length > 0 || companyData.website) && (
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm lg:grid-cols-4">
+                {aboutItems.map((item) => (
+                  <div key={item.label} className="min-w-0">
+                    <dt className="text-xs text-muted-foreground">{item.label}</dt>
+                    <dd className="mt-0.5 text-foreground">{item.value}</dd>
+                  </div>
+                ))}
+                {companyData.website && (
+                  <div className="min-w-0">
+                    <dt className="text-xs text-muted-foreground">Site</dt>
+                    <dd className="mt-0.5">
+                      <a
+                        href={companyData.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-brand underline-offset-4 hover:underline"
+                      >
+                        Site oficial
+                      </a>
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            )}
+          </section>
+        )}
+
+        {relatedRows.length > 0 && (
+          <section aria-label="Empresas relacionadas">
+            <RelatedCompanies
+              companies={relatedRows}
+              currentTicker={ticker}
+              currentSector={companyData.sector}
+              currentIndustry={companyData.industry}
+              currentAssetType="STOCK"
+              showMargin={canSeeGraham}
+              showScore={canViewFullContent}
+            />
+          </section>
         )}
       </div>
-
-      {/* Seção de Empresas Relacionadas - SEO Links Internos */}
-      {relatedCompanies.length > 0 && (
-        <div className="container mx-auto px-4 pb-8">
-          <RelatedCompanies
-            companies={relatedCompanies.map(comp => ({
-              ticker: comp.ticker,
-              name: comp.name,
-              sector: comp.sector,
-              logoUrl: comp.logoUrl || null,
-              marketCap: comp.marketCap || null,
-              assetType: 'STOCK' // Empresas relacionadas são sempre ações na página de ações
-            }))}
-            currentTicker={ticker}
-            currentSector={companyData.sector}
-            currentIndustry={companyData.industry}
-            currentAssetType="STOCK"
-          />
-        </div>
-      )}
-
-      {/* Footer para usuários não logados - SEO */}
-      {!session && (
-        <Footer />
-      )}
 
       {/* Schema Structured Data para SEO */}
       {latestFinancials && (
@@ -1074,7 +923,7 @@ export default async function TickerPage({ params }: PageProps) {
               },
               "stockExchange": "B3 - Brasil Bolsa Balcão",
               "tickerSymbol": ticker,
-              "priceRange": formatCurrency(currentPrice),
+              "priceRange": formatBRL(currentPrice),
               "dividendYield": toNumber(latestFinancials.dy),
               "peRatio": toNumber(latestFinancials.pl),
               "pbRatio": toNumber(latestFinancials.pvp),
@@ -1101,17 +950,6 @@ export default async function TickerPage({ params }: PageProps) {
         <AutoSubscribeHandler ticker={ticker} />
       </Suspense>
 
-      {/* Modal de captura de email para usuários anônimos */}
-      {!session && (
-        <EmailCaptureModal
-          ticker={ticker}
-          companyId={companyData.id}
-          companyName={companyData.name}
-        />
-      )}
-
-      {/* Ben Chat FAB */}
-      {session && <BenChatFAB />}
     </>
   )
 }

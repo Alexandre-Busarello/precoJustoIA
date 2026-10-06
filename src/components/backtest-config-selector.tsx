@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { formatBRL, formatDeltaPct, formatPct } from '@/lib/format';
 
 interface BacktestConfig {
   id: string;
@@ -160,7 +161,7 @@ export function BacktestConfigSelector({
       if (response.ok) {
         await response.json();
         toast({
-          title: "Configuração criada!",
+          title: "Configuração criada",
           description: `${asset.ticker} foi adicionado à nova configuração "${newConfigForm.name}".`,
         });
         onConfigSelected();
@@ -203,7 +204,7 @@ export function BacktestConfigSelector({
       if (response.ok) {
         const selectedConfig = configs.find(c => c.id === configId);
         toast({
-          title: "Ativo adicionado!",
+          title: "Ativo adicionado",
           description: `${asset.ticker} foi adicionado à configuração "${selectedConfig?.name}".`,
         });
         onConfigSelected();
@@ -252,13 +253,6 @@ export function BacktestConfigSelector({
     }
   }, [isOpen]);
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
-
   const content = (
     <div className="flex flex-col h-full min-h-0">
           {/* Botões de ação */}
@@ -269,7 +263,7 @@ export function BacktestConfigSelector({
               className="flex-1"
             >
               <Settings className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Configurações Existentes</span>
+              <span className="hidden sm:inline">Configurações existentes</span>
               <span className="sm:hidden">Existentes</span>
             </Button>
             <Button
@@ -278,7 +272,7 @@ export function BacktestConfigSelector({
               className="flex-1"
             >
               <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Nova Configuração</span>
+              <span className="hidden sm:inline">Nova configuração</span>
               <span className="sm:hidden">Nova</span>
             </Button>
           </div>
@@ -288,7 +282,7 @@ export function BacktestConfigSelector({
               // Lista de configurações existentes
               <div className="space-y-3">
                 {configs.length > 0 && (
-                  <div className="text-xs text-gray-500 mb-3 px-1">
+                  <div className="text-xs text-muted-foreground mb-3 px-1">
                     Mostrando as 10 configurações mais recentes
                   </div>
                 )}
@@ -299,24 +293,24 @@ export function BacktestConfigSelector({
                   </div>
                 ) : configs.length === 0 ? (
                   <div className="text-center py-8">
-                    <AlertCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">
                       Nenhuma configuração encontrada
                     </h3>
-                    <p className="text-gray-500 mb-4">
+                    <p className="text-muted-foreground mb-4">
                       Crie sua primeira configuração de backtest para começar
                     </p>
                     <Button onClick={() => setShowCreateForm(true)}>
                       <Plus className="w-4 h-4 mr-2" />
-                      Criar Primeira Configuração
+                      Criar primeira configuração
                     </Button>
                   </div>
                 ) : (
                   configs.map((config) => (
                     <Card 
                       key={config.id} 
-                      className={`cursor-pointer transition-all hover:shadow-md ${
-                        selectedConfigId === config.id ? 'ring-2 ring-blue-500' : ''
+                      className={`cursor-pointer transition-all hover:bg-muted ${
+                        selectedConfigId === config.id ? 'ring-2 ring-brand' : ''
                       }`}
                       onClick={() => setSelectedConfigId(config.id)}
                     >
@@ -324,7 +318,7 @@ export function BacktestConfigSelector({
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <CardTitle className="text-sm sm:text-base truncate">{config.name}</CardTitle>
-                            <div className="flex flex-wrap items-center gap-1 sm:gap-2 md:gap-4 text-xs text-gray-500 mt-1">
+                            <div className="flex flex-wrap items-center gap-1 sm:gap-2 md:gap-4 text-xs text-muted-foreground mt-1">
                               <span className="flex items-center gap-1 whitespace-nowrap">
                                 <Calendar className="w-3 h-3 flex-shrink-0" />
                                 <span className="hidden sm:inline">{format(new Date(config.startDate), 'MMM/yy', { locale: ptBR })} - {format(new Date(config.endDate), 'MMM/yy', { locale: ptBR })}</span>
@@ -332,8 +326,8 @@ export function BacktestConfigSelector({
                               </span>
                               <span className="flex items-center gap-1 whitespace-nowrap">
                                 <DollarSign className="w-3 h-3 flex-shrink-0" />
-                                <span className="hidden sm:inline">{formatCurrency(config.initialCapital)}</span>
-                                <span className="sm:hidden">R$ {(config.initialCapital / 1000).toFixed(0)}k</span>
+                                <span className="hidden sm:inline">{formatBRL(config.initialCapital)}</span>
+                                <span className="sm:hidden">{formatBRL(config.initialCapital, { digits: 0 })}</span>
                               </span>
                               <span className="flex items-center gap-1 whitespace-nowrap">
                                 <Settings className="w-3 h-3 flex-shrink-0" />
@@ -344,7 +338,7 @@ export function BacktestConfigSelector({
                           {config.results && config.results.length > 0 && (
                             <Badge variant="secondary" className="text-xs w-fit">
                               <TrendingUp className="w-3 h-3 mr-1" />
-                              {config.results[0].annualizedReturn.toFixed(1)}%
+                              {formatDeltaPct(config.results[0].annualizedReturn)}
                             </Badge>
                           )}
                         </div>
@@ -354,7 +348,7 @@ export function BacktestConfigSelector({
                           <div className="flex flex-wrap gap-1">
                             {config.assets.slice(0, 3).map((asset) => (
                               <Badge key={asset.ticker} variant="outline" className="text-xs">
-                                <span className="hidden sm:inline">{asset.ticker} ({(asset.targetAllocation * 100).toFixed(0)}%)</span>
+                                <span className="hidden sm:inline">{asset.ticker} ({formatPct(asset.targetAllocation, { digits: 0 })})</span>
                                 <span className="sm:hidden">{asset.ticker}</span>
                               </Badge>
                             ))}
@@ -374,7 +368,7 @@ export function BacktestConfigSelector({
               // Formulário para nova configuração
               <div className="space-y-3 sm:space-y-4">
                 <div>
-                  <Label htmlFor="name" className="text-sm font-medium">Nome da Configuração *</Label>
+                  <Label htmlFor="name" className="text-sm font-medium">Nome da configuração</Label>
                   <Input
                     id="name"
                     value={newConfigForm.name}
@@ -398,7 +392,7 @@ export function BacktestConfigSelector({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <Label htmlFor="startDate" className="text-sm font-medium">Data de Início</Label>
+                    <Label htmlFor="startDate" className="text-sm font-medium">Data de início</Label>
                     <Input
                       id="startDate"
                       type="date"
@@ -408,7 +402,7 @@ export function BacktestConfigSelector({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="endDate" className="text-sm font-medium">Data de Fim</Label>
+                    <Label htmlFor="endDate" className="text-sm font-medium">Data de fim</Label>
                     <Input
                       id="endDate"
                       type="date"
@@ -421,7 +415,7 @@ export function BacktestConfigSelector({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <Label htmlFor="initialCapital" className="text-sm font-medium">Capital Inicial (R$)</Label>
+                    <Label htmlFor="initialCapital" className="text-sm font-medium">Capital inicial (R$)</Label>
                     <Input
                       id="initialCapital"
                       type="number"
@@ -436,7 +430,7 @@ export function BacktestConfigSelector({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="monthlyContribution" className="text-sm font-medium">Aporte Mensal (R$)</Label>
+                    <Label htmlFor="monthlyContribution" className="text-sm font-medium">Aporte mensal (R$)</Label>
                     <Input
                       id="monthlyContribution"
                       type="number"
@@ -452,16 +446,16 @@ export function BacktestConfigSelector({
                   </div>
                 </div>
 
-                <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-900 mb-2 text-sm sm:text-base">Ativo Inicial</h4>
+                <div className="rounded-lg border border-border bg-surface p-3 sm:p-4">
+                  <h4 className="font-medium text-foreground mb-2 text-sm sm:text-base">Ativo inicial</h4>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <Badge variant="default" className="w-fit">{asset.ticker}</Badge>
-                    <span className="text-xs sm:text-sm text-blue-700">
+                    <span className="text-xs sm:text-sm text-muted-foreground">
                       <span className="hidden sm:inline">{asset.companyName} - 100% da carteira inicialmente</span>
                       <span className="sm:hidden">100% da carteira inicialmente</span>
                     </span>
                   </div>
-                  <p className="text-xs text-blue-600 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Você poderá ajustar as alocações após criar a configuração
                   </p>
                 </div>
@@ -491,7 +485,7 @@ export function BacktestConfigSelector({
                 ) : (
                   <Check className="w-4 h-4 mr-2" />
                 )}
-                <span className="hidden sm:inline">Adicionar à Configuração</span>
+                <span className="hidden sm:inline">Adicionar à configuração</span>
                 <span className="sm:hidden">Adicionar</span>
               </Button>
             ) : (
@@ -505,7 +499,7 @@ export function BacktestConfigSelector({
                 ) : (
                   <Plus className="w-4 h-4 mr-2" />
                 )}
-                <span className="hidden sm:inline">Criar e Adicionar</span>
+                <span className="hidden sm:inline">Criar e adicionar</span>
                 <span className="sm:hidden">Criar</span>
               </Button>
             )}
@@ -521,7 +515,7 @@ export function BacktestConfigSelector({
           <SheetHeader className="px-4 pt-4 pb-2">
             <SheetTitle className="flex items-center gap-2">
               <Settings className="w-5 h-5" />
-              Adicionar {asset.ticker} ao Backtest
+              Adicionar {asset.ticker} ao backtest
             </SheetTitle>
             <SheetDescription>
               Escolha uma configuração existente ou crie uma nova para adicionar {asset.companyName || asset.ticker}
@@ -541,7 +535,7 @@ export function BacktestConfigSelector({
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl flex-1 min-w-0">
               <Settings className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-              <span className="truncate">Adicionar {asset.ticker} ao Backtest</span>
+              <span className="truncate">Adicionar {asset.ticker} ao backtest</span>
             </DialogTitle>
           </div>
           <DialogDescription className="text-sm sm:text-base">

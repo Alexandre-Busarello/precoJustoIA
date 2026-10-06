@@ -1,186 +1,64 @@
 /**
- * Badge de Retorno em Tempo Real
- * Busca e exibe o retorno em tempo real do índice em background
+ * Variação do dia em tempo real (só com o pregão aberto).
+ * Busca em segundo plano com cache; em caso de erro não mostra nada (vale a pontuação oficial).
  */
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { Badge } from '@/components/ui/badge';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { Clock, TrendingUp, TrendingDown, Radio } from 'lucide-react';
-import { fetchRealTimeReturnWithCache, getCachedRealTimeReturn } from '@/lib/index-realtime-cache';
+import { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
+import { formatDeltaPct } from '@/lib/format';
+import { fetchRealTimeReturnWithCache } from '@/lib/index-realtime-cache';
 import { isBrazilMarketOpen } from '@/lib/market-status-client';
-
-interface RealTimeReturnData {
-  dailyChange: number;
-  realTimeReturn: number;
-  isMarketOpen: boolean;
-  lastAvailableDailyChange?: number; // Última variação disponível (para banner quando mercado fechado)
-}
 
 interface IndexRealTimeBadgeProps {
   ticker: string;
 }
 
-export function IndexRealTimeBadge({
-  ticker,
-}: IndexRealTimeBadgeProps) {
-  const [realTimeData, setRealTimeData] = useState<RealTimeReturnData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const hasFetchedRef = useRef(false); // Evitar múltiplos fetches
-  
-  // Verificar se mercado está aberto - se não estiver, não mostrar badge
+type State = { status: 'loading' } | { status: 'ready'; dailyChange: number } | { status: 'hidden' };
+
+export function IndexRealTimeBadge({ ticker }: IndexRealTimeBadgeProps) {
   const marketOpen = isBrazilMarketOpen();
+  const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
-    // Se mercado fechado, não fazer fetch e não mostrar badge
-    if (!marketOpen) {
-      setIsLoading(false);
-      return;
-    }
-    
-    // Se já fez fetch, não fazer novamente
-    if (hasFetchedRef.current) {
-      return;
-    }
-
+    if (!marketOpen) return;
     let mounted = true;
-
-    async function fetchRealTimeReturn() {
-      try {
-        // Verificar cache primeiro (síncrono) antes de mostrar loading
-        const cached = getCachedRealTimeReturn(ticker);
-        if (cached) {
-          hasFetchedRef.current = true; // Marcar como já processado
-          if (mounted) {
-            setRealTimeData({
-              dailyChange: cached.dailyChange,
-              realTimeReturn: cached.realTimeReturn,
-              isMarketOpen: cached.isMarketOpen,
-              lastAvailableDailyChange: cached.lastAvailableDailyChange,
-            });
-            setIsLoading(false);
-          }
-          return;
-        }
-        
-        // Se não há cache, marcar como processado e fazer request
-        hasFetchedRef.current = true;
-        setIsLoading(true);
-        setError(false);
-        
-        // Usar função com cache automático
-        const data = await fetchRealTimeReturnWithCache(ticker);
-        
-        if (mounted) {
-          setRealTimeData({
-            dailyChange: data.dailyChange,
-            realTimeReturn: data.realTimeReturn,
-            isMarketOpen: data.isMarketOpen,
-            lastAvailableDailyChange: data.lastAvailableDailyChange,
-          });
-          setIsLoading(false);
-        }
-      } catch (err) {
+    // Usa o cache local quando existe; senão busca na API.
+    fetchRealTimeReturnWithCache(ticker)
+      .then((data) => mounted && setState({ status: 'ready', dailyChange: data.dailyChange }))
+      .catch((err) => {
         console.error(`Erro ao buscar rentabilidade em tempo real para ${ticker}:`, err);
-        if (mounted) {
-          setError(true);
-          setIsLoading(false);
-        }
-      }
-    }
-
-    // Buscar apenas uma vez quando o componente montar
-    fetchRealTimeReturn();
-
+        if (mounted) setState({ status: 'hidden' });
+      });
     return () => {
       mounted = false;
     };
   }, [ticker, marketOpen]);
 
-  // Se mercado fechado, não mostrar badge
-  if (!marketOpen) {
-    return null;
-  }
-  
-  // Se ainda está carregando, mostrar badge de "Calculando"
-  if (isLoading) {
-    return (
-      <TooltipProvider>
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <Badge variant="outline" className="text-xs">
-              <Clock className="h-3 w-3 mr-1 animate-pulse" />
-              <span className="hidden sm:inline">Calculando...</span>
-              <span className="sm:hidden">Calc...</span>
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[200px] text-xs">
-            <p>Calculando rentabilidade em tempo real antes do fechamento oficial</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
+  if (!marketOpen || state.status === 'hidden') return null;
+
+  if (state.status === 'loading') {
+    return <span className="text-xs text-muted-foreground">Calculando variação do dia</span>;
   }
 
-  // Se houve erro, não mostrar nada (usar retorno oficial)
-  if (error || !realTimeData) {
-    return null;
-  }
-
-  // Este componente só é renderizado quando mercado está aberto
-  // Mostrar variação do dia em tempo real (mercado aberto)
-  const isPositive = realTimeData.dailyChange >= 0;
-  const ChangeIcon = isPositive ? TrendingUp : TrendingDown;
-  const changeColor = isPositive
-    ? 'text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20'
-    : 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20';
-
-  const tooltipText = `Variação em tempo real: ${isPositive ? '+' : ''}${realTimeData.dailyChange.toFixed(2)}% hoje. Dados calculados antes do fechamento oficial do mercado. A pontuação oficial será atualizada às 19h.`;
-
+  // dailyChange vem em pontos percentuais (0,53 = 0,53%).
+  const change = state.dailyChange / 100;
   return (
-    <TooltipProvider>
-      <Tooltip delayDuration={200}>
-        <TooltipTrigger asChild>
-          <Badge
-            variant="outline"
-            className={`text-xs ${changeColor} relative group flex items-center gap-1`}
-          >
-            {/* Indicador de tempo real - ícone de rádio pulsante */}
-            <Radio className="h-2.5 w-2.5 text-blue-500 dark:text-blue-400 animate-pulse flex-shrink-0" />
-            <ChangeIcon className="h-3 w-3 flex-shrink-0" />
-            <span className="hidden md:inline whitespace-nowrap">
-              {isPositive ? '+' : ''}
-              {realTimeData.dailyChange.toFixed(2)}% hoje
-            </span>
-            <span className="md:hidden whitespace-nowrap">
-              {isPositive ? '+' : ''}
-              {realTimeData.dailyChange.toFixed(2)}%
-            </span>
-            {/* Badge pequeno indicando "Tempo Real" - visível mas discreto */}
-            <span className="hidden lg:inline text-[10px] opacity-70 ml-0.5 font-normal">
-              • tempo real
-            </span>
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[260px] text-xs p-2">
-          <p className="font-semibold mb-1.5 flex items-center gap-1.5">
-            <Radio className="h-3 w-3 text-blue-500 animate-pulse" />
-            Dados em Tempo Real
-          </p>
-          <p className="text-muted-foreground leading-relaxed">
-            {tooltipText}
-          </p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <span
+      className="inline-flex items-center gap-1 text-xs"
+      title="Variação calculada antes do fechamento oficial. A pontuação oficial é atualizada às 19h."
+    >
+      <span className="size-1.5 rounded-full bg-brand" aria-hidden="true" />
+      <span
+        className={cn(
+          'font-medium tabular-nums',
+          change > 0 ? 'text-positive' : change < 0 ? 'text-negative' : 'text-muted-foreground'
+        )}
+      >
+        {formatDeltaPct(change, { digits: 2 })}
+      </span>
+      <span className="text-muted-foreground">hoje, tempo real</span>
+    </span>
   );
 }
-

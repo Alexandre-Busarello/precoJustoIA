@@ -1,17 +1,18 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+import { Loader2, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
-import { Send, User, UserCheck, Clock, AlertCircle, CheckCircle, XCircle, MessageSquare } from 'lucide-react'
+import { formatDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
-interface TicketMessage {
+export interface TicketMessage {
   id: string
   message: string
   createdAt: string
@@ -22,13 +23,17 @@ interface TicketMessage {
   }
 }
 
-interface SupportTicket {
+export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'WAITING_USER' | 'WAITING_ADMIN' | 'RESOLVED' | 'CLOSED'
+export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
+export type TicketCategory = 'GENERAL' | 'TECHNICAL' | 'BILLING' | 'FEATURE_REQUEST' | 'BUG_REPORT' | 'ACCOUNT'
+
+export interface SupportTicket {
   id: string
   title: string
   description: string
-  status: 'OPEN' | 'IN_PROGRESS' | 'WAITING_USER' | 'WAITING_ADMIN' | 'RESOLVED' | 'CLOSED'
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
-  category: 'GENERAL' | 'TECHNICAL' | 'BILLING' | 'FEATURE_REQUEST' | 'BUG_REPORT' | 'ACCOUNT'
+  status: TicketStatus
+  priority: TicketPriority
+  category: TicketCategory
   createdAt: string
   updatedAt: string
   closedAt?: string
@@ -43,6 +48,42 @@ interface SupportTicket {
   messages: TicketMessage[]
 }
 
+type BadgeVariant = 'neutral' | 'brand' | 'warning' | 'positive'
+
+export const TICKET_STATUS: Record<TicketStatus, { label: string; variant: BadgeVariant }> = {
+  OPEN: { label: 'Aberto', variant: 'neutral' },
+  IN_PROGRESS: { label: 'Em andamento', variant: 'brand' },
+  WAITING_USER: { label: 'Aguardando você', variant: 'warning' },
+  WAITING_ADMIN: { label: 'Aguardando suporte', variant: 'neutral' },
+  RESOLVED: { label: 'Resolvido', variant: 'positive' },
+  CLOSED: { label: 'Fechado', variant: 'neutral' },
+}
+
+export const TICKET_PRIORITY: Record<TicketPriority, string> = {
+  LOW: 'Baixa',
+  MEDIUM: 'Média',
+  HIGH: 'Alta',
+  URGENT: 'Urgente',
+}
+
+export const TICKET_CATEGORY: Record<TicketCategory, string> = {
+  GENERAL: 'Dúvida geral',
+  TECHNICAL: 'Problema técnico',
+  BILLING: 'Cobrança',
+  FEATURE_REQUEST: 'Sugestão',
+  BUG_REPORT: 'Bug',
+  ACCOUNT: 'Conta',
+}
+
+export const OPEN_TICKET_STATUSES: TicketStatus[] = ['OPEN', 'IN_PROGRESS', 'WAITING_USER', 'WAITING_ADMIN']
+
+export function TicketStatusBadge({ status }: { status: TicketStatus }) {
+  const config = TICKET_STATUS[status]
+  return <Badge variant={config.variant}>{config.label}</Badge>
+}
+
+export const ticketNumber = (id: string) => `#${id.slice(-8)}`
+
 interface TicketDetailsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -50,245 +91,180 @@ interface TicketDetailsDialogProps {
   onTicketUpdated: () => void
 }
 
-const statusConfig = {
-  OPEN: { label: 'Aberto', color: 'bg-blue-500', icon: AlertCircle },
-  IN_PROGRESS: { label: 'Em Andamento', color: 'bg-yellow-500', icon: Clock },
-  WAITING_USER: { label: 'Aguardando Você', color: 'bg-orange-500', icon: MessageSquare },
-  WAITING_ADMIN: { label: 'Aguardando Suporte', color: 'bg-purple-500', icon: Clock },
-  RESOLVED: { label: 'Resolvido', color: 'bg-green-500', icon: CheckCircle },
-  CLOSED: { label: 'Fechado', color: 'bg-gray-500', icon: XCircle }
-}
-
-const priorityConfig = {
-  LOW: { label: 'Baixa', color: 'bg-gray-500' },
-  MEDIUM: { label: 'Média', color: 'bg-blue-500' },
-  HIGH: { label: 'Alta', color: 'bg-orange-500' },
-  URGENT: { label: 'Urgente', color: 'bg-red-500' }
-}
-
-const categoryConfig = {
-  GENERAL: 'Geral',
-  TECHNICAL: 'Técnico',
-  BILLING: 'Faturamento',
-  FEATURE_REQUEST: 'Solicitação de Recurso',
-  BUG_REPORT: 'Relatório de Bug',
-  ACCOUNT: 'Conta'
-}
+const MAX_MESSAGE = 2000
 
 export default function TicketDetailsDialog({ open, onOpenChange, ticket, onTicketUpdated }: TicketDetailsDialogProps) {
   const [messages, setMessages] = useState<TicketMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
+
+  // Sem DialogTrigger o Radix não sabe para onde devolver o foco: guarda o elemento que abriu o diálogo
+  const returnFocusRef = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    if (open && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+      returnFocusRef.current = document.activeElement
+    }
+  }, [open])
+  const handleCloseAutoFocus = (event: Event) => {
+    const target = returnFocusRef.current
+    if (target?.isConnected) {
+      event.preventDefault()
+      target.focus()
+    }
+  }
   const { toast } = useToast()
 
   const fetchMessages = useCallback(async () => {
-    if (!ticket?.id) return
-    
     try {
       setLoading(true)
+      setLoadError(false)
       const response = await fetch(`/api/tickets/${ticket.id}/messages`)
-      
-      if (!response.ok) {
-        throw new Error('Erro ao carregar mensagens')
-      }
-
-      const data = await response.json()
-      setMessages(data)
+      if (!response.ok) throw new Error('Erro ao carregar mensagens')
+      setMessages(await response.json())
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error)
-      toast({
-        title: 'Erro ao carregar mensagens',
-        description: error instanceof Error ? error.message : 'Erro desconhecido',
-        variant: 'destructive'
-      })
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
-  }, [ticket?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ticket.id])
 
   useEffect(() => {
-    if (open && ticket) {
-      fetchMessages()
-    }
-  }, [open, ticket, fetchMessages])
+    if (open) fetchMessages()
+  }, [open, fetchMessages])
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim()) return
-
+  const handleSendMessage = async (e: FormEvent) => {
+    e.preventDefault()
+    const text = newMessage.trim()
+    if (!text) return
     setSendingMessage(true)
-
     try {
       const response = await fetch(`/api/tickets/${ticket.id}/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: newMessage.trim()
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
       })
-
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || 'Erro ao enviar mensagem')
       }
-
       setNewMessage('')
       await fetchMessages()
       onTicketUpdated()
-
-      toast({
-        title: 'Mensagem enviada!',
-        description: 'Sua mensagem foi enviada com sucesso.',
-      })
-
+      toast({ title: 'Resposta enviada' })
     } catch (error) {
       toast({
-        title: 'Erro ao enviar mensagem',
-        description: error instanceof Error ? error.message : 'Erro desconhecido',
-        variant: 'destructive'
+        title: 'Não foi possível enviar',
+        description: error instanceof Error ? error.message : 'Tente novamente em instantes.',
+        variant: 'destructive',
       })
     } finally {
       setSendingMessage(false)
     }
   }
 
-  const StatusIcon = statusConfig[ticket.status].icon
   const canReply = !['CLOSED', 'RESOLVED'].includes(ticket.status)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-[800px] max-h-[90vh] h-[90vh] sm:h-auto flex flex-col p-4 sm:p-6">
-        <DialogHeader className="flex-shrink-0">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <DialogTitle className="text-lg sm:text-xl pr-2 line-clamp-2">{ticket.title}</DialogTitle>
-              <DialogDescription className="mt-1 sm:mt-2 text-sm">
-                Ticket #{ticket.id.slice(-8)} • {categoryConfig[ticket.category]}
-              </DialogDescription>
+      <DialogContent
+        className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl sm:p-0"
+        onCloseAutoFocus={handleCloseAutoFocus}
+      >
+        <DialogHeader className="border-b border-border p-5 pr-14 sm:p-6 sm:pr-14">
+          <DialogTitle className="text-lg leading-snug">{ticket.title}</DialogTitle>
+          <DialogDescription asChild>
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <TicketStatusBadge status={ticket.status} />
+                <span className="tabular-nums">{ticketNumber(ticket.id)}</span>
+              </div>
+              <p className="tabular-nums">
+                {TICKET_CATEGORY[ticket.category]} · Prioridade {TICKET_PRIORITY[ticket.priority].toLowerCase()} · Aberto em{' '}
+                {formatDate(ticket.createdAt)}
+                {ticket.closedAt && <> · Fechado em {formatDate(ticket.closedAt)}</>}
+                {ticket.assignee?.name && <> · Atendido por {ticket.assignee.name}</>}
+              </p>
             </div>
-            <div className="flex flex-row sm:flex-col gap-2 sm:ml-4 flex-shrink-0">
-              <Badge 
-                variant="secondary" 
-                className={`${statusConfig[ticket.status].color} text-white text-xs`}
-              >
-                <StatusIcon className="h-3 w-3 mr-1" />
-                {statusConfig[ticket.status].label}
-              </Badge>
-              <Badge 
-                variant="outline"
-                className={`${priorityConfig[ticket.priority].color} text-white border-0 text-xs`}
-              >
-                {priorityConfig[ticket.priority].label}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 mt-3 sm:mt-4">
-            <span>Criado: {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}</span>
-            {ticket.assignee && (
-              <span className="hidden sm:inline">Atribuído a: {ticket.assignee.name}</span>
-            )}
-            {ticket.closedAt && (
-              <span>Fechado: {new Date(ticket.closedAt).toLocaleDateString('pt-BR')}</span>
-            )}
-          </div>
+          </DialogDescription>
         </DialogHeader>
 
-        <Separator className="my-4" />
-
-        {/* Mensagens */}
-        <div className="flex-1 min-h-0">
-          <ScrollArea className="h-[300px] sm:h-[400px] pr-2 sm:pr-4">
-            <div className="space-y-4">
-              {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  Nenhuma mensagem ainda
-                </div>
-              ) : (
-                messages.map((message) => (
-                  <Card key={message.id} className={message.user.isAdmin ? 'bg-blue-50 border-blue-200' : ''}>
-                    <CardContent className="pt-3 sm:pt-4 pb-3 sm:pb-4">
-                      <div className="flex items-start gap-2 sm:gap-3">
-                        <div className={`p-1.5 sm:p-2 rounded-full flex-shrink-0 ${message.user.isAdmin ? 'bg-blue-600' : 'bg-gray-600'}`}>
-                          {message.user.isAdmin ? (
-                            <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                          ) : (
-                            <User className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-900 text-sm sm:text-base">
-                                {message.user.isAdmin ? 'Suporte' : message.user.name || 'Você'}
-                              </span>
-                              {message.user.isAdmin && (
-                                <Badge variant="secondary" className="text-xs">
-                                  Equipe
-                                </Badge>
-                              )}
-                            </div>
-                            <span className="text-xs text-gray-500">
-                              {new Date(message.createdAt).toLocaleDateString('pt-BR')} {new Date(message.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <div className="text-gray-700 whitespace-pre-wrap text-sm sm:text-base break-words">
-                            {message.message}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6" aria-live="polite">
+          {loading && messages.length === 0 ? (
+            <div className="space-y-4" aria-busy="true">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-16 w-4/5" />
             </div>
-          </ScrollArea>
+          ) : loadError ? (
+            <div role="alert" className="space-y-3 text-center">
+              <p className="text-sm text-muted-foreground">Não foi possível carregar as mensagens.</p>
+              <Button variant="outline" onClick={fetchMessages}>
+                Tentar novamente
+              </Button>
+            </div>
+          ) : messages.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground">Nenhuma mensagem ainda.</p>
+          ) : (
+            <ol className="space-y-4">
+              {messages.map((message) => {
+                const fromTeam = message.user.isAdmin
+                return (
+                  <li
+                    key={message.id}
+                    className={cn('rounded-lg border p-4', fromTeam ? 'border-border bg-surface' : 'border-border bg-card')}
+                  >
+                    <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                      <span className="font-medium text-foreground">{fromTeam ? 'Equipe de suporte' : message.user.name || 'Você'}</span>
+                      <time dateTime={message.createdAt} className="text-xs text-muted-foreground tabular-nums">
+                        {formatDate(message.createdAt, { style: 'datetime' })}
+                      </time>
+                    </div>
+                    <p className="text-sm leading-6 break-words whitespace-pre-wrap text-foreground">{message.message}</p>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
         </div>
 
-        {/* Campo de resposta */}
-        {canReply && (
-          <>
-            <Separator className="my-3 sm:my-4" />
-            <div className="flex-shrink-0 space-y-3">
+        <div className="border-t border-border p-5 sm:p-6">
+          {canReply ? (
+            <form onSubmit={handleSendMessage} className="grid gap-2">
+              <Label htmlFor="ticket-reply" className="sr-only">
+                Sua resposta
+              </Label>
               <Textarea
-                placeholder="Digite sua resposta..."
+                id="ticket-reply"
+                placeholder="Escreva sua resposta"
                 value={newMessage}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewMessage(e.target.value)}
-                rows={2}
-                maxLength={2000}
-                className="text-sm sm:text-base resize-none"
+                onChange={(e) => setNewMessage(e.target.value)}
+                rows={3}
+                maxLength={MAX_MESSAGE}
+                className="resize-none"
+                aria-describedby="ticket-reply-count"
               />
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                <span className="text-xs text-gray-500">
-                  {newMessage.length}/2000 caracteres
+              <div className="flex items-center justify-between gap-3">
+                <span id="ticket-reply-count" className="text-xs text-muted-foreground tabular-nums">
+                  {newMessage.length}/{MAX_MESSAGE}
                 </span>
-                <Button 
-                  onClick={handleSendMessage}
-                  disabled={!newMessage.trim() || sendingMessage}
-                  className="flex items-center gap-2 w-full sm:w-auto"
-                  size="sm"
-                >
-                  <Send className="h-4 w-4" />
-                  {sendingMessage ? 'Enviando...' : 'Enviar'}
+                <Button type="submit" disabled={!newMessage.trim() || sendingMessage}>
+                  {sendingMessage ? (
+                    <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
+                  ) : (
+                    <Send className="size-4" strokeWidth={1.75} />
+                  )}
+                  Enviar resposta
                 </Button>
               </div>
-            </div>
-          </>
-        )}
-
-        {!canReply && (
-          <div className="flex-shrink-0 bg-gray-50 p-3 sm:p-4 rounded-lg text-center">
-            <p className="text-gray-600 text-sm sm:text-base">
-              Este ticket está {ticket.status === 'CLOSED' ? 'fechado' : 'resolvido'} e não aceita mais respostas.
+            </form>
+          ) : (
+            <p className="text-center text-sm text-muted-foreground">
+              Este chamado está {ticket.status === 'CLOSED' ? 'fechado' : 'resolvido'} e não aceita novas respostas.
             </p>
-          </div>
-        )}
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )

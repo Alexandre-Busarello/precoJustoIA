@@ -1,15 +1,15 @@
 /**
- * Card de Índice
- * Exibe informações resumidas de um índice no dashboard
+ * Card de índice da listagem /indices: nome, ticker, sparkline e métricas principais.
  */
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { formatDeltaPct, formatNumber, formatPct } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
 import { IndexSparkline } from './index-sparkline';
 import { IndexRealTimeBadge } from './index-realtime-badge';
 import { isBrazilMarketOpen } from '@/lib/market-status-client';
@@ -17,122 +17,101 @@ import { isBrazilMarketOpen } from '@/lib/market-status-client';
 interface IndexCardProps {
   ticker: string;
   name: string;
-  color: string;
   currentPoints: number;
+  /** Retorno acumulado desde o início, em pontos percentuais. */
   accumulatedReturn: number;
-  dailyChange: number | null; // Variação do dia (quando disponível)
+  /** Variação do último pregão, em pontos percentuais. */
+  dailyChange: number | null;
+  /** DY médio ponderado da carteira, em pontos percentuais. */
   currentYield: number | null;
   assetCount: number;
   sparklineData?: Array<{ date: string; points: number }>;
 }
 
+function toneClass(value: number) {
+  return value > 0 ? 'text-positive' : value < 0 ? 'text-negative' : 'text-foreground';
+}
+
 export function IndexCard({
   ticker,
   name,
-  color,
   currentPoints,
   accumulatedReturn,
   dailyChange,
   currentYield,
   assetCount,
-  sparklineData = []
+  sparklineData = [],
 }: IndexCardProps) {
-  // Sempre mostrar retorno acumulado (total desde o início)
-  const isPositive = accumulatedReturn >= 0;
-  const returnColor = isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
-  const ReturnIcon = isPositive ? TrendingUp : TrendingDown;
-  
-  // Para variação do dia, se disponível
-  const hasDailyChange = dailyChange !== null;
-  const isDailyPositive = hasDailyChange ? dailyChange >= 0 : null;
-  
-  // Verificar se mercado está aberto e atualizar periodicamente
-  const [marketOpen, setMarketOpen] = useState(() => isBrazilMarketOpen());
-  
+  // O status do pregão depende do relógio do cliente: calcula só após montar (evita divergência de hidratação).
+  const [marketOpen, setMarketOpen] = useState(false);
+
   useEffect(() => {
-    // Atualizar status do mercado a cada minuto
-    const interval = setInterval(() => {
-      setMarketOpen(isBrazilMarketOpen());
-    }, 60000); // 60 segundos
-    
+    setMarketOpen(isBrazilMarketOpen());
+    const interval = setInterval(() => setMarketOpen(isBrazilMarketOpen()), 60_000);
     return () => clearInterval(interval);
   }, []);
 
+  const totalReturn = accumulatedReturn / 100;
+  const daily = dailyChange !== null ? dailyChange / 100 : null;
+
   return (
-    <Link href={`/indices/${ticker}`}>
-      <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <CardTitle className="text-lg font-semibold mb-1">{name}</CardTitle>
-              <Badge 
-                variant="outline" 
-                className="text-xs"
-                style={{ borderColor: color, color }}
-              >
-                {ticker}
-              </Badge>
-            </div>
-            <div 
-              className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
-              style={{ backgroundColor: color }}
-            />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {/* Sparkline */}
-          <div className="h-[40px] -mx-2">
-            <IndexSparkline data={sparklineData} color={color} />
-          </div>
+    <Link
+      href={`/indices/${ticker.toLowerCase()}`}
+      className="group flex h-full flex-col gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring sm:p-5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h2 className="text-sm font-medium text-foreground">{name}</h2>
+          <Badge variant="neutral">{ticker}</Badge>
+        </div>
+        <ChevronRight
+          className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
+      </div>
 
-          {/* Métricas */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Pontos</span>
-              <span className="text-lg font-semibold">{currentPoints.toFixed(2)}</span>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Retorno Total</span>
-              <div className="flex flex-col items-end gap-1">
-                <div className={`flex items-center gap-1 ${returnColor}`}>
-                  <ReturnIcon className="h-4 w-4" />
-                  <span className="font-semibold">
-                    {isPositive ? '+' : ''}{accumulatedReturn.toFixed(2)}%
-                  </span>
-                </div>
-                {/* Mostrar badge de tempo real apenas quando mercado aberto */}
-                {marketOpen && <IndexRealTimeBadge ticker={ticker} />}
-                {/* Mostrar variação do dia sem badge apenas quando mercado fechado */}
-                {!marketOpen && hasDailyChange && (
-                  <span className={`text-xs ${isDailyPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {isDailyPositive ? '+' : ''}{dailyChange!.toFixed(2)}% hoje
-                  </span>
-                )}
-              </div>
-            </div>
+      <IndexSparkline data={sparklineData} />
 
-            {currentYield !== null && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">DY Médio</span>
-                <span className="text-sm font-medium">{currentYield.toFixed(2)}%</span>
-              </div>
-            )}
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">Retorno desde o início</p>
+          <p className={cn('text-2xl font-semibold tabular-nums tracking-tight', toneClass(totalReturn))}>
+            {formatDeltaPct(totalReturn)}
+          </p>
+        </div>
+        <div className="text-right">
+          {marketOpen ? (
+            <IndexRealTimeBadge ticker={ticker} />
+          ) : (
+            daily !== null && (
+              <p className="text-xs">
+                <span className={cn('font-medium tabular-nums', toneClass(daily))}>
+                  {formatDeltaPct(daily, { digits: 2 })}
+                </span>{' '}
+                <span className="text-muted-foreground">no último pregão</span>
+              </p>
+            )
+          )}
+        </div>
+      </div>
 
-            <div className="flex items-center justify-between pt-2 border-t">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Ativos</span>
-              <span className="text-sm font-medium">{assetCount}</span>
-            </div>
-          </div>
-
-          {/* Link */}
-          <div className="flex items-center justify-end pt-2 text-sm text-blue-600 dark:text-blue-400">
-            Ver detalhes
-            <ArrowRight className="h-4 w-4 ml-1" />
-          </div>
-        </CardContent>
-      </Card>
+      <dl className="mt-auto grid grid-cols-3 gap-3 border-t border-border pt-3 text-sm">
+        <div className="min-w-0">
+          <dt className="text-xs text-muted-foreground">Pontos</dt>
+          <dd className="font-medium tabular-nums text-foreground">{formatNumber(currentPoints, { digits: 2 })}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-xs text-muted-foreground">DY médio</dt>
+          <dd className="font-medium tabular-nums text-foreground">
+            {currentYield !== null ? formatPct(currentYield / 100) : '—'}
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-xs text-muted-foreground">Ativos</dt>
+          <dd className="font-medium tabular-nums text-foreground">{assetCount}</dd>
+        </div>
+      </dl>
     </Link>
   );
 }
-

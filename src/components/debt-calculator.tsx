@@ -3,11 +3,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { InfoHint } from '@/components/ui/info-hint'
 import { Label } from '@/components/ui/label'
-import { Loader2, Download, Info, Edit, Trash2, CheckSquare, Square } from 'lucide-react'
+import { SectionHeader } from '@/components/ui/section-header'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Loader2, Download, Pencil, Trash2 } from 'lucide-react'
+import { formatBRL } from '@/lib/format'
+import { DecimalInput, NumericMoneyInput } from '@/app/calculadoras/_components/money-input'
 import { useToast } from '@/hooks/use-toast'
 import { usePremiumStatus } from '@/hooks/use-premium-status'
 import { DebtForm, DebtFormData } from './debt-form'
@@ -15,7 +20,6 @@ import { RentabilitySelector, StrategySource } from './rentability-selector'
 import { SimulationChart } from './simulation-chart'
 import { SimulationSummary } from './simulation-summary'
 import { AIAnalysisSection } from './ai-analysis-section'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface DebtCalculatorProps {
   isPublic?: boolean
@@ -99,8 +103,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
     } catch (error) {
       console.error('Erro ao carregar dívidas:', error)
       toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar suas dívidas',
+        title: 'Não foi possível carregar suas dívidas',
         variant: 'destructive'
       })
     } finally {
@@ -177,7 +180,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
       : 0
 
     const aggregatedData = {
-      name: selectedDebts.length === 1 ? selectedDebts[0].name : `Múltiplas Dívidas (${selectedDebts.length})`,
+      name: selectedDebts.length === 1 ? selectedDebts[0].name : `${selectedDebts.length} dívidas`,
       balance: totalBalance,
       monthlyPayment: totalMonthlyPayment,
       interestRateAnnual: weightedRate,
@@ -214,7 +217,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
         description: 'Faça login para salvar suas dívidas',
         variant: 'default'
       })
-      router.push('/auth/signin')
+      router.push('/login?callbackUrl=/arbitragem-divida')
       return
     }
 
@@ -228,8 +231,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
 
       if (response.ok) {
         toast({
-          title: 'Sucesso',
-          description: 'Dívida salva com sucesso'
+          title: 'Dívida salva'
         })
         setShowDebtForm(false)
         loadDebts()
@@ -239,7 +241,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
       }
     } catch (error: any) {
       toast({
-        title: 'Erro',
+        title: 'Não foi possível concluir',
         description: error.message,
         variant: 'destructive'
       })
@@ -267,8 +269,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
       if (response.ok) {
         const result = await response.json()
         toast({
-          title: 'Sucesso',
-          description: 'Dívida atualizada com sucesso'
+          title: 'Dívida atualizada'
         })
         setEditingDebtId(null)
         setShowDebtForm(false)
@@ -284,7 +285,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
       }
     } catch (error: any) {
       toast({
-        title: 'Erro',
+        title: 'Não foi possível concluir',
         description: error.message,
         variant: 'destructive'
       })
@@ -310,8 +311,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
 
       if (response.ok) {
         toast({
-          title: 'Sucesso',
-          description: 'Dívida excluída com sucesso'
+          title: 'Dívida excluída'
         })
         // Remover da seleção se estava selecionada
         setSelectedDebtIds(prev => prev.filter(id => id !== debtId))
@@ -322,7 +322,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
       }
     } catch (error: any) {
       toast({
-        title: 'Erro',
+        title: 'Não foi possível concluir',
         description: error.message,
         variant: 'destructive'
       })
@@ -399,7 +399,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
     const names = selectedDebts.map(d => d.name).join(', ')
 
     return {
-      name: selectedDebts.length === 1 ? selectedDebts[0].name : `Múltiplas Dívidas (${selectedDebts.length})`,
+      name: selectedDebts.length === 1 ? selectedDebts[0].name : `${selectedDebts.length} dívidas`,
       balance: totalBalance,
       monthlyPayment: totalMonthlyPayment,
       interestRateAnnual: weightedRate,
@@ -420,36 +420,36 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
     
     // Validar dados da dívida (usar dados agregados se houver seleção múltipla)
     if (effectiveDebtData.balance === undefined || effectiveDebtData.balance === null || effectiveDebtData.balance <= 0) {
-      missingFields.push('Saldo Devedor')
+      missingFields.push('Saldo devedor')
     }
     if (effectiveDebtData.monthlyPayment === undefined || effectiveDebtData.monthlyPayment === null || effectiveDebtData.monthlyPayment <= 0) {
-      missingFields.push('Prestação Mensal')
+      missingFields.push('Prestação mensal')
     }
     if (effectiveDebtData.interestRateAnnual === undefined || effectiveDebtData.interestRateAnnual === null || effectiveDebtData.interestRateAnnual < 0) {
-      missingFields.push('Taxa de Juros Anual')
+      missingFields.push('Juros ao ano')
     }
     
     // Validar configuração de simulação
     if (monthlyBudget === undefined || monthlyBudget === null || monthlyBudget <= 0) {
-      missingFields.push('Orçamento Mensal Total')
+      missingFields.push('Orçamento mensal')
     }
     
     // Validar estratégia de rentabilidade
     if (strategyType === 'FIXED_RATE') {
       if (manualRate === undefined || manualRate === null || manualRate <= 0) {
-        missingFields.push('Taxa de Rentabilidade Anual')
+        missingFields.push('Rentabilidade anual')
       }
     } else if (strategyType === 'PORTFOLIO') {
       if (!portfolioId || portfolioId.trim() === '') {
-        missingFields.push('Seleção de Carteira')
+        missingFields.push('Carteira')
       }
     } else if (strategyType === 'RANKING') {
       if (!rankingId || rankingId.trim() === '') {
-        missingFields.push('Seleção de Ranking')
+        missingFields.push('Ranking')
       }
     } else if (strategyType === 'MANUAL_TICKERS') {
       if (!manualTickers || manualTickers.length === 0) {
-        missingFields.push('Tickers Manuais')
+        missingFields.push('Tickers')
       }
     }
     
@@ -457,28 +457,28 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
       // Criar mapa de erros por campo
       const errors: Record<string, string> = {}
       
-      if (missingFields.includes('Saldo Devedor')) {
+      if (missingFields.includes('Saldo devedor')) {
         errors.balance = 'Campo obrigatório'
       }
-      if (missingFields.includes('Prestação Mensal')) {
+      if (missingFields.includes('Prestação mensal')) {
         errors.monthlyPayment = 'Campo obrigatório'
       }
-      if (missingFields.includes('Taxa de Juros Anual')) {
+      if (missingFields.includes('Juros ao ano')) {
         errors.interestRateAnnual = 'Campo obrigatório'
       }
-      if (missingFields.includes('Orçamento Mensal Total')) {
+      if (missingFields.includes('Orçamento mensal')) {
         errors.monthlyBudget = 'Campo obrigatório'
       }
-      if (missingFields.includes('Taxa de Rentabilidade Anual')) {
+      if (missingFields.includes('Rentabilidade anual')) {
         errors.manualRate = 'Campo obrigatório'
       }
-      if (missingFields.includes('Seleção de Carteira')) {
+      if (missingFields.includes('Carteira')) {
         errors.portfolioId = 'Selecione uma carteira'
       }
-      if (missingFields.includes('Seleção de Ranking')) {
+      if (missingFields.includes('Ranking')) {
         errors.rankingId = 'Selecione um ranking'
       }
-      if (missingFields.includes('Tickers Manuais')) {
+      if (missingFields.includes('Tickers')) {
         errors.manualTickers = 'Adicione pelo menos um ticker'
       }
       
@@ -507,8 +507,8 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
       }, 100)
       
       toast({
-        title: 'Campos obrigatórios não preenchidos',
-        description: `Por favor, preencha os seguintes campos: ${missingFields.join(', ')}. Os campos com erro estão destacados em vermelho.`,
+        title: 'Preencha os campos obrigatórios',
+        description: `Faltam: ${missingFields.join(', ')}.`,
         variant: 'destructive'
       })
       return
@@ -521,8 +521,8 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
     const monthlyPayment = effectiveDebtData.monthlyPayment || 0
     if (monthlyPayment > 0 && monthlyBudget < monthlyPayment) {
       toast({
-        title: 'Erro de validação',
-        description: `O Orçamento Mensal (R$ ${monthlyBudget.toLocaleString('pt-BR')}) deve ser maior ou igual à Prestação Mensal Total (R$ ${monthlyPayment.toLocaleString('pt-BR')})`,
+        title: 'Revise os valores',
+        description: `O orçamento mensal (${formatBRL(monthlyBudget)}) precisa cobrir a prestação mensal (${formatBRL(monthlyPayment)}).`,
         variant: 'destructive'
       })
       return
@@ -532,8 +532,8 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
     const surplus = monthlyBudget - monthlyPayment
     if (investmentSplit > surplus) {
       toast({
-        title: 'Erro de validação',
-        description: `O Split de Investimento (R$ ${investmentSplit.toLocaleString('pt-BR')}) não pode ser maior que a SOBRA disponível (R$ ${surplus.toLocaleString('pt-BR')})`,
+        title: 'Revise os valores',
+        description: `O valor fixo para investir (${formatBRL(investmentSplit)}) não pode passar da sobra mensal (${formatBRL(surplus)}).`,
         variant: 'destructive'
       })
       return
@@ -610,7 +610,7 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
       }, 300)
     } catch (error: any) {
       toast({
-        title: 'Erro',
+        title: 'Não foi possível concluir',
         description: error.message,
         variant: 'destructive'
       })
@@ -650,149 +650,90 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
     }
   }
 
+  const surplus = Math.max(0, monthlyBudget - (Number((getAggregatedDebtData() ?? debtData).monthlyPayment) || 0))
+
   return (
     <div className="space-y-6">
-      {/* Seção de Dívida */}
       {session && !isPublic && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Suas Dívidas</CardTitle>
-              {debts.length > 1 && !isLoadingDebts && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSelectAllDebts}
-                  disabled={isLoading}
-                >
-                  {selectedDebtIds.length === debts.length ? (
-                    <>
-                      <CheckSquare className="h-4 w-4 mr-2" />
-                      Desmarcar Todas
-                    </>
-                  ) : (
-                    <>
-                      <Square className="h-4 w-4 mr-2" />
-                      Selecionar Todas
-                    </>
-                  )}
+        <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+          <SectionHeader
+            title="Suas dívidas"
+            description={
+              selectedDebtIds.length > 1
+                ? 'Com mais de uma dívida marcada, a simulação soma saldos e prestações e usa a taxa média ponderada.'
+                : 'Marque as dívidas que entram na simulação.'
+            }
+            actions={
+              debts.length > 1 &&
+              !isLoadingDebts && (
+                <Button variant="outline" size="sm" onClick={handleSelectAllDebts} disabled={isLoading}>
+                  {selectedDebtIds.length === debts.length ? 'Desmarcar todas' : 'Marcar todas'}
                 </Button>
-              )}
+              )
+            }
+          />
+          {isLoadingDebts ? (
+            <div className="space-y-2" aria-busy="true">
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
             </div>
-          </CardHeader>
-          <CardContent>
-            {isLoadingDebts ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
-                <span className="text-muted-foreground">Carregando dívidas...</span>
-              </div>
-            ) : debts.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground mb-4">Nenhuma dívida cadastrada</p>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowDebtForm(true)}
-                >
-                  Cadastrar Primeira Dívida
-                </Button>
-              </div>
-            ) : (
-              <>
-            {selectedDebtIds.length > 0 && (
-              <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
-                <p className="text-sm font-medium text-primary">
-                  {selectedDebtIds.length === 1 
-                    ? '1 dívida selecionada'
-                    : `${selectedDebtIds.length} dívidas selecionadas`
-                  }
-                </p>
-                {selectedDebtIds.length > 1 && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    A simulação será feita com os dados agregados (soma de saldos e prestações, taxa média ponderada)
-                  </p>
-                )}
-              </div>
-            )}
-            <div className="space-y-2">
-              {debts.map((debt) => {
-                const isSelected = selectedDebtIds.includes(debt.id)
-                return (
-                  <div
-                    key={debt.id}
-                    className={`flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors ${
-                      isSelected ? 'border-primary bg-primary/5' : ''
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 flex-1">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleDebtSelection(debt.id)}
-                        className="flex-shrink-0"
+          ) : debts.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border p-6 text-center">
+              <p className="text-sm text-muted-foreground">Nenhuma dívida cadastrada.</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => setShowDebtForm(true)}>
+                Cadastrar dívida
+              </Button>
+            </div>
+          ) : (
+            <>
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {debts.map((debt) => {
+                  const isSelected = selectedDebtIds.includes(debt.id)
+                  return (
+                    <li key={debt.id} className="flex items-center gap-3 px-3 py-2">
+                      <Checkbox
+                        id={`debt-${debt.id}`}
+                        checked={isSelected}
+                        onCheckedChange={() => handleToggleDebtSelection(debt.id)}
                         disabled={isLoading}
-                      >
-                        {isSelected ? (
-                          <CheckSquare className="h-5 w-5 text-primary" />
-                        ) : (
-                          <Square className="h-5 w-5 text-muted-foreground" />
-                        )}
-                      </button>
-                      <div
-                        className="flex-1 cursor-pointer"
-                        onClick={() => handleToggleDebtSelection(debt.id)}
-                      >
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold">{debt.name}</p>
-                          {isSelected && (
-                            <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
-                              Selecionada
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Saldo: R$ {debt.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} | 
-                          Prestação: R$ {debt.monthlyPayment.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
+                      />
+                      <label htmlFor={`debt-${debt.id}`} className="min-w-0 flex-1 cursor-pointer py-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-foreground">{debt.name}</span>
+                          {isSelected && <Badge variant="brand">Na simulação</Badge>}
+                        </span>
+                        <span className="block text-xs text-muted-foreground tabular-nums">
+                          Saldo {formatBRL(Number(debt.balance))}, prestação {formatBRL(Number(debt.monthlyPayment))}
+                        </span>
+                      </label>
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleEditDebt(debt)
-                        }}
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Editar ${debt.name}`}
+                        onClick={() => handleEditDebt(debt)}
                         disabled={isLoading}
                       >
-                        <Edit className="h-4 w-4" />
+                        <Pencil className="size-4" strokeWidth={1.75} />
                       </Button>
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteDebt(debt.id)
-                        }}
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Excluir ${debt.name}`}
+                        onClick={() => handleDeleteDebt(debt.id)}
                         disabled={isLoading}
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 className="size-4 text-negative" strokeWidth={1.75} />
                       </Button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <Button
-              className="mt-4"
-              variant="outline"
-              onClick={() => setShowDebtForm(true)}
-            >
-              Nova Dívida
-            </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                    </li>
+                  )
+                })}
+              </ul>
+              <Button variant="outline" size="sm" onClick={() => setShowDebtForm(true)}>
+                Nova dívida
+              </Button>
+            </>
+          )}
+        </section>
       )}
 
       {showDebtForm && (
@@ -802,207 +743,136 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
           onCancel={() => {
             setShowDebtForm(false)
             setEditingDebtId(null)
-            // Os dados serão restaurados automaticamente pelo useEffect quando selectedDebtIds mudar
           }}
           isLoading={isLoading}
           isEditing={!!editingDebtId}
         />
       )}
 
-      {/* Formulário de Dívida (modo visitante ou nova) */}
       {(!session || isPublic || selectedDebtIds.length === 0) && !showDebtForm && (
         <DebtForm
           initialData={debtData}
           externalErrors={{
             balance: fieldErrors.balance,
             monthlyPayment: fieldErrors.monthlyPayment,
-            interestRateAnnual: fieldErrors.interestRateAnnual
+            interestRateAnnual: fieldErrors.interestRateAnnual,
           }}
           onDataChange={handleDebtDataChange}
           onSubmit={async (data) => {
-            // Se usuário está logado, sempre tentar salvar (independente de isPublic)
             if (session) {
               await handleSaveDebt(data)
             } else {
-              // Modo visitante: apenas atualizar estado local
               setDebtData(data)
-              // Limpar erros ao atualizar dados
               setFieldErrors({})
-              toast({
-                title: 'Dica',
-                description: 'Faça login para salvar suas dívidas e configurações',
-                variant: 'default'
-              })
+              toast({ title: 'Entre na sua conta para salvar dívidas e configurações' })
             }
           }}
           isLoading={isLoading}
         />
       )}
 
-      {/* Configuração de Simulação */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Configuração de Simulação</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="monthlyBudget">Orçamento Mensal Total (R$)</Label>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <p className="font-semibold mb-1">Orçamento Mensal Total</p>
-                      <p className="text-sm">
-                        Valor total disponível por mês para pagar a prestação da dívida e investir.
-                        Exemplo: Se você tem R$ 5.000/mês e a prestação é R$ 3.000, sua SOBRA é R$ 2.000.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <Input
-                id="monthlyBudget"
-                type="number"
-                step="0.01"
-                value={monthlyBudget || ''}
-                onChange={(e) => {
-                  setMonthlyBudget(parseFloat(e.target.value) || 0)
-                  if (fieldErrors.monthlyBudget) {
-                    setFieldErrors({ ...fieldErrors, monthlyBudget: '' })
-                  }
-                }}
-                placeholder="Ex: 5000"
-                className={fieldErrors.monthlyBudget ? 'border-red-500' : ''}
-              />
-              {fieldErrors.monthlyBudget && (
-                <p className="text-sm text-red-500">{fieldErrors.monthlyBudget}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="investmentSplit">Split de Investimento - Híbrido (R$)</Label>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <p className="font-semibold mb-1">Split de Investimento</p>
-                      <p className="text-sm mb-2">
-                        Valor fixo que você deseja investir mensalmente na estratégia Híbrida, mantendo o hábito de investir mesmo enquanto paga a dívida.
-                      </p>
-                      <p className="text-sm">
-                        <strong>Exemplo:</strong> Se sua SOBRA é R$ 2.000 e o Split é R$ 1.000, você investe R$ 1.000 e amortiza R$ 1.000 extra na dívida.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <Input
-                id="investmentSplit"
-                type="number"
-                step="0.01"
-                value={investmentSplit || ''}
-                onChange={(e) => setInvestmentSplit(parseFloat(e.target.value) || 0)}
-                placeholder="Ex: 1000"
-              />
-            </div>
-          </div>
-
+      <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+        <h2 className="text-sm font-medium text-foreground">Premissas da simulação</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="monthlyTR">Taxa Referencial (TR) Mensal (%)</Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="font-semibold mb-1">Taxa Referencial (TR) Mensal</p>
-                    <p className="text-sm mb-2">
-                      A TR é aplicada mensalmente sobre o saldo devedor antes do cálculo da amortização.
-                      Ela representa a correção monetária da dívida.
-                    </p>
-                    <p className="text-sm">
-                      <strong>Padrão:</strong> 0,1% ao mês. Você pode ajustar este valor conforme sua expectativa de inflação ou correção monetária.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="monthlyBudget">Orçamento mensal</Label>
+              <InfoHint
+                label="Sobre o orçamento mensal"
+                content="Valor total por mês para pagar a prestação e investir. Com R$ 5.000 de orçamento e prestação de R$ 3.000, a sobra é de R$ 2.000."
+              />
             </div>
-            <Input
-              id="monthlyTR"
-              type="number"
-              step="0.001"
-              min="0"
-              max="1"
-              value={monthlyTR * 100 || ''}
-              onChange={(e) => {
-                const value = parseFloat(e.target.value) || 0
-                setMonthlyTR(value / 100) // Converter de % para decimal (ex: 0.1% = 0.001)
+            <NumericMoneyInput
+              id="monthlyBudget"
+              placeholder="5.000,00"
+              value={monthlyBudget}
+              onValueChange={(value) => {
+                setMonthlyBudget(value)
+                if (fieldErrors.monthlyBudget) setFieldErrors({ ...fieldErrors, monthlyBudget: '' })
               }}
-              placeholder="Ex: 0.1"
+              aria-invalid={fieldErrors.monthlyBudget ? true : undefined}
+              enterKeyHint="next"
             />
-            <p className="text-xs text-muted-foreground">
-              Valor em porcentagem (ex: 0.1 para 0,1% ao mês)
-            </p>
+            {fieldErrors.monthlyBudget ? (
+              <p className="text-sm text-negative">{fieldErrors.monthlyBudget}</p>
+            ) : (
+              monthlyBudget > 0 && (
+                <p className="text-xs text-muted-foreground tabular-nums">Sobra mensal: {formatBRL(surplus)}</p>
+              )
+            )}
           </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-1">
+              <Label htmlFor="investmentSplit">Valor fixo para investir (híbrida)</Label>
+              <InfoHint
+                label="Sobre o valor fixo para investir"
+                content="Na estratégia híbrida, este valor é investido todo mês e o restante da sobra amortiza a dívida. Com sobra de R$ 2.000 e valor fixo de R$ 1.000, você investe R$ 1.000 e amortiza R$ 1.000."
+              />
+            </div>
+            <NumericMoneyInput
+              id="investmentSplit"
+              placeholder="1.000,00"
+              value={investmentSplit}
+              onValueChange={setInvestmentSplit}
+              enterKeyHint="next"
+            />
+          </div>
+        </div>
 
-          <RentabilitySelector
-            value={strategyType}
-            manualRate={manualRate}
-            portfolioId={portfolioId}
-            rankingId={rankingId}
-            manualTickers={manualTickers}
-            onStrategyChange={setStrategyType}
-            onManualRateChange={(rate) => {
-              setManualRate(rate)
-              if (fieldErrors.manualRate) {
-                setFieldErrors({ ...fieldErrors, manualRate: '' })
-              }
-            }}
-            onPortfolioChange={(id) => {
-              setPortfolioId(id)
-              if (fieldErrors.portfolioId) {
-                setFieldErrors({ ...fieldErrors, portfolioId: '' })
-              }
-            }}
-            onRankingChange={(id) => {
-              setRankingId(id)
-              if (fieldErrors.rankingId) {
-                setFieldErrors({ ...fieldErrors, rankingId: '' })
-              }
-            }}
-            onTickersChange={(tickers) => {
-              setManualTickers(tickers)
-              if (fieldErrors.manualTickers) {
-                setFieldErrors({ ...fieldErrors, manualTickers: '' })
-              }
-            }}
-            portfolios={portfolios}
-            isLoadingPortfolios={isLoadingPortfolios}
-            errors={fieldErrors}
+        <div className="space-y-2 sm:max-w-[calc(50%-0.5rem)]">
+          <div className="flex items-center gap-1">
+            <Label htmlFor="monthlyTR">TR mensal</Label>
+            <InfoHint
+              label="Sobre a TR"
+              content="A Taxa Referencial corrige o saldo devedor todo mês, antes da amortização. O padrão é 0,1% ao mês; ajuste conforme sua expectativa."
+            />
+          </div>
+          <DecimalInput
+            id="monthlyTR"
+            placeholder="0,1"
+            suffix="% a.m."
+            value={monthlyTR * 100}
+            onValueChange={(value) => setMonthlyTR(value / 100)}
+            enterKeyHint="next"
           />
+        </div>
 
-          <Button
-            onClick={handleRunSimulation}
-            disabled={isLoading}
-            className="w-full"
-            size="lg"
-          >
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Executar Simulação
-          </Button>
-        </CardContent>
-      </Card>
+        <RentabilitySelector
+          value={strategyType}
+          manualRate={manualRate}
+          portfolioId={portfolioId}
+          rankingId={rankingId}
+          manualTickers={manualTickers}
+          onStrategyChange={setStrategyType}
+          onManualRateChange={(rate) => {
+            setManualRate(rate)
+            if (fieldErrors.manualRate) setFieldErrors({ ...fieldErrors, manualRate: '' })
+          }}
+          onPortfolioChange={(id) => {
+            setPortfolioId(id)
+            if (fieldErrors.portfolioId) setFieldErrors({ ...fieldErrors, portfolioId: '' })
+          }}
+          onRankingChange={(id) => {
+            setRankingId(id)
+            if (fieldErrors.rankingId) setFieldErrors({ ...fieldErrors, rankingId: '' })
+          }}
+          onTickersChange={(tickers) => {
+            setManualTickers(tickers)
+            if (fieldErrors.manualTickers) setFieldErrors({ ...fieldErrors, manualTickers: '' })
+          }}
+          portfolios={portfolios}
+          isLoadingPortfolios={isLoadingPortfolios}
+          errors={fieldErrors}
+        />
 
-      {/* Resultados */}
+        <Button onClick={handleRunSimulation} disabled={isLoading} className="w-full sm:w-auto">
+          {isLoading && <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />}
+          {isLoading ? 'Simulando' : 'Simular estratégias'}
+        </Button>
+      </section>
+
       {simulationResults && (
-        <div ref={resultsRef} className="space-y-4">
+        <div ref={resultsRef} className="scroll-mt-20 space-y-6">
           <SimulationChart
             sniperData={simulationResults.sniper.monthlyData}
             hybridData={simulationResults.hybrid.monthlyData}
@@ -1013,33 +883,26 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
           <SimulationSummary
             sniperResults={{
               ...simulationResults.sniper,
-              totalMonths: simulationResults.sniper.monthlyData.length
+              totalMonths: simulationResults.sniper.monthlyData.length,
             }}
             hybridResults={{
               ...simulationResults.hybrid,
-              totalMonths: simulationResults.hybrid.monthlyData.length
+              totalMonths: simulationResults.hybrid.monthlyData.length,
             }}
             rentabilityRate={simulationResults.rentability.annualRate}
           />
 
-          <div className="grid grid-cols-2 gap-4">
-            <Button
-              variant="outline"
-              onClick={() => handleExportCSV('sniper')}
-            >
-              <Download className="mr-2 h-4 w-4" />
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => handleExportCSV('sniper')}>
+              <Download className="size-4" strokeWidth={1.75} />
               Exportar Sniper (CSV)
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleExportCSV('hybrid')}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar Híbrido (CSV)
+            <Button variant="outline" onClick={() => handleExportCSV('hybrid')}>
+              <Download className="size-4" strokeWidth={1.75} />
+              Exportar híbrida (CSV)
             </Button>
           </div>
 
-          {/* Análise AI - Apenas para Premium */}
           {isPremium && session && (
             <AIAnalysisSection
               simulationResults={simulationResults}
@@ -1055,4 +918,3 @@ export function DebtCalculator({ isPublic = false, initialDebtId }: DebtCalculat
     </div>
   )
 }
-

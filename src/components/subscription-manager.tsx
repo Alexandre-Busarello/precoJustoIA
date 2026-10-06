@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { VALUATION_MODELS_SHORT_LABEL } from "@/lib/site-constants"
 import { 
   Shield, 
   Calendar, 
@@ -191,7 +192,7 @@ export function SubscriptionManager() {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-600" />
-                  <span>8 Modelos de Valuation</span>
+                  <span>{VALUATION_MODELS_SHORT_LABEL}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-600" />
@@ -254,7 +255,7 @@ export function SubscriptionManager() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-600" />
-                  <span>350+ Empresas da B3</span>
+                  <span>600+ ativos da B3</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-600" />
@@ -266,7 +267,7 @@ export function SubscriptionManager() {
             <div className="bg-gradient-to-r from-violet-50 to-pink-50 dark:from-violet-950/20 dark:to-pink-950/20 rounded-lg p-4">
               <h4 className="font-semibold mb-2">🚀 Upgrade para Premium</h4>
               <p className="text-sm text-muted-foreground mb-3">
-                Desbloqueie 8 modelos de valuation, análise com IA e muito mais!
+                Desbloqueie todos os modelos de valuation, os relatórios de IA e muito mais.
               </p>
               <Button className="w-full bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700" asChild>
                 <a href="/planos">

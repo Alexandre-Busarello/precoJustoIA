@@ -1,317 +1,229 @@
 /**
- * Componente: Performance Individual de Ativos do Índice
- * Mostra tabela com todos os ativos que passaram pelo índice e suas performances
+ * Performance individual: cada ativo que passou pelo índice e sua contribuição para o retorno acumulado.
+ * Sem Premium: prévia borrada de 3 linhas e um convite para assinar.
  */
 
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, TrendingUp, TrendingDown, Minus, Lock } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useState } from 'react';
-import { usePremiumStatus } from '@/hooks/use-premium-status';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { Lock } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { formatDate, formatDeltaPct, formatPct } from '@/lib/format';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { AssetCell, assetHref } from '@/components/asset/asset-cell';
+import { SectionHeader } from '@/components/ui/section-header';
 
 interface AssetPerformance {
   ticker: string;
+  companyName?: string | null;
+  logoUrl?: string | null;
+  assetType?: string | null;
+  /** Prévia sem Premium: ticker fictício, sem link. */
+  isObfuscated?: boolean;
   entryDate: string;
   exitDate: string | null;
   entryPrice: number;
   exitPrice: number | null;
   daysInIndex: number;
   totalReturn: number | null;
+  /** Contribuição para o retorno do índice, em pontos percentuais. */
   contributionToIndex: number;
+  /** Peso médio como fração. */
   averageWeight: number;
   status: 'ACTIVE' | 'EXITED';
   firstSnapshotDate: string;
   lastSnapshotDate: string;
 }
 
-interface IndexAssetPerformanceProps {
-  ticker: string;
+type Filter = 'ALL' | 'ACTIVE' | 'EXITED';
+
+interface AssetPerformanceResponse {
+  performances: AssetPerformance[];
+  /** A API ocultou os dados (sem acesso Premium no servidor). */
+  isObfuscated: boolean;
 }
 
-async function fetchAssetPerformance(ticker: string): Promise<AssetPerformance[]> {
+async function fetchAssetPerformance(ticker: string): Promise<AssetPerformanceResponse> {
   const response = await fetch(`/api/indices/${ticker}/asset-performance`);
-  if (!response.ok) {
-    throw new Error('Erro ao buscar performance de ativos');
-  }
+  if (!response.ok) throw new Error('Erro ao buscar performance de ativos');
   const data = await response.json();
-  return data.performances || [];
+  return { performances: data.performances || [], isObfuscated: Boolean(data.isObfuscated) };
 }
 
-export function IndexAssetPerformance({ ticker }: IndexAssetPerformanceProps) {
-  const { isPremium } = usePremiumStatus();
-  const [filter, setFilter] = useState<'ALL' | 'ACTIVE' | 'EXITED'>('ALL');
-  const [sortBy, setSortBy] = useState<'entryDate' | 'totalReturn' | 'contribution' | 'days'>('entryDate');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+const columns: DataTableColumn<AssetPerformance>[] = [
+  {
+    key: 'ticker',
+    header: 'Ativo',
+    sticky: true,
+    sortable: true,
+    cell: (perf) => (
+      <AssetCell
+        href={perf.isObfuscated ? undefined : assetHref(perf.ticker, perf.assetType)}
+        ticker={perf.ticker}
+        name={perf.companyName}
+        logoUrl={perf.logoUrl}
+        className="max-w-40 sm:max-w-52"
+      />
+    ),
+  },
+  {
+    key: 'status',
+    header: 'Situação',
+    cell: (perf) => (
+      <Badge variant={perf.status === 'ACTIVE' ? 'brand' : 'neutral'}>
+        {perf.status === 'ACTIVE' ? 'Na carteira' : 'Removido'}
+      </Badge>
+    ),
+  },
+  {
+    key: 'entryDate',
+    header: 'Entrada',
+    sortable: true,
+    sortValue: (perf) => perf.entryDate,
+    cell: (perf) => formatDate(perf.entryDate),
+  },
+  {
+    key: 'exitDate',
+    header: 'Saída',
+    sortable: true,
+    sortValue: (perf) => perf.exitDate,
+    cell: (perf) => formatDate(perf.exitDate),
+  },
+  { key: 'daysInIndex', header: 'Dias', align: 'right', sortable: true },
+  {
+    key: 'contributionToIndex',
+    header: 'Contribuição',
+    align: 'right',
+    sortable: true,
+    hint: 'Quanto o ativo somou (ou tirou) do retorno acumulado do índice, em pontos percentuais.',
+    cell: (perf) => {
+      const value = perf.contributionToIndex / 100;
+      return (
+        <span className={cn('font-medium', value > 0 ? 'text-positive' : value < 0 ? 'text-negative' : 'text-muted-foreground')}>
+          {formatDeltaPct(value, { digits: 2 })}
+        </span>
+      );
+    },
+  },
+  {
+    key: 'averageWeight',
+    header: 'Peso médio',
+    align: 'right',
+    sortable: true,
+    cell: (perf) => formatPct(perf.averageWeight),
+  },
+];
 
-  const { data: performances, isLoading, error } = useQuery({
+const FILTERS: Array<{ key: Filter; label: string }> = [
+  { key: 'ALL', label: 'Todos' },
+  { key: 'ACTIVE', label: 'Na carteira' },
+  { key: 'EXITED', label: 'Removidos' },
+];
+
+export function IndexAssetPerformance({ ticker }: { ticker: string }) {
+  const { isPremium } = usePremiumStatus();
+  const [filter, setFilter] = useState<Filter>('ALL');
+
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['index-asset-performance', ticker],
     queryFn: () => fetchAssetPerformance(ticker),
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
+  const performances = data?.performances ?? [];
+  const isObfuscated = data?.isObfuscated ?? false;
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Performance Individual dos Ativos</CardTitle>
-          <CardDescription>Rastreamento de rentabilidade de cada ativo que passou pelo índice</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const header = (
+    <SectionHeader
+      title="Performance individual dos ativos"
+      description="Contribuição de cada ativo que passou pelo índice para o retorno acumulado."
+    />
+  );
 
   if (error) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Performance Individual dos Ativos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-destructive">Erro ao carregar performance dos ativos</p>
-        </CardContent>
-      </Card>
+      <section className="space-y-4">
+        {header}
+        <div className="rounded-lg border border-border bg-card p-6 text-center">
+          <p className="text-sm text-foreground">Não foi possível carregar a performance dos ativos.</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+            Tentar novamente
+          </Button>
+        </div>
+      </section>
     );
   }
 
-  if (!performances || performances.length === 0) {
+  const counts: Record<Filter, number> = {
+    ALL: performances.length,
+    ACTIVE: performances.filter((p) => p.status === 'ACTIVE').length,
+    EXITED: performances.filter((p) => p.status === 'EXITED').length,
+  };
+  const rows = performances.filter((p) => filter === 'ALL' || p.status === filter);
+
+  // O servidor é a fonte da verdade: se a API ocultou os dados, mostra o convite mesmo que o cliente se ache Premium.
+  if (!isLoading && (isObfuscated || (!isPremium && performances.length > 0))) {
+    const invite = (
+      <div className="flex max-w-sm flex-col items-center gap-3 rounded-lg border border-border bg-popover p-4 text-center shadow-md">
+        <Lock className="size-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+        <p className="text-sm text-foreground">
+          {performances.length > 0
+            ? `Veja os ${performances.length} ativos que passaram pelo índice e a contribuição de cada um.`
+            : 'Veja todos os ativos que passaram pelo índice e a contribuição de cada um.'}
+        </p>
+        <Button asChild size="sm">
+          <Link href="/planos">Conhecer o Premium</Link>
+        </Button>
+      </div>
+    );
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Performance Individual dos Ativos</CardTitle>
-          <CardDescription>Rastreamento de rentabilidade de cada ativo que passou pelo índice</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Nenhum dado de performance disponível ainda.</p>
-        </CardContent>
-      </Card>
+      <section className="space-y-4">
+        {header}
+        {performances.length > 0 ? (
+          <div className="relative">
+            <div aria-hidden="true" className="pointer-events-none select-none blur-sm">
+              <DataTable columns={columns} rows={performances.slice(0, 3)} getRowId={(p) => p.ticker} />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center p-4">{invite}</div>
+          </div>
+        ) : (
+          <div className="flex justify-center py-6">{invite}</div>
+        )}
+      </section>
     );
   }
-
-  // Filtrar performances
-  const filteredPerformances = performances.filter(perf => {
-    if (filter === 'ACTIVE') return perf.status === 'ACTIVE';
-    if (filter === 'EXITED') return perf.status === 'EXITED';
-    return true;
-  });
-
-  // Ordenar performances
-  const sortedPerformances = [...filteredPerformances].sort((a, b) => {
-    let aValue: number | string | null = null;
-    let bValue: number | string | null = null;
-
-    switch (sortBy) {
-      case 'entryDate':
-        aValue = a.entryDate;
-        bValue = b.entryDate;
-        break;
-      case 'totalReturn':
-        aValue = a.totalReturn ?? -Infinity;
-        bValue = b.totalReturn ?? -Infinity;
-        break;
-      case 'contribution':
-        aValue = a.contributionToIndex;
-        bValue = b.contributionToIndex;
-        break;
-      case 'days':
-        aValue = a.daysInIndex;
-        bValue = b.daysInIndex;
-        break;
-    }
-
-    if (aValue === null && bValue === null) return 0;
-    if (aValue === null) return 1;
-    if (bValue === null) return -1;
-
-    const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-    return sortDirection === 'asc' ? comparison : -comparison;
-  });
-
-  // Para não premium: mostrar todos mas com blur
-  const visiblePerformances = sortedPerformances;
-  const shouldBlur = !isPremium;
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value);
-  };
-
-  const formatPercent = (value: number | null) => {
-    if (value === null) return 'N/A';
-    const sign = value >= 0 ? '+' : '';
-    return `${sign}${value.toFixed(2)}%`;
-  };
-
-  const getReturnColor = (value: number | null) => {
-    if (value === null) return 'text-muted-foreground';
-    if (value > 0) return 'text-green-600 dark:text-green-400';
-    if (value < 0) return 'text-red-600 dark:text-red-400';
-    return 'text-muted-foreground';
-  };
-
-  const getReturnIcon = (value: number | null) => {
-    if (value === null) return <Minus className="h-4 w-4" />;
-    if (value > 0) return <TrendingUp className="h-4 w-4" />;
-    if (value < 0) return <TrendingDown className="h-4 w-4" />;
-    return <Minus className="h-4 w-4" />;
-  };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>Performance Individual dos Ativos</span>
-          {!isPremium && (
-            <Badge variant="outline" className="text-xs">
-              <Lock className="h-3 w-3 mr-1" />
-              Premium
-            </Badge>
-          )}
-        </CardTitle>
-        <CardDescription>
-          Contribuição histórica de cada ativo para a rentabilidade acumulada do índice
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {/* Banner de Upgrade - Topo */}
-          {!isPremium && visiblePerformances.length > 0 && (
-            <div className="p-4 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/20 dark:to-violet-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-start gap-3">
-                <Lock className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <h4 className="font-semibold text-sm mb-1">Desbloqueie a Performance Completa</h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Veja todos os {sortedPerformances.length} ativos que passaram pelo índice e suas performances detalhadas sem blur.
-                  </p>
-                  <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700">
-                    <Link href="/checkout">
-                      Fazer Upgrade para Premium
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Filtros */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground">Filtrar:</span>
-            <Button
-              variant={filter === 'ALL' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('ALL')}
-            >
-              Todos ({performances.length})
-            </Button>
-            <Button
-              variant={filter === 'ACTIVE' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('ACTIVE')}
-            >
-              Ativos ({performances.filter(p => p.status === 'ACTIVE').length})
-            </Button>
-            <Button
-              variant={filter === 'EXITED' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('EXITED')}
-            >
-              Removidos ({performances.filter(p => p.status === 'EXITED').length})
-            </Button>
-          </div>
-
-          {/* Controles de ordenação */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground">Ordenar por:</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="text-sm border rounded px-2 py-1"
-            >
-              <option value="entryDate">Data de Entrada</option>
-              <option value="contribution">Contribuição</option>
-              <option value="days">Dias no Índice</option>
-            </select>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-            >
-              {sortDirection === 'asc' ? '↑ Crescente' : '↓ Decrescente'}
-            </Button>
-          </div>
-
-          {/* Tabela */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ticker</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Entrada</TableHead>
-                  <TableHead>Saída</TableHead>
-                  <TableHead>Dias</TableHead>
-                  <TableHead className="text-right">Contribuição</TableHead>
-                  <TableHead className="text-right">Peso Médio</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visiblePerformances.map((perf) => (
-                  <TableRow 
-                    key={perf.ticker}
-                    className={shouldBlur ? "relative overflow-hidden" : ""}
-                    style={shouldBlur ? { filter: 'blur(4px)', pointerEvents: 'none' } : {}}
-                  >
-                    <TableCell className="font-medium">{perf.ticker}</TableCell>
-                    <TableCell>
-                      <Badge variant={perf.status === 'ACTIVE' ? 'default' : 'secondary'}>
-                        {perf.status === 'ACTIVE' ? 'Ativo' : 'Removido'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {new Date(perf.entryDate).toLocaleDateString('pt-BR')}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {perf.exitDate ? new Date(perf.exitDate).toLocaleDateString('pt-BR') : '-'}
-                    </TableCell>
-                    <TableCell>{perf.daysInIndex}</TableCell>
-                    <TableCell className={`text-right font-medium ${getReturnColor(perf.contributionToIndex)}`}>
-                      <div className="flex items-center justify-end gap-1">
-                        {getReturnIcon(perf.contributionToIndex)}
-                        {formatPercent(perf.contributionToIndex)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {(perf.averageWeight * 100).toFixed(2)}%
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {sortedPerformances.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Nenhum ativo encontrado com o filtro selecionado.
-            </p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    <section className="space-y-4">
+      {header}
+      <div role="group" aria-label="Filtrar ativos" className="inline-flex max-w-full overflow-x-auto rounded-lg bg-muted p-[3px]">
+        {FILTERS.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={filter === key}
+            onClick={() => setFilter(key)}
+            className="min-h-11 shrink-0 rounded-md px-3 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-border focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring md:min-h-8"
+          >
+            {label} <span className="tabular-nums">({counts[key]})</span>
+          </button>
+        ))}
+      </div>
+      <DataTable
+        columns={columns}
+        rows={rows}
+        loading={isLoading}
+        getRowId={(p) => p.ticker}
+        defaultSort={{ key: 'entryDate', direction: 'desc' }}
+        caption="Performance individual dos ativos do índice"
+        empty={{
+          title: performances.length === 0 ? 'Ainda não há dados de performance' : 'Nenhum ativo com este filtro',
+        }}
+      />
+    </section>
   );
 }
-

@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { invalidateDashboardPortfoliosCache } from "./dashboard-portfolios";
 
@@ -73,59 +75,51 @@ export function DeletePortfolioDialog({
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setConfirmText("");
+        onOpenChange(next);
+      }}
+    >
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
-          <div className="flex items-center gap-2 text-destructive">
-            <AlertTriangle className="h-5 w-5" />
-            <AlertDialogTitle>Excluir Carteira Permanentemente</AlertDialogTitle>
-          </div>
-          <AlertDialogDescription className="space-y-3 pt-2">
-            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3">
-              <p className="text-sm font-semibold text-destructive">
-                ⚠️ Esta ação é IRREVERSÍVEL!
-              </p>
-              <p className="text-xs text-destructive/80 mt-1">
-                Todos os dados serão excluídos permanentemente:
-              </p>
-              <ul className="text-xs text-destructive/80 mt-2 space-y-1 list-disc list-inside">
-                <li>Todas as transações</li>
-                <li>Histórico de métricas</li>
-                <li>Configurações de alocação</li>
-                <li>Análises e relatórios</li>
-              </ul>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirm-name" className="text-sm">
-                Para confirmar, digite o nome da carteira:{" "}
-                <span className="font-semibold">{portfolioName}</span>
-              </Label>
-              <Input
-                id="confirm-name"
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
-                placeholder={portfolioName}
-                className="font-mono"
-                disabled={isDeleting}
-              />
-            </div>
+          <AlertDialogTitle>Excluir carteira permanentemente</AlertDialogTitle>
+          <AlertDialogDescription>
+            Esta ação não pode ser desfeita. Transações, histórico de métricas, alocações e análises de{" "}
+            <span className="font-medium text-foreground">{portfolioName}</span> serão apagados.
           </AlertDialogDescription>
         </AlertDialogHeader>
+
+        <div className="space-y-2">
+          <Label htmlFor="confirm-name" className="text-sm font-normal">
+            Para confirmar, digite o nome da carteira:{" "}
+            <span className="font-medium text-foreground">{portfolioName}</span>
+          </Label>
+          <Input
+            id="confirm-name"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={portfolioName}
+            autoComplete="off"
+            disabled={isDeleting}
+          />
+        </div>
+
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
             disabled={!isConfirmed || isDeleting}
-            className="bg-destructive hover:bg-destructive/90"
+            className={cn(buttonVariants({ variant: "destructive" }))}
           >
             {isDeleting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Excluindo...
+                <Loader2 className="animate-spin" strokeWidth={1.75} aria-hidden="true" />
+                Excluindo
               </>
             ) : (
-              "Excluir Permanentemente"
+              "Excluir carteira"
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

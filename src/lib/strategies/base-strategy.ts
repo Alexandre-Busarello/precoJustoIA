@@ -4,11 +4,29 @@ import {
   CompanyData, 
   StrategyAnalysis, 
   RankBuilderResult,
-  TechnicalAnalysisData
+  TechnicalAnalysisData,
+  CompanyFinancialData
 } from './types';
-import { BDRDataService } from '../bdr-data-service';
+import { formatPct } from '../format';
+import { MIN_DISCOUNT_GROWTH_SPREAD } from '../finance/valuation';
+import { sectorClass, type SectorClass } from '../finance/sector-classification';
+import { getMacroAssumptionsSync, keFromMacro, type MacroAssumptions } from '../finance/macro';
+import { marginOfSafety as discountFromPrices, upside as upsideFromPrices } from '../valuation-metrics';
 
 // Funções utilitárias
+
+/** ETFs internacionais tratados como BDR (mesma lista de `BDRDataService.isBDR`). */
+const INTERNATIONAL_ETF_TICKERS = ['IVVB11', 'SPXI11'];
+
+/**
+ * Mesma regra de `BDRDataService.isBDR` (tickers terminados em 34/35 e ETFs internacionais), sem importar o serviço,
+ * que carrega o Prisma: as estratégias ficam puras e testáveis sem banco.
+ */
+export function isBDRTickerSymbol(ticker: string | undefined | null): boolean {
+  if (!ticker) return false;
+  const normalized = ticker.trim().toUpperCase();
+  return normalized.endsWith('34') || normalized.endsWith('35') || INTERNATIONAL_ETF_TICKERS.includes(normalized);
+}
 export function isFIITicker(ticker: string | undefined | null): boolean {
   if (!ticker) return false;
   return /^[A-Z]{4}11$/.test(ticker.trim().toUpperCase());
@@ -32,10 +50,11 @@ export function formatCurrency(value: number | null): string {
   }).format(value);
 }
 
+/** Fração → percentual pt-BR (0,0836 → "8,4%"), via `@/lib/format`. `N/A` sem valor. */
 export function formatPercent(value: unknown): string {
   const numValue = toNumber(value);
-  if (numValue === null || numValue === undefined) return 'N/A';
-  return `${(numValue * 100).toFixed(2)}%`;
+  if (numValue === null || numValue === undefined || !Number.isFinite(numValue)) return 'N/A';
+  return formatPct(numValue);
 }
 
 /**
@@ -197,6 +216,166 @@ export function applyHistoricalAverageIfEnabled(
   return calculateHistoricalAverage(currentValue, historicalValues);
 }
 
+/** Alíquota de IR + CSLL usada no NOPAT e no benefício fiscal da dívida (34%). */
+export const CORPORATE_TAX_RATE = 0.34;
+
+/** Spread de crédito sobre a Selic (BRL) ou sobre o UST 10y (USD) para estimar o custo da dívida (Kd). */
+export const CREDIT_SPREAD = 0.02;
+
+/** Teto do potencial plausível (500%): acima disso o preço justo indica erro de dados (moeda, paridade, unidade). */
+export const MAX_PLAUSIBLE_UPSIDE = 5;
+
+/** Desconto vs valor intrínseco (`1 − preço / preço justo`), em fração. `null` sem preço ou preço justo válidos. */
+export function discountFraction(price: number | null | undefined, fairValue: number | null | undefined): number | null {
+  return discountFromPrices(price, fairValue);
+}
+
+/** Potencial (`preço justo / preço − 1`) em pontos percentuais (33,3 = 33,3%), a unidade de `StrategyAnalysis.upside`. */
+export function upsidePercent(price: number | null | undefined, fairValue: number | null | undefined): number | null {
+  const value = upsideFromPrices(price, fairValue);
+  return value === null ? null : value * 100;
+}
+
+/** `true` quando o potencial passa de 500%: o preço justo não é confiável e não deve ser exibido. */
+export function isImplausibleUpside(price: number | null | undefined, fairValue: number | null | undefined): boolean {
+  const value = upsideFromPrices(price, fairValue);
+  return value !== null && value > MAX_PLAUSIBLE_UPSIDE;
+}
+
+/** Classe setorial da empresa (financeira, utility, commodity cíclica ou outra) pelos helpers determinísticos. */
+export function companySectorClass(companyData: Pick<CompanyData, 'sector' | 'industry'>): SectorClass {
+  return sectorClass(companyData.sector, companyData.industry);
+}
+
+/** Premissas macro do snapshot síncrono (o chamador pode pré-carregar com `warmMacroAssumptions`). */
+export function macroAssumptions(): MacroAssumptions {
+  return getMacroAssumptionsSync();
+}
+
+/** Ke nominal em BRL: NTN-B real + IPCA 12m + β × ERP, nunca abaixo da Selic. */
+export function costOfEquityBRL(beta = 1, macro: MacroAssumptions = macroAssumptions()): number {
+  return keFromMacro(macro, beta);
+}
+
+/** Ke nominal em USD (BDRs com fundamentos em dólar): UST 10y + β × ERP. */
+export function costOfEquityUSD(beta = 1, macro: MacroAssumptions = macroAssumptions()): number {
+  return macro.ust10y + beta * macro.erp;
+}
+
+/** Crescimento do ano `t` (1…years) convergindo linearmente de `initial` para `terminal` (no último ano é `terminal`). */
+export function convergingGrowth(initial: number, terminal: number, years: number): number[] {
+  return Array.from({ length: years }, (_, i) => initial + ((terminal - initial) * (i + 1)) / years);
+}
+
+export interface DcfInput {
+  /** Fluxo de caixa do ano-base (ano 0). */
+  baseCashflow: number;
+  /** Crescimento do ano 1 (ex.: CAGR de 5 anos limitado a 10%). */
+  initialGrowth: number;
+  /** Crescimento perpétuo após a projeção. */
+  terminalGrowth: number;
+  /** Taxa de desconto (WACC para FCFF, Ke para FCFE). */
+  discountRate: number;
+  years: number;
+}
+
+export interface DcfResult {
+  presentValueCashflows: number;
+  presentValueTerminal: number;
+  /** Soma dos valores presentes: EV (FCFF) ou valor do acionista (FCFE). */
+  total: number;
+  /** Participação do valor terminal no total, em fração. */
+  terminalValueShare: number;
+  growthPath: number[];
+}
+
+/**
+ * Fluxo de caixa descontado: projeta `years` anos com crescimento convergindo linearmente para o g terminal e soma o
+ * valor terminal de Gordon. `null` com fluxo-base ≤ 0, horizonte inválido ou spread taxa − g abaixo de 4 p.p.
+ */
+export function projectDiscountedCashflows({ baseCashflow, initialGrowth, terminalGrowth, discountRate, years }: DcfInput): DcfResult | null {
+  if (!Number.isFinite(baseCashflow) || baseCashflow <= 0 || !Number.isInteger(years) || years <= 0) return null;
+  if (!Number.isFinite(discountRate) || !Number.isFinite(terminalGrowth) || !Number.isFinite(initialGrowth)) return null;
+  if (discountRate - terminalGrowth < MIN_DISCOUNT_GROWTH_SPREAD - 1e-9) return null;
+
+  const growthPath = convergingGrowth(initialGrowth, terminalGrowth, years);
+  let cashflow = baseCashflow;
+  let presentValueCashflows = 0;
+  growthPath.forEach((growth, i) => {
+    cashflow *= 1 + growth;
+    presentValueCashflows += cashflow / Math.pow(1 + discountRate, i + 1);
+  });
+  const terminalValue = (cashflow * (1 + terminalGrowth)) / (discountRate - terminalGrowth);
+  const presentValueTerminal = terminalValue / Math.pow(1 + discountRate, years);
+  const total = presentValueCashflows + presentValueTerminal;
+  return { presentValueCashflows, presentValueTerminal, total, terminalValueShare: presentValueTerminal / total, growthPath };
+}
+
+/** FCFF = EBIT × (1 − 34%) + D&A − Capex − ΔNCG. */
+export function fcffFromComponents({
+  ebit,
+  depreciation,
+  capex,
+  workingCapitalIncrease,
+}: {
+  ebit: number;
+  depreciation: number;
+  capex: number;
+  workingCapitalIncrease: number;
+}): number {
+  return ebit * (1 - CORPORATE_TAX_RATE) + depreciation - capex - workingCapitalIncrease;
+}
+
+export interface BdrConversion {
+  /** Moeda dos fundamentos (LPA, VPA, fluxos). */
+  currency: 'USD' | 'BRL';
+  /** Multiplica um valor por ação subjacente para obter o valor por recibo em BRL. */
+  perReceiptFactor: number;
+}
+
+/**
+ * Conversão dos fundamentos de um BDR para BRL por recibo. Usa `financialCurrency`, a cotação (`usdBrl`/`fxRate`) e
+ * `bdrRatio` (recibos por ação subjacente) quando a fonte de dados os informar. `null` quando não há como converter:
+ * os modelos de preço justo não se aplicam ao BDR, porque o preço é em BRL por recibo e os fundamentos vêm em USD por ação.
+ */
+export function bdrConversion(financials: CompanyFinancialData): BdrConversion | null {
+  const currency = typeof financials.financialCurrency === 'string' ? financials.financialCurrency.toUpperCase() : null;
+  const ratio = toNumber(financials.bdrRatio);
+  if (currency === 'BRL') {
+    return ratio && ratio > 0 ? { currency: 'BRL', perReceiptFactor: 1 / ratio } : null;
+  }
+  const fx = toNumber(financials.usdBrl ?? financials.fxRate);
+  if (currency === 'USD' && fx && fx > 0 && ratio && ratio > 0) {
+    return { currency: 'USD', perReceiptFactor: fx / ratio };
+  }
+  return null;
+}
+
+/** Motivo exibido quando um modelo de preço justo não se aplica a BDRs sem paridade e câmbio. */
+export const BDR_NOT_APPLICABLE_REASON =
+  'Modelo não aplicável a BDR: o preço é em reais por recibo e os fundamentos vêm em dólar por ação da empresa no exterior. Sem paridade e câmbio na base de dados, o preço justo não seria comparável.';
+
+/** Resultado padrão de um modelo que não se aplica à empresa (sem preço justo e sem critérios). */
+export function notApplicableAnalysis(reasoning: string): StrategyAnalysis {
+  return {
+    isEligible: false,
+    score: 0,
+    fairValue: null,
+    upside: null,
+    discount: null,
+    reasoning,
+    criteria: [],
+    key_metrics: { notApplicable: 1 },
+  };
+}
+
+/** Média dos valores finitos (do mais recente ao mais antigo) limitada a `years` itens. `null` sem valores. */
+export function averageOfLatest(values: readonly (number | null | undefined)[], years: number): { average: number; count: number } | null {
+  const valid = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v)).slice(0, years);
+  if (valid.length === 0) return null;
+  return { average: valid.reduce((acc, v) => acc + v, 0) / valid.length, count: valid.length };
+}
+
 // Classe base abstrata para todas as estratégias
 export abstract class AbstractStrategy<T extends StrategyParams> implements BaseStrategy<T> {
   abstract readonly name: string;
@@ -278,63 +457,20 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     return this.getIndicatorValue(financialData, 'dividaLiquidaEbitda', use7YearAverages, historicalFinancials);
   }
   
-  protected calculateFCDFairValue(
-    ebitda: number | null, 
-    fluxoCaixaLivre: number | null, 
-    sharesOutstanding: number | null,
-    growthRate: number = 0.025,      // 2.5% padrão
-    discountRate: number = 0.10,     // 10% padrão  
-    yearsProjection: number = 5      // 5 anos padrão
-  ): number | null {
-    if (!ebitda || !sharesOutstanding || ebitda <= 0 || sharesOutstanding <= 0) return null;
-    
-    // 1. Fluxo de Caixa Base
-    let fcffBase: number;
-    if (fluxoCaixaLivre && fluxoCaixaLivre > 0) {
-      fcffBase = fluxoCaixaLivre;
-    } else {
-      // Estimativa conservadora: EBITDA * 0.6
-      fcffBase = ebitda * 0.6;
-    }
-    
-    if (fcffBase <= 0) return null;
-    
-    // 2. Projetar Fluxos de Caixa Futuros
-    const projectedCashflows: number[] = [];
-    let currentCashflow = fcffBase;
-    
-    for (let year = 1; year <= yearsProjection; year++) {
-      // Taxa de crescimento decrescente
-      const yearlyGrowth = growthRate + (0.05 * Math.exp(-year * 0.5));
-      currentCashflow = currentCashflow * (1 + yearlyGrowth);
-      projectedCashflows.push(currentCashflow);
-    }
-    
-    // 3. Calcular Valor Presente dos Fluxos
-    let presentValueCashflows = 0;
-    for (let year = 0; year < projectedCashflows.length; year++) {
-      const pv = projectedCashflows[year] / Math.pow(1 + discountRate, year + 1);
-      presentValueCashflows += pv;
-    }
-    
-    // 4. Calcular Valor Terminal e seu Valor Presente
-    const terminalCashflow = projectedCashflows[projectedCashflows.length - 1] * (1 + growthRate);
-    const terminalValue = terminalCashflow / (discountRate - growthRate);
-    const presentValueTerminal = terminalValue / Math.pow(1 + discountRate, yearsProjection);
-    
-    // 5. Valor Total da Empresa (Enterprise Value)
-    // IMPORTANTE: No modelo DCF, o Enterprise Value calculado já representa o valor total da empresa.
-    // A dívida já está implícita no cálculo porque:
-    // - Os fluxos de caixa livre (FCFF) já são calculados após pagamento de juros
-    // - A taxa de desconto (WACC) já considera o custo da dívida
-    // Portanto, NÃO devemos subtrair a dívida líquida novamente (seria dupla contagem)
-    const enterpriseValue = presentValueCashflows + presentValueTerminal;
-    
-    // 6. Preço Justo por Ação = Enterprise Value / Número de Ações
-    const pricePerShare = enterpriseValue / sharesOutstanding;
-    return pricePerShare;
+  /**
+   * Motivo de não aplicação para BDRs sem paridade/câmbio (ver `bdrConversion`), ou `null` quando o modelo pode rodar.
+   */
+  protected bdrNotApplicableReason(companyData: CompanyData): string | null {
+    if (!this.isBDRTicker(companyData.ticker)) return null;
+    return bdrConversion(companyData.financials) ? null : BDR_NOT_APPLICABLE_REASON;
   }
-  
+
+  /** Fator para levar um valor por ação subjacente ao valor por recibo em BRL (1 para ações da B3). */
+  protected perReceiptFactor(companyData: CompanyData): number {
+    if (!this.isBDRTicker(companyData.ticker)) return 1;
+    return bdrConversion(companyData.financials)?.perReceiptFactor ?? 1;
+  }
+
   // Filtrar empresas por tamanho (Market Cap)
   protected filterCompaniesBySize(companies: CompanyData[], sizeFilter: string): CompanyData[] {
     if (sizeFilter === 'all') return companies;
@@ -361,8 +497,7 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
 
   // Verificar se um ticker é BDR
   protected isBDRTicker(ticker?: string | null): boolean {
-    if (!ticker) return false;
-    return BDRDataService.isBDR(ticker);
+    return isBDRTickerSymbol(ticker);
   }
 
   // Filtrar empresas por inclusão/exclusão de BDRs
@@ -399,38 +534,32 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
   }
 
   /**
-   * Filtra empresas cujo ticker termina em 5, 6, 7, 8 ou 9
-   * Esses tickers geralmente representam classes de ações com menor liquidez ou direitos diferentes
+   * Mantido por compatibilidade: devolve a lista sem alteração. Antes excluía tickers terminados em 5–9, o que removia
+   * classes PNA/PNB líquidas (USIM5, BRKM5, ELET6...). A escolha da classe mais líquida de cada empresa acontece antes,
+   * na montagem dos dados do ranking.
    */
   protected filterTickerEndingDigits(companies: CompanyData[]): CompanyData[] {
-    return companies.filter(company => {
-      const ticker = company.ticker?.trim().toUpperCase();
-      if (!ticker) return true; // Manter se não tem ticker válido
-      
-      // Pegar o último caractere do ticker
-      const lastChar = ticker[ticker.length - 1];
-      
-      // Excluir se termina em 5, 6, 7, 8 ou 9
-      return !['5', '6', '7', '8', '9'].includes(lastChar);
-    });
+    return companies;
   }
 
-  // Converter StrategyAnalysis para RankBuilderResult
+  /**
+   * Converte StrategyAnalysis em RankBuilderResult. `upside` é o potencial (preço justo ÷ preço − 1) e `marginOfSafety`
+   * é o desconto vs valor intrínseco (1 − preço ÷ preço justo), ambos em pontos percentuais.
+   */
   protected convertToRankingResult(
     companyData: CompanyData, 
     analysis: StrategyAnalysis
   ): RankBuilderResult {
+    const discount = analysis.discount ?? discountFraction(companyData.currentPrice, analysis.fairValue);
     return {
       ticker: companyData.ticker,
       name: companyData.name,
       sector: companyData.sector,
       currentPrice: companyData.currentPrice,
-      logoUrl: companyData.logoUrl, // Incluir logo por padrão
+      logoUrl: companyData.logoUrl,
       fairValue: analysis.fairValue,
-      upside: analysis.upside,
-      marginOfSafety: analysis.fairValue && companyData.currentPrice > 0 
-        ? ((analysis.fairValue - companyData.currentPrice) / companyData.currentPrice) * 100 
-        : null,
+      upside: analysis.upside ?? upsidePercent(companyData.currentPrice, analysis.fairValue),
+      marginOfSafety: discount === null ? null : Number((discount * 100).toFixed(2)),
       rational: analysis.reasoning,
       key_metrics: analysis.key_metrics
     };
@@ -691,7 +820,7 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
         originalIndex, // Preservar posição original baseada na análise fundamentalista
         // Adicionar informação técnica ao rational se disponível
         rational: technicalData ? 
-          `${result.rational}\n\n📊 **Análise Técnica**: ${this.getTechnicalSummary(technicalData)}` : 
+          `${result.rational}\n\n**Análise técnica**: ${this.getTechnicalSummary(technicalData)}` : 
           result.rational
       };
     });
@@ -745,8 +874,8 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
     }
 
     if (technicalData.overallSignal) {
-      const signalText = technicalData.overallSignal === 'SOBREVENDA' ? 'Oportunidade de entrada' :
-                        technicalData.overallSignal === 'SOBRECOMPRA' ? 'Possível saída' : 'Neutro';
+      const signalText = technicalData.overallSignal === 'SOBREVENDA' ? 'sobrevenda' :
+                        technicalData.overallSignal === 'SOBRECOMPRA' ? 'sobrecompra' : 'neutro';
       parts.push(`Sinal: ${signalText}`);
     }
 

@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/user-service';
+import { getRankingModel, includesLowLiquidity, isRankingUniverse, rankingModelLabel } from '@/lib/ranking-models';
+import { summarizeParams } from '@/components/ranking-wizard/ranking-data';
 
 // Função helper simplificada para retry
 async function withRetry<T>(
@@ -154,71 +156,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** Nome do modelo para o histórico (registro de /ranking, com nomes para modelos que saíram dele). */
 function getModelDisplayName(model: string): string {
-  switch (model) {
-    // Ações
-    case 'ai': return 'IA Premium';
-    case 'gordon': return 'Fórmula de Gordon';
-    case 'graham': return 'Fórmula de Graham';
-    case 'dividendYield': return 'Dividend Yield';
-    case 'lowPE': return 'Value Investing';
-    case 'magicFormula': return 'Fórmula Mágica';
-    case 'fcd': return 'Fluxo de Caixa Descontado';
-    case 'fundamentalist': return 'Fundamentalista 3+1';
-    case 'screening': return 'Screening';
-    case 'barsi': return 'Método Barsi';
-    // FIIs
-    case 'fiiDividendYield': return 'FII Dividend Yield';
-    // ETFs
-    case 'etfs-melhor-score-geral': return 'ETFs — Melhor Score Geral';
-    case 'etfs-menor-taxa-administracao': return 'ETFs — Menor Taxa';
-    case 'etfs-maior-retorno-1a': return 'ETFs — Maior Retorno no Ano';
-    case 'etfs-renda-fixa': return 'ETFs — Renda Fixa';
-    default: return model;
-  }
+  return rankingModelLabel(model);
 }
 
+/** Resumo dos parâmetros em pt-BR (os mesmos do painel de parâmetros), ou a descrição do modelo. */
 function generateHistoryDescription(model: string, params: Record<string, unknown>): string {
-  switch (model) {
-    case 'ai': {
-      const riskTolerance = params.riskTolerance as string || 'Moderado';
-      const timeHorizon = params.timeHorizon as string || 'Longo Prazo';
-      const focus = params.focus as string || 'Crescimento e Valor';
-      return `Risco: ${riskTolerance}, Horizonte: ${timeHorizon}, Foco: ${focus}`;
-    }
-    case 'gordon': {
-      const discountRate = ((params.discountRate as number || 0.10) * 100).toFixed(1);
-      const dividendGrowthRate = ((params.dividendGrowthRate as number || 0.03) * 100).toFixed(1);
-      return `Taxa desconto: ${discountRate}%, Crescimento div: ${dividendGrowthRate}%`;
-    }
-    case 'graham':
-      return `Margem de segurança: ${((params.marginOfSafety as number) * 100).toFixed(0)}%`;
-    case 'dividendYield':
-      return `Yield mínimo: ${((params.minYield as number) * 100).toFixed(1)}%`;
-    case 'lowPE':
-      return `P/L máx: ${params.maxPE}, ROE min: ${((params.minROE as number) * 100).toFixed(0)}%`;
-    case 'magicFormula':
-      return `Top ${params.limit || 10} empresas`;
-    case 'fcd': {
-      const growthRate = ((params.growthRate as number || 0.025) * 100).toFixed(1);
-      const discountRateFcd = ((params.discountRate as number || 0.10) * 100).toFixed(1);
-      return `Crescimento: ${growthRate}%, Taxa: ${discountRateFcd}%`;
-    }
-    case 'barsi':
-      return 'Ações pagadoras de dividendos consistentes — método Barsi';
-    case 'fiiDividendYield':
-      return 'FIIs com maior dividend yield e liquidez';
-    case 'etfs-melhor-score-geral':
-      return 'Score composto: custo, retorno, liquidez, solidez e qualidade da carteira';
-    case 'etfs-menor-taxa-administracao':
-      return 'ETFs com score ≥ 40 ordenados pela menor taxa de administração';
-    case 'etfs-maior-retorno-1a':
-      return 'ETFs com maior retorno em 12 meses';
-    case 'etfs-renda-fixa':
-      return 'ETFs de renda fixa (Selic, IPCA, IRF-M, IMA)';
-    default:
-      return 'Parâmetros personalizados';
-  }
+  const entry = getRankingModel(model);
+  if (!entry) return 'Parâmetros personalizados';
+  const summary = summarizeParams(entry, { ...entry.defaults(isRankingUniverse(params.assetTypeFilter) ? params.assetTypeFilter : 'b3'), ...params });
+  const liquidity = entry.assetType === 'stock' && includesLowLiquidity(params) ? 'Inclui baixa liquidez' : '';
+  return [summary || entry.description, liquidity].filter(Boolean).join(' · ');
 }
 
 // POST handler removido - agora usamos redirecionamento direto com sessionStorage

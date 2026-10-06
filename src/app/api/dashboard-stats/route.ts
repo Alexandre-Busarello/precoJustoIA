@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma, safeQueryWithParams } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
+import { STOCK_VALUATION_MODELS_COUNT } from '@/lib/site-constants';
 
 // Função helper removida pois não é usada
 
@@ -85,7 +86,7 @@ export async function GET() {
 
     // Contar modelos disponíveis baseado na subscription
     const isPremium = currentUser.isPremium;
-    const availableModels = isPremium ? 7 : 1; // Premium: 7 modelos, Free: 1 modelo
+    const availableModels = isPremium ? STOCK_VALUATION_MODELS_COUNT : 1; // Free: só Graham
 
     return NextResponse.json({
       rankingsToday,

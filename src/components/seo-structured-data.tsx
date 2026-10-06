@@ -1,4 +1,5 @@
 import Script from 'next/script'
+import { VALUATION_MODELS_LABEL, VALUATION_MODELS_SHORT_LABEL } from '@/lib/site-constants'
 
 interface SEOStructuredDataProps {
   type?: 'homepage' | 'article' | 'product' | 'organization'
@@ -96,7 +97,7 @@ export function SEOStructuredData({
               "name": "Plano Gratuito",
               "price": "0",
               "priceCurrency": "BRL",
-              "description": "Fórmula de Graham e análise de 350+ empresas da B3"
+              "description": "Fórmula de Graham e análise de mais de 600 ativos da B3"
             },
             {
               "@type": "Offer",
@@ -104,23 +105,17 @@ export function SEOStructuredData({
               "price": "19.90",
               "priceCurrency": "BRL",
               "billingIncrement": "P1M",
-              "description": "8 modelos de valuation + análise com IA"
+              "description": `${VALUATION_MODELS_SHORT_LABEL} + análise com IA`
             }
           ],
           "featureList": [
             "Análise fundamentalista automatizada",
-            "8 modelos de valuation",
+            VALUATION_MODELS_LABEL,
             "Análise com inteligência artificial",
-            "Mais de 350 empresas da B3",
+            "Mais de 600 ativos da B3 (ações, BDRs e FIIs)",
             "Comparador de ações",
             "Rankings personalizados"
-          ],
-          "aggregateRating": {
-            "@type": "AggregateRating",
-            "ratingValue": "4.8",
-            "ratingCount": "1250",
-            "bestRating": "5"
-          }
+          ]
         })
         break
 

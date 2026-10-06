@@ -33,7 +33,7 @@ export function NotificationMarkdown({ content, className, inline = false }: Not
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 dark:text-blue-400 hover:underline"
+                className="text-brand underline-offset-4 hover:underline"
               >
                 {children}
               </a>
@@ -47,7 +47,7 @@ export function NotificationMarkdown({ content, className, inline = false }: Not
   }
 
   return (
-    <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>
+    <div className={cn("max-w-none text-sm", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         rehypePlugins={[rehypeRaw]}
@@ -61,7 +61,7 @@ export function NotificationMarkdown({ content, className, inline = false }: Not
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-brand underline-offset-4 hover:underline"
           >
             {children}
           </a>
@@ -70,12 +70,12 @@ export function NotificationMarkdown({ content, className, inline = false }: Not
         ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
         li: ({ children }) => <li className="ml-2">{children}</li>,
         code: ({ children }) => (
-          <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs font-mono">
+          <code className="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs">
             {children}
           </code>
         ),
         blockquote: ({ children }) => (
-          <blockquote className="border-l-4 border-slate-300 dark:border-slate-600 pl-4 italic my-2">
+          <blockquote className="my-2 border-l-2 border-border pl-4 text-muted-foreground">
             {children}
           </blockquote>
         ),

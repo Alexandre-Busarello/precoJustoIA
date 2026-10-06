@@ -1,462 +1,324 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+/**
+ * Projeções do Ibovespa: estimativas semanal, mensal e anual geradas pelo Ben (IA) e já salvas no banco.
+ * A página só lê as projeções; nada aqui dispara geração por IA.
+ * Estimativas nunca usam verde/vermelho: a cor semântica é reservada a resultados realizados.
+ */
+
+import Link from 'next/link'
+import dynamic from 'next/dynamic'
+import { useQuery } from '@tanstack/react-query'
+import { Lock } from 'lucide-react'
+import { NotificationMarkdown } from '@/components/notification-markdown'
+import { PageHeader } from '@/components/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, TrendingDown, Calendar, BarChart3, Lock, Minus } from 'lucide-react'
-import Image from 'next/image'
-import { useQuery } from '@tanstack/react-query'
-import { usePremiumStatus } from '@/hooks/use-premium-status'
-import Link from 'next/link'
-import { cn } from '@/lib/utils'
-import { NotificationMarkdown } from '@/components/notification-markdown'
+import { SectionHeader } from '@/components/ui/section-header'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Stat } from '@/components/ui/stat'
+import { formatDate, formatDeltaPct, formatNumber, formatPct } from '@/lib/format'
+import type { ProjectionPoint } from './projection-chart'
 
-async function fetchProjections() {
+const ProjectionChart = dynamic(() => import('./projection-chart'), {
+  ssr: false,
+  loading: () => <Skeleton className="h-56 w-full sm:h-64" />,
+})
+
+type Period = 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
+type Direction = 'ALTA' | 'QUEDA' | 'ESTABILIDADE'
+
+interface IndicatorDetail {
+  impact?: string
+  weight?: number
+  reason?: string
+}
+
+interface KeyIndicators {
+  all?: Record<string, IndicatorDetail>
+  primary?: string
+  secondary?: string[]
+  weights?: Record<string, number>
+}
+
+interface Projection {
+  id: string
+  period: Period
+  projectedValue: number | string
+  confidence: number
+  reasoning: string
+  keyIndicators: KeyIndicators | null
+  validUntil: string
+  createdAt: string
+}
+
+interface ProjectionsResponse {
+  projections: Projection[]
+  currentValue: number
+  isPremium: boolean
+}
+
+const PERIODS: Period[] = ['WEEKLY', 'MONTHLY', 'ANNUAL']
+const PERIOD_LABEL: Record<Period, string> = { WEEKLY: 'Semanal', MONTHLY: 'Mensal', ANNUAL: 'Anual' }
+const PERIOD_HORIZON: Record<Period, string> = { WEEKLY: 'Semana', MONTHLY: 'Mês', ANNUAL: 'Ano' }
+const DIRECTION_LABEL: Record<Direction, string> = {
+  ALTA: 'Alta estimada',
+  QUEDA: 'Queda estimada',
+  ESTABILIDADE: 'Estabilidade estimada',
+}
+const IMPACT_LABEL: Record<string, string> = { ALTA: 'Pressão de alta', BAIXA: 'Pressão de baixa', NEUTRO: 'Neutro' }
+
+async function fetchProjections(): Promise<ProjectionsResponse> {
   const response = await fetch('/api/ibov-projections')
-  if (!response.ok) {
-    throw new Error('Erro ao buscar projeções')
-  }
+  if (!response.ok) throw new Error('Não foi possível carregar as projeções.')
   return response.json()
 }
 
-/**
- * Extrai a direção da projeção (ALTA, QUEDA ou ESTABILIDADE) do reasoning ou calcula baseado nos valores
- */
-function getProjectionDirection(
-  reasoning: string,
-  projectedValue: number,
-  currentValue: number
-): 'ALTA' | 'QUEDA' | 'ESTABILIDADE' {
-  // Tentar extrair do reasoning primeiro
-  const reasoningUpper = reasoning.toUpperCase()
-  if (reasoningUpper.includes('PROJEÇÃO: ALTA') || reasoningUpper.includes('**PROJEÇÃO: ALTA')) {
-    return 'ALTA'
-  }
-  if (reasoningUpper.includes('PROJEÇÃO: QUEDA') || reasoningUpper.includes('**PROJEÇÃO: QUEDA')) {
-    return 'QUEDA'
-  }
-  if (reasoningUpper.includes('PROJEÇÃO: ESTABILIDADE') || reasoningUpper.includes('**PROJEÇÃO: ESTABILIDADE')) {
-    return 'ESTABILIDADE'
-  }
-  
-  // Se não encontrou no reasoning, calcular baseado nos valores
-  const variation = (projectedValue - currentValue) / currentValue
-  const absVariation = Math.abs(variation)
-  
-  if (absVariation < 0.005) { // Menos de 0.5% de diferença
-    return 'ESTABILIDADE'
-  }
-  
+/** Direção declarada no texto da IA ("Projeção: alta") ou, na falta dela, calculada pelos valores. */
+function getDirection(reasoning: string, projected: number, current: number): Direction {
+  const text = reasoning.toUpperCase()
+  if (text.includes('PROJEÇÃO: ALTA')) return 'ALTA'
+  if (text.includes('PROJEÇÃO: QUEDA')) return 'QUEDA'
+  if (text.includes('PROJEÇÃO: ESTABILIDADE')) return 'ESTABILIDADE'
+  const variation = current > 0 ? projected / current - 1 : 0
+  if (Math.abs(variation) < 0.005) return 'ESTABILIDADE'
   return variation > 0 ? 'ALTA' : 'QUEDA'
 }
 
-/**
- * Retorna informações visuais baseadas na direção da projeção
- */
-function getProjectionVisuals(direction: 'ALTA' | 'QUEDA' | 'ESTABILIDADE') {
-  switch (direction) {
-    case 'ALTA':
-      return {
-        badgeVariant: 'default' as const,
-        badgeClassName: 'bg-green-500 hover:bg-green-600 text-white border-green-600',
-        icon: TrendingUp,
-        iconClassName: 'text-green-600 dark:text-green-400',
-        borderGradient: 'from-green-500 to-emerald-500',
-        bgGradient: 'from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30',
-        textColor: 'text-green-600'
-      }
-    case 'QUEDA':
-      return {
-        badgeVariant: 'destructive' as const,
-        badgeClassName: 'bg-red-500 hover:bg-red-600 text-white border-red-600',
-        icon: TrendingDown,
-        iconClassName: 'text-red-600 dark:text-red-400',
-        borderGradient: 'from-red-500 to-rose-500',
-        bgGradient: 'from-red-50 to-rose-50 dark:from-red-950/30 dark:to-rose-950/30',
-        textColor: 'text-red-600'
-      }
-    case 'ESTABILIDADE':
-      return {
-        badgeVariant: 'secondary' as const,
-        badgeClassName: 'bg-blue-500 hover:bg-blue-600 text-white border-blue-600',
-        icon: BarChart3,
-        iconClassName: 'text-blue-600 dark:text-blue-400',
-        borderGradient: 'from-blue-500 to-indigo-500',
-        bgGradient: 'from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30',
-        textColor: 'text-blue-600'
-      }
-  }
+/** Projeção vigente do período (ou a mais recente, se todas venceram). */
+function currentProjection(list: Projection[]): Projection | undefined {
+  const now = Date.now()
+  return list.find((p) => new Date(p.validUntil).getTime() > now) ?? list[0]
 }
 
-export default function ProjecoesIbovPage() {
-  const { isPremium } = usePremiumStatus()
-  const { data, isLoading } = useQuery({
-    queryKey: ['ibov-projections'],
-    queryFn: fetchProjections
-  })
-
-  const projections = data?.projections || []
-  const currentValue = data?.currentValue || 0
-
-  // Agrupar projeções por período (sem diária)
-  const groupedProjections = {
-    WEEKLY: projections.filter((p: any) => p.period === 'WEEKLY'),
-    MONTHLY: projections.filter((p: any) => p.period === 'MONTHLY'),
-    ANNUAL: projections.filter((p: any) => p.period === 'ANNUAL')
-  }
-
-  const periodLabels = {
-    WEEKLY: 'Semanal',
-    MONTHLY: 'Mensal',
-    ANNUAL: 'Anual'
-  }
-
-  const periodColors = {
-    WEEKLY: 'from-violet-500 to-violet-600',
-    MONTHLY: 'from-purple-500 to-purple-600',
-    ANNUAL: 'from-pink-500 to-pink-600'
-  }
-
-  if (isLoading) {
+function Indicators({ indicators }: { indicators: KeyIndicators }) {
+  if (indicators.all && typeof indicators.all === 'object') {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-8 max-w-7xl">
-          <Card>
-            <CardContent className="p-8">
-              <p className="text-center text-muted-foreground">Carregando projeções...</p>
-            </CardContent>
-          </Card>
-        </div>
+      <ul className="divide-y divide-border rounded-lg border border-border">
+        {Object.entries(indicators.all).map(([name, detail]) => (
+          <li key={name} className="space-y-1 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium text-foreground">{name}</span>
+              <span className="flex items-center gap-2">
+                <Badge variant="neutral">{IMPACT_LABEL[detail?.impact ?? 'NEUTRO'] ?? detail?.impact}</Badge>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  peso {formatPct(Number(detail?.weight ?? 0), { digits: 0 })}
+                </span>
+              </span>
+            </div>
+            {detail?.reason && <p className="text-xs leading-5 text-muted-foreground">{detail.reason}</p>}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {indicators.primary && <Badge variant="brand">Principal: {indicators.primary}</Badge>}
+        {indicators.secondary?.map((name) => (
+          <Badge key={name} variant="neutral">
+            {name}
+          </Badge>
+        ))}
       </div>
+      {indicators.weights && (
+        <dl className="space-y-1 text-xs">
+          {Object.entries(indicators.weights).map(([name, weight]) => (
+            <div key={name} className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">{name}</dt>
+              <dd className="tabular-nums">{formatPct(Number(weight), { digits: 0 })}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
+  )
+}
+
+function PeriodSection({
+  period,
+  list,
+  currentValue,
+  isPremium,
+}: {
+  period: Period
+  list: Projection[]
+  currentValue: number
+  isPremium: boolean
+}) {
+  const projection = currentProjection(list)
+  const title = `Estimativa ${PERIOD_LABEL[period].toLowerCase()}`
+
+  if (!projection) {
+    return (
+      <section className="space-y-2 rounded-lg border border-border bg-card p-4 sm:p-5">
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
+        <p className="text-sm text-muted-foreground">Ainda não há estimativa para este período.</p>
+      </section>
     )
   }
 
+  const projected = Number(projection.projectedValue) || 0
+  const hasValue = isPremium && projected > 0
+  const variation = hasValue && currentValue > 0 ? projected / currentValue - 1 : null
+  const direction = hasValue ? getDirection(projection.reasoning, projected, currentValue) : null
+  const history = list.filter((p) => p.id !== projection.id).slice(0, 5)
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="relative w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-violet-500 p-0.5 shadow-lg">
-              <Image 
-                src="/ben.png" 
-                alt="Ben" 
-                width={64} 
-                height={64} 
-                className="w-full h-full object-cover rounded-full"
-              />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold">Projeções IBOVESPA</h1>
-              <p className="text-muted-foreground">
-                Análises e projeções calculadas pelo Ben, seu assistente de IA especializado em análise fundamentalista
-              </p>
+    <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+      <SectionHeader
+        title={title}
+        description={`Criada em ${formatDate(projection.createdAt, { style: 'datetime' })}, válida até ${formatDate(projection.validUntil, { style: 'datetime' })}`}
+        actions={
+          <>
+            <Badge variant="neutral">Estimativa</Badge>
+            {direction && <Badge variant="brand">{DIRECTION_LABEL[direction]}</Badge>}
+          </>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Stat label="Ibovespa agora" value={currentValue > 0 ? formatNumber(currentValue, { digits: 0 }) : '—'} caption="pontos" />
+        <Stat
+          label="Valor estimado"
+          value={hasValue ? formatNumber(projected, { digits: 0 }) : '—'}
+          caption={variation !== null ? `${formatDeltaPct(variation)} vs. agora` : 'pontos'}
+          locked={!isPremium}
+        />
+        <Stat
+          label="Confiança"
+          value={formatPct(projection.confidence / 100, { digits: 0 })}
+          locked={!isPremium}
+          hint="Grau de confiança declarado pela IA ao gerar a estimativa. Não é probabilidade de acerto."
+        />
+      </div>
+
+      {isPremium ? (
+        <>
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-foreground">Análise do Ben (estimativa gerada por IA)</h3>
+            <div className="rounded-lg bg-surface p-4 text-sm leading-6">
+              <NotificationMarkdown content={projection.reasoning} className="text-sm" />
             </div>
           </div>
-          
-          {/* Valor Atual do IBOV */}
-          {currentValue > 0 && (
-            <Card className="mb-6">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Valor Atual</p>
-                    <p className="text-2xl font-bold">IBOVESPA</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-3xl font-bold">{currentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                    <p className="text-xs text-muted-foreground">pontos</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+
+          {projection.keyIndicators && typeof projection.keyIndicators === 'object' && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-foreground">Indicadores considerados</h3>
+              <Indicators indicators={projection.keyIndicators} />
+            </div>
           )}
-        </div>
 
-        {/* Projeções por Período */}
-        <div className="space-y-8">
-          {(['WEEKLY', 'MONTHLY', 'ANNUAL'] as const).map((period) => {
-            const periodProjections = groupedProjections[period]
-            if (periodProjections.length === 0) {
-              return (
-                <Card key={period}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5" />
-                      Projeção {periodLabels[period]}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground text-sm">
-                      Nenhuma projeção disponível para este período ainda.
-                    </p>
-                  </CardContent>
-                </Card>
-              )
-            }
-
-            // Pegar a projeção mais recente válida ou a mais recente
-            const now = new Date()
-            const validProjection = periodProjections.find((p: any) => new Date(p.validUntil) > now) || periodProjections[0]
-
-            const projectedValue = Number(validProjection.projectedValue) || 0
-            const change = projectedValue - currentValue
-            const changePercent = currentValue > 0 ? (change / currentValue) * 100 : 0
-            
-            // Determinar direção da projeção
-            const direction = getProjectionDirection(validProjection.reasoning, projectedValue, currentValue)
-            const visuals = getProjectionVisuals(direction)
-            const DirectionIcon = visuals.icon
-
-            return (
-              <div key={period} className="relative">
-                <Card className={cn(
-                  "relative overflow-visible",
-                  !isPremium && "blur-sm"
-                )}>
-                  {/* Avatar do Ben no canto superior esquerdo */}
-                  <div className="absolute -top-3 -left-3 z-20">
-                    <div className={`w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br ${visuals.borderGradient} p-0.5 shadow-lg`}>
-                      <Image 
-                        src="/ben.png" 
-                        alt="Ben" 
-                        width={48} 
-                        height={48} 
-                        className="w-full h-full object-cover rounded-full"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className={`relative p-0.5 rounded-lg bg-gradient-to-br ${visuals.borderGradient}`}>
-                    <Card className={`border-0 bg-gradient-to-r ${visuals.bgGradient}`}>
-                      <CardHeader className="pt-8">
-                        <div className="flex items-center justify-between flex-wrap gap-4">
-                          <div className="flex items-center gap-3">
-                            <CardTitle className="text-xl">Projeção {periodLabels[period]}</CardTitle>
-                            {isPremium && validProjection.confidence > 0 && (
-                              <Badge variant="outline" className="text-xs">
-                                {validProjection.confidence}% confiança
-                              </Badge>
-                            )}
-                            {projectedValue > 0 && (
-                              <Badge className={visuals.badgeClassName}>
-                                <DirectionIcon className="w-3 h-3 mr-1" />
-                                {changePercent > 0 ? '+' : ''}
-                                {changePercent.toFixed(2)}%
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Calendar className="w-4 h-4" />
-                            <span>
-                              Criada em {new Date(validProjection.createdAt).toLocaleDateString('pt-BR', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </span>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {/* Valores */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Valor Atual</p>
-                            <p className="text-xl font-bold">
-                              {currentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Projeção</p>
-                            {projectedValue > 0 ? (
-                              <p className={`text-xl font-bold ${visuals.iconClassName}`}>
-                                {projectedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </p>
-                            ) : (
-                              <p className="text-xl font-bold text-muted-foreground">---</p>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Variação</p>
-                            {projectedValue > 0 ? (
-                              <p className={`text-xl font-bold ${visuals.textColor}`}>
-                                {change > 0 ? '+' : ''}
-                                {change.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </p>
-                            ) : (
-                              <p className="text-xl font-bold text-muted-foreground">---</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Reasoning */}
-                        <div>
-                          <p className="text-sm font-semibold mb-2">Análise do Ben</p>
-                          <div className="bg-muted/50 rounded-lg p-4 text-sm">
-                            <NotificationMarkdown content={validProjection.reasoning} className="text-sm" />
-                          </div>
-                        </div>
-
-                        {/* Indicadores Analisados */}
-                        {isPremium && validProjection.keyIndicators && typeof validProjection.keyIndicators === 'object' && (
-                          <div>
-                            <p className="text-sm font-semibold mb-2">Indicadores Analisados</p>
-                            {/* Se existe campo "all" com todos os indicadores detalhados */}
-                            {(validProjection.keyIndicators as any).all && typeof (validProjection.keyIndicators as any).all === 'object' ? (
-                              <div className="space-y-2">
-                                {Object.entries((validProjection.keyIndicators as any).all).map(
-                                  ([indicator, data]: [string, any]) => {
-                                    const impact = data?.impact || 'NEUTRO'
-                                    const weight = data?.weight || 0
-                                    const reason = data?.reason || ''
-                                    const isPositive = impact === 'ALTA'
-                                    const isNegative = impact === 'BAIXA'
-                                    
-                                    return (
-                                      <div key={indicator} className="border rounded-lg p-3 bg-muted/30">
-                                        <div className="flex items-center justify-between mb-1">
-                                          <span className="text-sm font-semibold">{indicator}</span>
-                                          <div className="flex items-center gap-2">
-                                            <Badge 
-                                              variant={isPositive ? 'default' : isNegative ? 'destructive' : 'secondary'} 
-                                              className="text-xs"
-                                            >
-                                              {impact}
-                                            </Badge>
-                                            <span className="text-sm font-medium">
-                                              {(Number(weight) * 100).toFixed(0)}%
-                                            </span>
-                                          </div>
-                                        </div>
-                                        {reason && (
-                                          <p className="text-xs text-muted-foreground mt-1">{reason}</p>
-                                        )}
-                                      </div>
-                                    )
-                                  }
-                                )}
-                              </div>
-                            ) : (
-                              /* Fallback para formato antigo */
-                              <div className="flex flex-wrap gap-2">
-                                {validProjection.keyIndicators.primary && (
-                                  <Badge variant="default" className="text-xs">
-                                    Principal: {validProjection.keyIndicators.primary}
-                                  </Badge>
-                                )}
-                                {Array.isArray(validProjection.keyIndicators.secondary) && 
-                                  validProjection.keyIndicators.secondary.map((indicator: string, idx: number) => (
-                                    <Badge key={idx} variant="outline" className="text-xs">
-                                      {indicator}
-                                    </Badge>
-                                  ))
-                                }
-                                {(validProjection.keyIndicators as any).weights && (
-                                  <div className="w-full mt-2 space-y-1">
-                                    {Object.entries((validProjection.keyIndicators as any).weights).map(
-                                      ([indicator, weight]: [string, any]) => (
-                                        <div key={indicator} className="flex items-center justify-between text-xs">
-                                          <span>{indicator}</span>
-                                          <span className="font-medium">
-                                            {(Number(weight) * 100).toFixed(0)}%
-                                          </span>
-                                        </div>
-                                      )
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
+          {history.length > 0 && (
+            <details className="group rounded-lg border border-border">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+                Estimativas anteriores ({history.length})
+                <span aria-hidden="true" className="text-muted-foreground">
+                  <span className="group-open:hidden">+</span>
+                  <span className="hidden group-open:inline">−</span>
+                </span>
+              </summary>
+              <ul className="divide-y divide-border border-t border-border text-sm">
+                {history.map((item) => {
+                  const value = Number(item.projectedValue) || 0
+                  return (
+                    <li key={item.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <span className="text-muted-foreground">{formatDate(item.createdAt)}</span>
+                      <span className="tabular-nums">
+                        {value > 0 ? `${formatNumber(value, { digits: 0 })} pts` : '—'}
+                        {value > 0 && currentValue > 0 && (
+                          <span className="ml-2 text-xs text-muted-foreground">{formatDeltaPct(value / currentValue - 1)}</span>
                         )}
-
-                        {/* Validade */}
-                        <div className="pt-2 border-t">
-                          <p className="text-xs text-muted-foreground">
-                            Válida até: {new Date(validProjection.validUntil).toLocaleDateString('pt-BR', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
-                        </div>
-
-                        {/* Histórico (se houver múltiplas projeções) - apenas para premium */}
-                        {isPremium && periodProjections.length > 1 && (
-                          <div className="pt-4 border-t">
-                            <p className="text-sm font-semibold mb-2">
-                              Histórico ({periodProjections.length} projeções)
-                            </p>
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {periodProjections.slice(1, 6).map((proj: any) => {
-                                const projValue = Number(proj.projectedValue) || 0
-                                const projChange = projValue - currentValue
-                                const projChangePercent = currentValue > 0 ? (projChange / currentValue) * 100 : 0
-                                const projDirection = getProjectionDirection(proj.reasoning, projValue, currentValue)
-                                const projVisuals = getProjectionVisuals(projDirection)
-                                const ProjDirectionIcon = projVisuals.icon
-                                return (
-                                  <div 
-                                    key={proj.id} 
-                                    className="flex items-center justify-between p-2 bg-muted/30 rounded text-xs"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium">
-                                        {projValue > 0 ? projValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '---'}
-                                      </span>
-                                      {projValue > 0 && (
-                                        <Badge className={`${projVisuals.badgeClassName} text-xs`}>
-                                          <ProjDirectionIcon className="w-2.5 h-2.5 mr-1" />
-                                          {projChangePercent > 0 ? '+' : ''}
-                                          {projChangePercent.toFixed(2)}%
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <span className="text-muted-foreground">
-                                      {new Date(proj.createdAt).toLocaleDateString('pt-BR', {
-                                        day: '2-digit',
-                                        month: '2-digit'
-                                      })}
-                                    </span>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-                </Card>
-                
-                {/* Overlay de conversão para usuários não-premium */}
-                {!isPremium && (
-                  <div className="absolute inset-0 z-40 flex items-center justify-center bg-gradient-to-br from-blue-500/90 to-violet-500/90 backdrop-blur-sm rounded-lg pointer-events-auto">
-                    <div className="text-center p-4 sm:p-6 max-w-sm">
-                      <Lock className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-white" />
-                      <h3 className="text-lg sm:text-xl font-bold text-white mb-2">
-                        Desbloqueie Projeções Detalhadas
-                      </h3>
-                      <p className="text-blue-100 mb-4 text-xs sm:text-sm">
-                        Acesse projeções completas do IBOVESPA com análises detalhadas do Ben. Faça upgrade para Premium e tenha acesso ilimitado.
-                      </p>
-                      <Button asChild className="bg-white text-blue-600 hover:bg-blue-50 text-sm sm:text-base">
-                        <Link href="/checkout">
-                          Fazer Upgrade
-                        </Link>
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </details>
+          )}
+        </>
+      ) : (
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Lock className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            Valor estimado, análise completa e indicadores ficam no Premium.
+          </p>
+          <Button asChild size="sm">
+            <Link href="/planos">Conhecer o Premium</Link>
+          </Button>
         </div>
+      )}
+    </section>
+  )
+}
+
+export default function ProjecoesIbovPage() {
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ['ibov-projections'], queryFn: fetchProjections })
+  // A API já oculta os valores para quem não é Premium; o próprio retorno diz qual é o caso.
+  const isPremium = data?.isPremium ?? false
+
+  const projections = data?.projections ?? []
+  const currentValue = data?.currentValue ?? 0
+  const byPeriod = Object.fromEntries(PERIODS.map((p) => [p, projections.filter((x) => x.period === p)])) as Record<
+    Period,
+    Projection[]
+  >
+
+  const chartPoints: ProjectionPoint[] = [
+    ...(currentValue > 0 ? [{ label: 'Hoje', value: currentValue, current: true }] : []),
+    ...PERIODS.flatMap((period) => {
+      const projection = currentProjection(byPeriod[period])
+      const value = Number(projection?.projectedValue) || 0
+      return value > 0 ? [{ label: PERIOD_HORIZON[period], value }] : []
+    }),
+  ]
+  const showChart = isPremium && currentValue > 0 && chartPoints.length > 1
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto max-w-6xl space-y-6 px-4 py-6 sm:py-8">
+        <PageHeader
+          title="Projeções do Ibovespa"
+          description="Estimativas semanal, mensal e anual geradas pelo Ben, o assistente de IA, a partir de indicadores macroeconômicos e de mercado."
+        />
+
+        {isLoading ? (
+          <div className="space-y-4" aria-busy="true">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        ) : error ? (
+          <div className="rounded-lg border border-border bg-card p-6 text-center">
+            <p className="text-sm text-foreground">Não foi possível carregar as projeções.</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+              Tentar novamente
+            </Button>
+          </div>
+        ) : (
+          <>
+            {showChart && (
+              <section className="space-y-3 rounded-lg border border-border bg-card p-4 sm:p-5">
+                <SectionHeader title="Trajetória estimada" description="Valor atual do índice e as estimativas vigentes por horizonte." />
+                <ProjectionChart points={chartPoints} />
+              </section>
+            )}
+            {PERIODS.map((period) => (
+              <PeriodSection
+                key={period}
+                period={period}
+                list={byPeriod[period]}
+                currentValue={currentValue}
+                isPremium={isPremium}
+              />
+            ))}
+          </>
+        )}
+
+        <p className="text-xs leading-5 text-muted-foreground">
+          As projeções são estimativas geradas por IA com base em dados públicos e podem não se confirmar. Não é
+          recomendação de investimento. Rentabilidade passada não garante resultados futuros.
+        </p>
       </div>
     </div>
   )

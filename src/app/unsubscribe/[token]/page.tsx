@@ -1,140 +1,114 @@
-import { notFound, redirect } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
-import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper';
-import { Card, CardContent } from '@/components/ui/card';
-import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import Link from 'next/link';
+import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { CheckCircle2, XCircle } from 'lucide-react'
+import { prisma } from '@/lib/prisma'
+import { safeQueryWithParams, safeWrite } from '@/lib/prisma-wrapper'
+import { Button } from '@/components/ui/button'
 
-interface PageProps {
-  params: {
-    token: string;
-  };
+export const metadata: Metadata = {
+  title: 'Cancelar inscrição',
+  description: 'Cancelamento de alertas por e-mail do Preço Justo AI.',
+  robots: { index: false, follow: false },
 }
 
-export default async function UnsubscribePage({ params }: PageProps) {
-  const resolvedParams = await params;
-  const token = resolvedParams.token;
+interface PageProps {
+  params: Promise<{ token: string }>
+}
 
-  if (!token || token.length < 10) {
-    notFound();
-  }
+function ResultCard({
+  status,
+  title,
+  children,
+  actions,
+}: {
+  status: 'success' | 'error'
+  title: string
+  children: ReactNode
+  actions: ReactNode
+}) {
+  const Icon = status === 'success' ? CheckCircle2 : XCircle
+  return (
+    <div className="flex min-h-[60dvh] items-center justify-center px-4 py-10">
+      <section className="w-full max-w-md space-y-4 rounded-lg border border-border bg-card p-6 text-center sm:p-8">
+        <Icon
+          className={status === 'success' ? 'mx-auto size-6 text-positive' : 'mx-auto size-6 text-muted-foreground'}
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
+        <div className="space-y-2 text-sm text-muted-foreground">{children}</div>
+        <div className="flex flex-col justify-center gap-2 pt-2 sm:flex-row">{actions}</div>
+      </section>
+    </div>
+  )
+}
+
+const homeButton = (variant: 'default' | 'outline') => (
+  <Button asChild variant={variant}>
+    <Link href="/">Página inicial</Link>
+  </Button>
+)
+
+export default async function UnsubscribePage({ params }: PageProps) {
+  const { token } = await params
+
+  if (!token || token.length < 10) notFound()
 
   try {
-    // Buscar subscription pelo token
     const subscription = await safeQueryWithParams(
       'subscription-by-unsubscribe-token',
-      () => prisma.userAssetSubscription.findFirst({
-        where: { unsubscribeToken: token },
-        include: {
-          company: {
-            select: {
-              ticker: true,
-              name: true,
-            },
-          },
-        },
-      }),
+      () =>
+        prisma.userAssetSubscription.findFirst({
+          where: { unsubscribeToken: token },
+          include: { company: { select: { ticker: true, name: true } } },
+        }),
       { token }
-    );
+    )
 
     if (!subscription) {
       return (
-        <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <CardContent className="p-6 sm:p-8">
-              <div className="text-center">
-                <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-                <h1 className="text-2xl font-bold text-foreground mb-2">
-                  Token Inválido
-                </h1>
-                <p className="text-muted-foreground mb-6">
-                  O link de descadastro não é válido ou já foi utilizado.
-                </p>
-                <Link
-                  href="/"
-                  className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                  Voltar para a página inicial
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      );
+        <ResultCard status="error" title="Link inválido" actions={homeButton('default')}>
+          <p>Este link de cancelamento não é válido ou já foi usado.</p>
+        </ResultCard>
+      )
     }
 
-    // Remover subscription
     await safeWrite(
       'delete-subscription-by-token',
-      () => prisma.userAssetSubscription.deleteMany({
-        where: { unsubscribeToken: token },
-      }),
+      () => prisma.userAssetSubscription.deleteMany({ where: { unsubscribeToken: token } }),
       ['user_asset_subscriptions']
-    );
+    )
 
-    const ticker = subscription.company.ticker;
-    const companyName = subscription.company.name || ticker;
+    const ticker = subscription.company.ticker
+    const companyName = subscription.company.name || ticker
 
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="p-6 sm:p-8">
-            <div className="text-center">
-              <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-              <h1 className="text-2xl font-bold text-foreground mb-2">
-                Descadastro Confirmado
-              </h1>
-              <p className="text-muted-foreground mb-4">
-                Você foi removido da lista de notificações sobre{' '}
-                <strong className="text-foreground">{ticker}</strong> ({companyName}).
-              </p>
-              <p className="text-sm text-muted-foreground mb-6">
-                Você não receberá mais emails sobre mudanças nos fundamentos desta ação.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Link
-                  href={`/acao/${ticker.toLowerCase()}`}
-                  className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                  Ver análise de {ticker}
-                </Link>
-                <Link
-                  href="/"
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                >
-                  Página inicial
-                </Link>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+      <ResultCard
+        status="success"
+        title="Inscrição cancelada"
+        actions={
+          <>
+            <Button asChild>
+              <Link href={`/acao/${ticker.toLowerCase()}`}>Ver análise de {ticker}</Link>
+            </Button>
+            {homeButton('outline')}
+          </>
+        }
+      >
+        <p>
+          Você não receberá mais e-mails sobre <span className="font-medium text-foreground">{ticker}</span> ({companyName}).
+        </p>
+        <p>Para voltar a acompanhar, inscreva-se de novo na página do ativo.</p>
+      </ResultCard>
+    )
   } catch (error) {
-    console.error('Erro ao processar descadastro:', error);
+    console.error('Erro ao processar descadastro:', error)
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-background dark:to-background/80 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="p-6 sm:p-8">
-            <div className="text-center">
-              <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-              <h1 className="text-2xl font-bold text-foreground mb-2">
-                Erro ao Processar
-              </h1>
-              <p className="text-muted-foreground mb-6">
-                Ocorreu um erro ao processar seu descadastro. Por favor, tente novamente mais tarde.
-              </p>
-              <Link
-                href="/"
-                className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                Voltar para a página inicial
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+      <ResultCard status="error" title="Não foi possível cancelar" actions={homeButton('default')}>
+        <p>Ocorreu um erro ao processar o cancelamento. Tente novamente mais tarde.</p>
+      </ResultCard>
+    )
   }
 }
-

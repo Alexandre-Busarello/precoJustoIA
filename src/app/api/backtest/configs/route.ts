@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeWrite } from '@/lib/prisma-wrapper';
+import { prisma } from '@/lib/prisma-wrapper';
+import { upsertBacktestConfig } from '@/lib/adaptive-backtest-service';
 import { getCurrentUser } from '@/lib/user-service';
 
 // GET /api/backtest/configs - Listar configurações do usuário
@@ -63,40 +64,15 @@ export async function GET(request: NextRequest) {
 
     const totalPages = Math.ceil(total / limit);
 
-    if (configs.length > 0) {
-      if (configs[0].results && configs[0].results.length > 0) {
-        console.log('📈 Primeiro resultado:', {
-          id: configs[0].results[0].id,
-          totalReturn: configs[0].results[0].totalReturn,
-          calculatedAt: configs[0].results[0].calculatedAt
-        });
-      } else {
-        console.log('⚠️ Primeira config não tem resultados, verificando outras...');
-        const configsWithResults = configs.filter(c => c.results && c.results.length > 0);
-        console.log('📊 Configs com resultados:', configsWithResults.length);
-        if (configsWithResults.length > 0) {
-          console.log('📈 Primeira config com resultado:', {
-            name: configsWithResults[0].name,
-            resultsCount: configsWithResults[0].results.length
-          });
-        }
-      }
-    }
-
-    // Converter Decimals para numbers e aplicar cap de 10% no DY nos resultados
+    // Converter Decimals para numbers. O DY médio salvo é legado: a simulação usa os proventos reais (DividendHistory).
     const processedConfigs = configs.map(config => ({
       ...config,
       initialCapital: Number(config.initialCapital),
       monthlyContribution: Number(config.monthlyContribution),
-      assets: config.assets.map(asset => {
-        const dy = (asset as any).averageDividendYield ? Number((asset as any).averageDividendYield) : null;
-        return {
-          ...asset,
-          targetAllocation: Number(asset.targetAllocation),
-          // Aplicar cap de 10% no dividend yield ao retornar
-          averageDividendYield: dy !== null ? Math.min(dy, 0.10) : null
-        };
-      }),
+      assets: config.assets.map(({ averageDividendYield: _legacyDividendYield, ...asset }) => ({
+        ...asset,
+        targetAllocation: Number(asset.targetAllocation)
+      })),
       results: config.results.map(result => ({
         ...result,
         totalReturn: Number(result.totalReturn),
@@ -186,29 +162,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const config = await safeWrite('create-backtest-config', () =>
-      prisma.backtestConfig.create({
-        data: {
-          userId: currentUser.id,
-          name: body.name,
-          description: body.description,
-          startDate: new Date(body.startDate),
-          endDate: new Date(body.endDate),
-          initialCapital: body.initialCapital,
-          monthlyContribution: body.monthlyContribution,
-          rebalanceFrequency: body.rebalanceFrequency,
-          assets: {
-            create: body.assets.map((asset: any) => ({
-              ticker: asset.ticker.toUpperCase(),
-              targetAllocation: asset.allocation,
-              averageDividendYield: asset.averageDividendYield || null
-            }))
-          }
-        },
-        include: { assets: true }
-      }),
-      ['backtest_configs', 'backtest_assets']
-    );
+    // Reaproveita a configuração do usuário com o mesmo nome e os mesmos ativos (sem duplicar a cada execução)
+    const { id } = await upsertBacktestConfig(currentUser.id, {
+      name: body.name,
+      description: body.description,
+      startDate: new Date(body.startDate),
+      endDate: new Date(body.endDate),
+      initialCapital: Number(body.initialCapital),
+      monthlyContribution: Number(body.monthlyContribution),
+      rebalanceFrequency: body.rebalanceFrequency || 'monthly',
+      assets: body.assets.map((asset: { ticker: string; allocation: number }) => ({
+        ticker: asset.ticker,
+        allocation: Number(asset.allocation)
+      }))
+    });
+    const config = await prisma.backtestConfig.findUnique({ where: { id }, include: { assets: true } });
 
     return NextResponse.json({ config });
 

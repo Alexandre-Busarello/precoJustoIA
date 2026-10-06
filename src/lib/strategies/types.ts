@@ -7,6 +7,11 @@ export interface StrategyParams {
   use7YearAverages?: boolean; // Usar médias de 7 anos dos indicadores quando disponível (padrão: false)
   includeBDRs?: boolean; // Incluir BDRs nas análises (padrão: true)
   assetTypeFilter?: 'b3' | 'bdr' | 'both' | 'fii'; // Filtrar por tipo de ativo (padrão: 'both')
+  /**
+   * Volume financeiro médio diário mínimo (R$/dia) para entrar no ranking.
+   * `undefined`: limite padrão do tipo de ativo (LIQUIDITY_DEFAULTS); `null`: inclui ativos com baixa liquidez.
+   */
+  minLiquidity?: number | null;
 }
 
 export interface GrahamParams extends StrategyParams {
@@ -138,6 +143,31 @@ export interface BarsiParams extends StrategyParams {
   focusOnBEST?: boolean; // Focar apenas nos setores B.E.S.T. (padrão: true)
 }
 
+/** Bazin: preço-teto = média de proventos brutos dos anos completos ÷ DY alvo. */
+export interface BazinParams extends StrategyParams {
+  targetDividendYield?: number; // DY alvo (padrão 0.06 = 6%)
+  yearsForAverage?: number; // Anos-calendário completos na média (padrão 5)
+  maxDebtToEquity?: number; // Dív. líq./PL máxima para não financeiras (padrão 0.5)
+  useNetJcp?: boolean; // Usar JCP líquido de IRRF (padrão false: bruto, padrão de mercado)
+  excludeExtraordinary?: boolean; // Remover proventos > 2× a mediana (padrão true)
+}
+
+/** Lynch: P/L justo = crescimento + DY (em p.p.) e PEG = P/L ÷ crescimento. */
+export interface LynchParams extends StrategyParams {
+  maxPeg?: number; // PEG máximo aceito (padrão 1.0)
+  maxGrowthRate?: number; // Teto do crescimento usado (padrão 0.25 = 25%)
+}
+
+/** Bancos e seguradoras: P/VP justo = (ROE − g) / (Ke − g). */
+export interface BankPvpParams extends StrategyParams {
+  costOfEquity?: number; // Ke; padrão: premissas macro (NTN-B + IPCA + ERP, nunca abaixo da Selic)
+  maxGrowthRate?: number; // Teto do g sustentável ROE × (1 − payout) (padrão 0.06)
+  minRoe?: number; // ROE médio de 5 anos mínimo (padrão 0.12 = 12%)
+}
+
+/** Chaves dos modelos novos, separadas das uniões existentes para não quebrar switches exaustivos. */
+export type NewModelKey = 'bazin' | 'lynch' | 'bankPvp';
+
 export type ModelParams =
   | GrahamParams
   | DividendYieldParams
@@ -150,7 +180,10 @@ export type ModelParams =
   | BarsiParams
   | FiiScreeningParams
   | FiiDividendYieldParams
-  | FiiRankingParams;
+  | FiiRankingParams
+  | BazinParams
+  | LynchParams
+  | BankPvpParams;
 
 // Dados financeiros padronizados (aceita qualquer tipo que será convertido por toNumber)
 export interface CompanyFinancialData {
@@ -266,8 +299,15 @@ export interface CompanyData {
   overallScore?: number | null;
   /** Prisma AssetType em string, ex.: FII */
   assetType?: string;
-  /** Últimos pagamentos para PJ-FII Score */
-  dividendHistory?: { amount: unknown; exDate: Date }[];
+  /** Proventos por ação (brutos): FIIs trazem os pagamentos recentes; ações, os últimos 6 anos completos + o ano corrente. */
+  dividendHistory?: { amount: unknown; exDate: Date; paymentDate?: Date | null; type?: string | null }[];
+  /**
+   * Volume financeiro médio diário (R$/dia). `undefined` quando quem montou os dados não calculou a liquidez;
+   * `null` quando calculou e não há dado (conta como baixa liquidez).
+   */
+  averageDailyTradedValue?: number | null;
+  /** Abaixo do limite de liquidez do tipo, mas mantido no ranking (BDRs, ou quando o usuário inclui ilíquidos). */
+  lowLiquidity?: boolean;
 }
 
 // Resultado de análise individual
@@ -279,6 +319,14 @@ export interface StrategyAnalysis {
   reasoning: string;
   criteria: { label: string; value: boolean; description: string }[];
   key_metrics?: Record<string, number | null>;
+  /** Desconto vs valor intrínseco (1 − P/VJ), em fração. */
+  discount?: number | null;
+  /** Participação do valor terminal no valor estimado (FCD/DDM), em fração. */
+  terminalValueShare?: number | null;
+  /** Ponte EV → Equity usada no valuation. */
+  equityBridge?: { ev: number; netDebt: number; equity: number } | null;
+  /** Critérios com dado disponível sobre o total avaliado (ex.: 6 de 9). */
+  dataCoverage?: { used: number; total: number };
 }
 
 // Resultado para ranking
@@ -294,6 +342,8 @@ export interface RankBuilderResult {
   rational: string; // Explicação detalhada da estratégia e critérios aplicados
   key_metrics?: Record<string, number | null>; // Métricas relevantes para o modelo
   fairValueModel?: string | null; // Modelo usado para calcular o preço justo (ex: "Graham", "FCD", "Gordon")
+  averageDailyTradedValue?: number | null; // Volume financeiro médio diário (R$/dia)
+  lowLiquidity?: boolean; // Abaixo do limite de liquidez do tipo de ativo
 }
 
 // Interface base para todas as estratégias

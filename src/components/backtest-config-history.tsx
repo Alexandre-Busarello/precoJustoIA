@@ -1,21 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  History, 
-  Calendar, 
-  BarChart3,
-  Eye,
-  TrendingUp,
-  TrendingDown,
-  Loader2,
-  RefreshCw
-} from 'lucide-react';
+import { SectionHeader } from '@/components/ui/section-header';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { useToast } from '@/hooks/use-toast';
+import { dateFromApi } from '@/app/backtest/backtest-utils';
+import { EMPTY_VALUE, formatBRL, formatDate, formatDeltaPct, formatNumber, formatPct } from '@/lib/format';
 
-// Interfaces
 interface BacktestResultHistory {
   id: string;
   totalReturn: number;
@@ -41,15 +35,17 @@ interface BacktestConfigHistoryProps {
   onShowResult?: (result: any, config: any, transactions?: any[]) => void;
 }
 
+function toneClass(value: number) {
+  if (!Number.isFinite(value) || value === 0) return undefined;
+  return value > 0 ? 'text-positive' : 'text-negative';
+}
+
+/** Aba "Execuções": todos os resultados de uma configuração, do mais recente ao mais antigo. */
 export function BacktestConfigHistory({ configId, configName, onShowResult }: BacktestConfigHistoryProps) {
+  const { toast } = useToast();
   const [results, setResults] = useState<BacktestResultHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Carregar histórico de resultados
-  useEffect(() => {
-    loadResults();
-  }, [configId]);
 
   const loadResults = async () => {
     try {
@@ -57,16 +53,12 @@ export function BacktestConfigHistory({ configId, configName, onShowResult }: Ba
       setError(null);
 
       const response = await fetch(`/api/backtest/configs/${configId}/results`);
-      
       if (!response.ok) {
-        throw new Error('Erro ao carregar histórico de resultados');
+        throw new Error('Não foi possível carregar as execuções');
       }
 
       const data = await response.json();
-      console.log('📊 Resultados carregados:', data.results?.length || 0);
-      
       setResults(data.results || []);
-
     } catch (err) {
       console.error('Erro ao carregar resultados:', err);
       setError(err instanceof Error ? err.message : 'Erro desconhecido');
@@ -75,18 +67,20 @@ export function BacktestConfigHistory({ configId, configName, onShowResult }: Ba
     }
   };
 
-  // Mostrar detalhes de um resultado específico
+  useEffect(() => {
+    loadResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configId]);
+
   const showResultDetails = async (result: BacktestResultHistory) => {
     if (!onShowResult) return;
 
     try {
-      // Buscar configuração completa e transações para este resultado
       const configResponse = await fetch(`/api/backtest/configs/${configId}`);
-      const configData = await configResponse.json();
-
       if (!configResponse.ok) {
-        throw new Error('Erro ao carregar configuração');
+        throw new Error('Erro ao carregar a configuração');
       }
+      const configData = await configResponse.json();
 
       const config = {
         name: configData.config.name,
@@ -97,15 +91,13 @@ export function BacktestConfigHistory({ configId, configName, onShowResult }: Ba
           allocation: asset.targetAllocation,
           averageDividendYield: asset.averageDividendYield
         })),
-        startDate: new Date(configData.config.startDate),
-        endDate: new Date(configData.config.endDate),
+        startDate: dateFromApi(configData.config.startDate),
+        endDate: dateFromApi(configData.config.endDate),
         initialCapital: configData.config.initialCapital,
         monthlyContribution: configData.config.monthlyContribution,
-        rebalanceFrequency: configData.config.rebalanceFrequency
+        rebalanceFrequency: configData.config.rebalanceFrequency,
+        id: configId
       };
-
-      // IMPORTANTE: Preservar o ID da configuração
-      (config as any).id = configId;
 
       const formattedResult = {
         totalReturn: result.totalReturn,
@@ -133,200 +125,104 @@ export function BacktestConfigHistory({ configId, configName, onShowResult }: Ba
       };
 
       onShowResult(formattedResult, config, configData.config.transactions || []);
-    } catch (error) {
-      console.error('Erro ao mostrar detalhes:', error);
-      alert('Erro ao carregar detalhes do resultado');
+    } catch (err) {
+      console.error('Erro ao mostrar detalhes:', err);
+      toast({ title: 'Erro ao abrir o resultado', description: 'Tente novamente em instantes.', variant: 'destructive' });
     }
   };
 
-  // Formatação
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
-
-  const formatPercentage = (value: number | null | undefined) => {
-    if (value === null || value === undefined || isNaN(value)) {
-      return 'N/A';
-    }
-    return `${(value * 100).toFixed(2)}%`;
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="p-12 text-center">
-          <Loader2 className="w-8 h-8 mx-auto animate-spin text-gray-400 mb-4" />
-          <p className="text-gray-500">Carregando histórico de resultados...</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
-        <CardContent className="p-6 text-center">
-          <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-            <History className="w-8 h-8 text-red-600" />
-          </div>
-          <h3 className="text-lg font-semibold mb-2 text-red-800 dark:text-red-200">
-            Erro ao Carregar Histórico
-          </h3>
-          <p className="text-red-600 dark:text-red-300 mb-4">{error}</p>
-          <Button onClick={loadResults} variant="outline">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Tentar Novamente
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (results.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-12 text-center">
-          <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-            <BarChart3 className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="text-lg font-semibold mb-2">Nenhum Resultado Encontrado</h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Esta configuração ainda não possui resultados de backtesting.
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-500">
-            Execute uma simulação para ver os resultados aqui.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const columns: DataTableColumn<BacktestResultHistory>[] = [
+    {
+      key: 'calculatedAt',
+      header: 'Execução',
+      sticky: true,
+      cell: (row) => {
+        const index = results.findIndex((r) => r.id === row.id);
+        return (
+          <span className="flex items-center gap-2 whitespace-nowrap">
+            <span className="tabular-nums">{formatDate(row.calculatedAt, { style: 'datetime' })}</span>
+            {index === 0 && <Badge variant="brand">Mais recente</Badge>}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'totalReturn',
+      header: 'Retorno total',
+      align: 'right',
+      cell: (row) => <span className={toneClass(row.totalReturn)}>{formatDeltaPct(row.totalReturn)}</span>,
+    },
+    {
+      key: 'annualizedReturn',
+      header: 'Retorno anual',
+      align: 'right',
+      cell: (row) => <span className={toneClass(row.annualizedReturn)}>{formatDeltaPct(row.annualizedReturn)}</span>,
+    },
+    {
+      key: 'sharpeRatio',
+      header: 'Sharpe',
+      align: 'right',
+      cell: (row) => (row.sharpeRatio ? formatNumber(row.sharpeRatio, { digits: 2 }) : EMPTY_VALUE),
+    },
+    { key: 'maxDrawdown', header: 'Drawdown', align: 'right', cell: (row) => formatPct(-row.maxDrawdown) },
+    { key: 'totalInvested', header: 'Capital próprio', align: 'right', cell: (row) => formatBRL(row.totalInvested) },
+    { key: 'finalValue', header: 'Valor final', align: 'right', cell: (row) => formatBRL(row.finalValue) },
+    {
+      key: 'actions',
+      header: <span className="sr-only">Ações</span>,
+      align: 'right',
+      cell: (row) => (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation();
+            showResultDetails(row);
+          }}
+        >
+          Ver
+        </Button>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <History className="w-6 h-6" />
-            Histórico de Resultados
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            {results.length} resultado(s) para {configName}
-          </p>
+      <SectionHeader
+        as="h3"
+        title="Histórico de execuções"
+        description={loading ? 'Carregando' : `${results.length} ${results.length === 1 ? 'execução' : 'execuções'} de ${configName}`}
+        actions={
+          <Button onClick={loadResults} variant="outline" size="sm" disabled={loading}>
+            <RefreshCw strokeWidth={1.75} aria-hidden="true" />
+            Atualizar
+          </Button>
+        }
+      />
+
+      {error ? (
+        <div className="rounded-lg border border-border px-4 py-10 text-center">
+          <p className="text-sm font-medium text-foreground">Não foi possível carregar as execuções</p>
+          <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+          <Button onClick={loadResults} variant="outline" className="mt-4">
+            Tentar de novo
+          </Button>
         </div>
-        <Button onClick={loadResults} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Atualizar
-        </Button>
-      </div>
-
-      {/* Lista de Resultados */}
-      <div className="space-y-4">
-        {results.map((result, index) => (
-          <Card 
-            key={result.id} 
-            className={`hover:shadow-lg transition-shadow ${index === 0 ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-950/20' : ''}`}
-          >
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Calendar className="w-5 h-5" />
-                    Resultado #{results.length - index}
-                    {index === 0 && (
-                      <Badge variant="default" className="bg-blue-500">
-                        Mais Recente
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Executado em {formatDate(result.calculatedAt)}
-                  </p>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              {/* Métricas Principais */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <div className="text-center">
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Retorno Total</p>
-                  <div className="flex items-center justify-center gap-1">
-                    {result.totalReturn >= 0 ? (
-                      <TrendingUp className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4 text-red-600" />
-                    )}
-                    <p className={`font-bold ${result.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatPercentage(result.totalReturn)}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Retorno Anual</p>
-                  <p className={`font-bold ${result.annualizedReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatPercentage(result.annualizedReturn)}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Sharpe Ratio</p>
-                  <p className="font-bold text-gray-900 dark:text-gray-100">
-                    {result.sharpeRatio ? result.sharpeRatio.toFixed(2) : 'N/A'}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Drawdown Máx.</p>
-                  <p className="font-bold text-red-600">
-                    {formatPercentage(result.maxDrawdown)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Valores Finais */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-600 dark:text-gray-400">Capital Próprio</p>
-                  <p className="font-medium">{formatCurrency(result.totalInvested)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 dark:text-gray-400">Valor Final</p>
-                  <p className="font-medium">{formatCurrency(result.finalValue)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 dark:text-gray-400">Dividendos Recebidos</p>
-                  <p className="font-medium">{formatCurrency(result.totalDividendsReceived || 0)}</p>
-                </div>
-              </div>
-
-              {/* Ações */}
-              <div className="flex items-center gap-2 pt-2 border-t">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => showResultDetails(result)}
-                  className="flex-1"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Ver Detalhes Completos
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={results}
+          getRowId={(row) => row.id}
+          loading={loading}
+          loadingRows={3}
+          onRowClick={showResultDetails}
+          caption={`Execuções de ${configName}`}
+          empty={{
+            title: 'Nenhuma execução ainda',
+            description: 'Execute o backtest desta configuração para ver os resultados aqui.',
+          }}
+        />
+      )}
     </div>
   );
 }

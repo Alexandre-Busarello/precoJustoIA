@@ -1,4 +1,5 @@
 import { loadStripe } from '@stripe/stripe-js'
+import { VALUATION_MODELS_SHORT_LABEL } from '@/lib/site-constants'
 
 // Verificar se a chave pública está definida
 if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
@@ -25,11 +26,11 @@ export const PLANS = {
     description: 'Acesso completo a todos os recursos premium',
     features: [
       'Tudo do plano gratuito',
-      '8 modelos de valuation',
+      `${VALUATION_MODELS_SHORT_LABEL} para ações`,
       'Análise com IA (Gemini)',
       'Comparador ilimitado',
       'Rankings personalizáveis',
-      'Análise individual por empresacompleta',
+      'Análise completa por empresa',
       'Dados históricos de 10+ anos',
       'Suporte prioritário',
     ],

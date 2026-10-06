@@ -1,30 +1,32 @@
 /**
- * Componente para exibir indicador de cache dentro da página, acima do card do score
+ * Indicador discreto de dados em cache (texto muted xs) com opção de atualizar.
  */
 
 'use client';
 
-import { useCompanyAnalysis } from '@/hooks/use-company-data';
+import { useHydratedCompanyAnalysis } from '@/components/strategic-analysis-client';
 import { CacheIndicator } from './cache-indicator';
 
 interface PageCacheIndicatorProps {
   ticker: string;
+  /** Mesmo valor usado na consulta de análise da página (evita uma segunda requisição). */
+  isPremium?: boolean;
+  className?: string;
 }
 
-export function PageCacheIndicator({ ticker }: PageCacheIndicatorProps) {
-  const { dataUpdatedAt } = useCompanyAnalysis(ticker);
+export function PageCacheIndicator({ ticker, isPremium, className }: PageCacheIndicatorProps) {
+  const { dataUpdatedAt } = useHydratedCompanyAnalysis(ticker, isPremium);
 
   if (!dataUpdatedAt) return null;
 
   return (
-    <div className="flex justify-end mb-2">
-      <CacheIndicator 
+    <div className={className ?? 'mb-2 flex justify-end text-xs text-muted-foreground'}>
+      <CacheIndicator
         queryKey={['company-analysis', ticker.toUpperCase()]}
         dataUpdatedAt={dataUpdatedAt}
         staleTime={24 * 60 * 60 * 1000}
-        ticker={ticker} // Passar ticker para invalidar todos os caches do ativo
+        ticker={ticker} // Invalida todos os caches do ativo
       />
     </div>
   );
 }
-

@@ -1,25 +1,12 @@
 /**
- * Gráfico Comparativo
- * Compara performance do índice com IBOVESPA e CDI
+ * Gráfico comparativo: índice (chart-1) contra IBOVESPA ou CDI (cinza tracejado), ambos em base 100.
  */
 
 'use client';
 
 import { useState, useMemo } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer
-} from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { formatBRL, formatDate, formatDeltaPct, formatNumber } from '@/lib/format';
 
 interface IndexComparisonChartProps {
   indexHistory: Array<{ 
@@ -31,107 +18,15 @@ interface IndexComparisonChartProps {
   }>;
   ibovData?: Array<{ date: string; value: number }>;
   cdiData?: Array<{ date: string; value: number }>;
-  indexColor: string;
-}
-
-/**
- * Converte cor hexadecimal para HSL
- */
-function hexToHsl(hex: string): { h: number; s: number; l: number } {
-  // Remove o # se presente
-  hex = hex.replace('#', '');
-  
-  // Converter para RGB
-  const r = parseInt(hex.substring(0, 2), 16) / 255;
-  const g = parseInt(hex.substring(2, 4), 16) / 255;
-  const b = parseInt(hex.substring(4, 6), 16) / 255;
-
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h = 0, s = 0;
-  const l = (max + min) / 2;
-
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    
-    switch (max) {
-      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
-      case g: h = ((b - r) / d + 2) / 6; break;
-      case b: h = ((r - g) / d + 4) / 6; break;
-    }
-  }
-
-  return { h: h * 360, s: s * 100, l: l * 100 };
-}
-
-/**
- * Calcula cores contrastantes para benchmarks baseadas na cor do índice
- * Garante que IBOV e CDI tenham cores bem diferentes da cor do índice
- */
-function getContrastingBenchmarkColors(indexColor: string): { ibov: string; cdi: string } {
-  const indexHsl = hexToHsl(indexColor);
-  const indexHue = indexHsl.h;
-  
-  // Cores padrão para benchmarks
-  const defaultIbov = '#2563eb'; // Azul
-  const defaultCdi = '#10b981';  // Verde
-  
-  // Se a cor do índice for muito próxima das cores padrão, ajustar
-  const ibovHsl = hexToHsl(defaultIbov);
-  const cdiHsl = hexToHsl(defaultCdi);
-  
-  // Calcular diferença de matiz (hue) entre índice e benchmarks
-  const hueDiffIbov = Math.abs(indexHue - ibovHsl.h);
-  const hueDiffCdi = Math.abs(indexHue - cdiHsl.h);
-  
-  // Se a diferença for muito pequena (< 30 graus), ajustar para cores mais contrastantes
-  let ibovColor = defaultIbov;
-  let cdiColor = defaultCdi;
-  
-  // Verificar primeiro casos específicos de cores do índice
-  
-  // Se o índice é laranja/amarelo (como IPJ-CRESCIMENTO #f59e0b), garantir contraste forte
-  if (indexHue >= 30 && indexHue <= 60) {
-    // Índice é laranja/amarelo - usar azul para IBOV e verde escuro para CDI
-    ibovColor = '#2563eb'; // Azul (contraste forte com laranja)
-    cdiColor = '#059669';  // Verde escuro (contraste forte com laranja)
-  }
-  // Se o índice é vermelho (330-360 ou 0-10 graus)
-  else if (indexHue >= 330 || indexHue <= 10) {
-    ibovColor = '#2563eb'; // Azul
-    cdiColor = '#10b981';  // Verde
-  }
-  // Se o índice é próximo do azul (IBOV padrão), usar cores alternativas
-  else if (hueDiffIbov < 30 || hueDiffIbov > 330) {
-    // Índice é azul/ciano - usar laranja para IBOV e verde escuro para CDI
-    ibovColor = '#f59e0b'; // Laranja
-    cdiColor = '#059669';  // Verde escuro
-  }
-  // Se o índice é próximo do verde (CDI padrão), usar cores alternativas
-  else if (hueDiffCdi < 30 || hueDiffCdi > 330) {
-    // Índice é verde - usar azul para IBOV e vermelho para CDI
-    ibovColor = '#2563eb'; // Azul
-    cdiColor = '#dc2626';  // Vermelho
-  }
-  // Caso padrão: usar cores padrão (já definidas acima)
-  
-  return { ibov: ibovColor, cdi: cdiColor };
 }
 
 export function IndexComparisonChart({
   indexHistory,
   ibovData = [],
   cdiData = [],
-  indexColor
 }: IndexComparisonChartProps) {
   const [benchmark, setBenchmark] = useState<'ibov' | 'cdi'>('ibov');
   
-  // Calcular cores contrastantes para benchmarks
-  const benchmarkColors = useMemo(() => 
-    getContrastingBenchmarkColors(indexColor),
-    [indexColor]
-  );
 
   // Normalizar benchmarks para base 100 na mesma data inicial do índice
   // O índice já está em pontos (base 100), então mantemos os pontos reais
@@ -252,7 +147,6 @@ export function IndexComparisonChart({
             return bDate.getTime() <= startDateObj.getTime();
           });
           
-          console.log(`📊 [IBOV] Total pontos: ${sortedIBOV.length}, Após startDate: ${ibovAfterStart.length}, StartDate: ${startDate}, Primeiro IBOV: ${sortedIBOV[0]?.date}, Último IBOV: ${sortedIBOV[sortedIBOV.length - 1]?.date}, benchmarkStartPoint: ${benchmarkStartPoint?.date}`);
           
           // Se não encontrou ponto anterior ou igual, o IBOV começa depois do índice
           if (!benchmarkStartPoint) {
@@ -312,7 +206,6 @@ export function IndexComparisonChart({
             benchmarkStartDate.setHours(0, 0, 0, 0);
             const isExactMatch = benchmarkStartDate.getTime() === startDateObj.getTime();
             
-            console.log(`📊 [IBOV] benchmarkStartValue: ${benchmarkStartValue}, isExactMatch: ${isExactMatch}, benchmarkStartDate: ${benchmarkStartPoint.date}`);
             
             // Filtrar para incluir apenas pontos >= startDate
             // Se o benchmarkStartPoint está antes do startDate, ainda precisamos usá-lo para normalização
@@ -323,7 +216,6 @@ export function IndexComparisonChart({
               return bDate.getTime() >= startDateObj.getTime();
             });
             
-            console.log(`📊 [IBOV] ibovToNormalize: ${ibovToNormalize.length} pontos, datas: ${ibovToNormalize.map(b => b.date).join(', ')}`);
             
             // Normalizar usando o valor do benchmarkStartPoint como base
             normalizedBenchmark = ibovToNormalize.map(point => ({
@@ -331,10 +223,6 @@ export function IndexComparisonChart({
               value: (point.value / benchmarkStartValue) * 100
             }));
             
-            console.log(`📊 [IBOV] normalizedBenchmark após normalização: ${normalizedBenchmark.length} pontos`);
-            normalizedBenchmark.forEach(b => {
-              console.log(`  - ${b.date}: ${b.value.toFixed(2)} pts`);
-            });
             
             // Se o benchmarkStartPoint não está na data exata, criar um ponto na startDate com valor 100
             if (!isExactMatch) {
@@ -348,12 +236,10 @@ export function IndexComparisonChart({
                 new Date(a.date).getTime() - new Date(b.date).getTime()
               );
               
-              console.log(`📊 [IBOV] Adicionado ponto virtual em ${startDate} com 100 pts`);
             } else {
               // Se está na data exata, garantir que o primeiro ponto normalizado seja 100
               if (normalizedBenchmark.length > 0 && normalizedBenchmark[0].date === startDate) {
                 normalizedBenchmark[0].value = 100;
-                console.log(`📊 [IBOV] Primeiro ponto (${startDate}) ajustado para 100 pts`);
               }
             }
           }
@@ -384,9 +270,6 @@ export function IndexComparisonChart({
 
     // Alinhar benchmark com dados do índice
     // Para cada ponto do benchmark, encontrar o ponto do índice mais próximo
-    console.log(`📊 [CHART] Combinando dados: ${normalizedBenchmark.length} pontos do benchmark, ${indexPoints.length} pontos do índice`);
-    console.log(`📊 [CHART] Datas do índice: ${indexPoints.map(p => p.date).join(', ')}`);
-    console.log(`📊 [CHART] Datas do benchmark: ${normalizedBenchmark.map(b => b.date).join(', ')}`);
     
     // Primeiro, alinhar pontos do benchmark com datas exatas do índice
     // IMPORTANTE: Apenas processar pontos do benchmark que estão dentro do período do índice
@@ -399,7 +282,6 @@ export function IndexComparisonChart({
       
       // Ignorar pontos do benchmark que estão além da última data do índice
       if (benchmarkDateObj.getTime() > endDateObj.getTime()) {
-        console.log(`📊 [CHART] ⏭️ Benchmark ${benchmarkPoint.date}: ${benchmarkPoint.value.toFixed(2)} pts ignorado (além da última data do índice: ${endDate})`);
         return;
       }
       
@@ -407,7 +289,6 @@ export function IndexComparisonChart({
       if (existing) {
         // Data exata existe no índice
         existing.benchmark = benchmarkPoint.value;
-        console.log(`📊 [CHART] ✅ Benchmark ${benchmarkPoint.date}: ${benchmarkPoint.value.toFixed(2)} pts (data exata encontrada no índice)`);
       } else {
         // Data não existe no índice mas está dentro do período - encontrar o ponto do índice mais próximo (anterior ou igual)
         let closestIndexPoint = null;
@@ -436,9 +317,6 @@ export function IndexComparisonChart({
             dividendsReceived: closestIndexPoint.dividendsReceived,
             dividendsByTicker: closestIndexPoint.dividendsByTicker
           });
-          console.log(`📊 [CHART] ✅ Benchmark ${benchmarkPoint.date}: ${benchmarkPoint.value.toFixed(2)} pts adicionado ao gráfico`);
-        } else {
-          console.log(`📊 [CHART] ❌ Benchmark ${benchmarkPoint.date}: não foi possível encontrar ponto correspondente do índice`);
         }
       }
     });
@@ -470,155 +348,190 @@ export function IndexComparisonChart({
           const benchmarkNum = Number(lastBenchmarkValue);
           if (!isNaN(benchmarkNum)) {
             existing.benchmark = benchmarkNum;
-            console.log(`📊 [CHART] ✅ Índice ${indexPoint.date}: Benchmark preenchido com último valor disponível (${lastBenchmarkDate}): ${benchmarkNum.toFixed(2)} pts`);
           }
-        } else {
-          console.log(`📊 [CHART] ⚠️ Índice ${indexPoint.date}: Nenhum valor de benchmark disponível anterior ou igual`);
         }
       }
     });
     
-    console.log(`📊 [CHART] Dados finais combinados: ${Array.from(dataMap.values()).length} pontos`);
-    Array.from(dataMap.values()).forEach(d => {
-      console.log(`  - ${d.date}: Índice=${d.index?.toFixed(2) || 'N/A'}, Benchmark=${d.benchmark?.toFixed(2) || 'N/A'}`);
-    });
 
     return Array.from(dataMap.values()).sort((a, b) => 
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
   }, [indexHistory, ibovData, cdiData, benchmark]);
 
-  const formatDate = (date: string) => {
-    // Converter string de data (YYYY-MM-DD) para Date local (evitar problemas de timezone)
-    // Criar data em timezone local ao invés de UTC
-    const [year, month, day] = date.split('-').map(Number);
-    const localDate = new Date(year, month - 1, day);
-    return format(localDate, 'dd/MM/yyyy', { locale: ptBR });
-  };
-
-  const formatTooltipValue = (value: number) => {
-    return `${value.toFixed(2)} pontos`;
-  };
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload || payload.length === 0) return null;
-
-    const data = payload[0].payload;
-    const dailyChange = data?.dailyChange;
-    const dividendsReceived = data?.dividendsReceived;
-    const dividendsByTicker = data?.dividendsByTicker;
-
-    return (
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
-        <p className="font-semibold mb-2">{formatDate(label)}</p>
-        {payload.map((entry: any, index: number) => (
-          <p key={index} style={{ color: entry.color }} className="text-sm">
-            {entry.name}: {formatTooltipValue(entry.value)}
-          </p>
-        ))}
-        {dailyChange !== null && dailyChange !== undefined && (
-          <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-            <p className={`text-xs font-semibold ${dailyChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              Variação do Dia: {dailyChange >= 0 ? '+' : ''}{dailyChange.toFixed(2)}%
-            </p>
-          </div>
-        )}
-        {dividendsReceived && dividendsReceived > 0 && (
-          <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-xs text-green-600 dark:text-green-400 font-semibold">
-              Dividendos: {(dividendsReceived / 100 * 100).toFixed(2)} pts
-            </p>
-            {dividendsByTicker && Object.keys(dividendsByTicker).length > 0 && (
-              <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                {Object.entries(dividendsByTicker).slice(0, 3).map(([ticker, amount]) => (
-                  <p key={ticker}>
-                    {ticker}: R$ {Number(amount).toFixed(2)}
-                  </p>
-                ))}
-                {Object.keys(dividendsByTicker).length > 3 && (
-                  <p className="text-gray-500">+{Object.keys(dividendsByTicker).length - 3} mais</p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const benchmarkLabel = benchmark === 'ibov' ? 'IBOVESPA' : 'CDI';
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Performance Comparativa</CardTitle>
-          <div className="flex gap-2">
-            <Button
-              variant={benchmark === 'ibov' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setBenchmark('ibov')}
+    <section aria-labelledby="index-comparison-title" className="rounded-lg border border-border bg-card p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="index-comparison-title" className="text-lg font-semibold tracking-tight text-foreground">
+          Performance comparada
+        </h2>
+        <div role="group" aria-label="Benchmark" className="inline-flex rounded-lg bg-muted p-[3px]">
+          {(['ibov', 'cdi'] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={benchmark === key}
+              onClick={() => setBenchmark(key)}
+              className="min-h-11 rounded-md px-4 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-border focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring md:min-h-8"
             >
-              IBOVESPA
-            </Button>
-            <Button
-              variant={benchmark === 'cdi' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setBenchmark('cdi')}
-            >
-              CDI
-            </Button>
-          </div>
+              {key === 'ibov' ? 'IBOVESPA' : 'CDI'}
+            </button>
+          ))}
         </div>
-      </CardHeader>
-      <CardContent>
-        {chartData.length === 0 ? (
-          <div className="h-[400px] flex items-center justify-center text-gray-500">
-            Dados insuficientes para comparação
-          </div>
-        ) : (
-          <div className="h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis 
+      </div>
+
+      {chartData.length === 0 ? (
+        <div className="mt-4 flex h-64 items-center justify-center rounded-lg bg-surface text-sm text-muted-foreground">
+          Ainda não há histórico suficiente para comparar.
+        </div>
+      ) : (
+        <figure className="mt-4 space-y-2">
+          <div className="h-72 sm:h-96">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+              <LineChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => {
-                    // Converter string de data (YYYY-MM-DD) para Date local
-                    const [year, month, day] = value.split('-').map(Number);
-                    const localDate = new Date(year, month - 1, day);
-                    return `${localDate.getDate()}/${localDate.getMonth() + 1}`;
-                  }}
+                  tick={AXIS_TICK}
+                  tickLine={false}
+                  axisLine={false}
+                  minTickGap={24}
+                  tickFormatter={(value: string) => formatShortDay(value)}
                 />
-                <YAxis 
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => `${value.toFixed(0)} pts`}
+                <YAxis
+                  tick={AXIS_TICK}
+                  tickLine={false}
+                  axisLine={false}
+                  width={44}
+                  domain={['auto', 'auto']}
+                  tickFormatter={(value: number) => formatNumber(value, { digits: 0 })}
                 />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="index"
-                  stroke={indexColor}
-                  strokeWidth={2}
-                  dot={false}
-                  name="Índice IPJ"
-                />
+                <Tooltip cursor={{ stroke: 'var(--border)' }} content={<ComparisonTooltip benchmarkLabel={benchmarkLabel} />} />
                 <Line
                   type="monotone"
                   dataKey="benchmark"
-                  stroke={benchmark === 'ibov' ? benchmarkColors.ibov : benchmarkColors.cdi}
+                  stroke="var(--chart-2)"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  dot={false}
+                  connectNulls
+                  name={benchmarkLabel}
+                  isAnimationActive={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="index"
+                  stroke="var(--chart-1)"
                   strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={{ r: 3 }}
-                  connectNulls={true}
-                  name={benchmark === 'ibov' ? 'IBOVESPA' : 'CDI'}
+                  dot={false}
+                  name="Índice"
+                  isAnimationActive={false}
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <figcaption className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <LegendItem label="Índice" color="var(--chart-1)" />
+            <LegendItem label={`${benchmarkLabel} (base 100 na mesma data)`} color="var(--chart-2)" dashed />
+          </figcaption>
+        </figure>
+      )}
+    </section>
   );
 }
 
+const AXIS_TICK = { fontSize: 12, fill: 'var(--muted-foreground)' } as const;
+
+/** `YYYY-MM-DD` → Date ao meio-dia UTC (evita trocar o dia por fuso). */
+function parseDay(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+function formatShortDay(value: string): string {
+  const [, month, day] = value.split('-');
+  return `${day}/${month}`;
+}
+
+function LegendItem({ label, color, dashed = false }: { label: string; color: string; dashed?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <svg width="16" height="8" aria-hidden="true">
+        <line x1="0" x2="16" y1="4" y2="4" stroke={color} strokeWidth="2" strokeDasharray={dashed ? '4 3' : undefined} />
+      </svg>
+      {label}
+    </span>
+  );
+}
+
+interface TooltipPayloadEntry {
+  name?: string;
+  value?: number;
+  color?: string;
+  dataKey?: string;
+  payload?: {
+    dailyChange?: number | null;
+    dividendsReceived?: number | null;
+    dividendsByTicker?: Record<string, number> | null;
+  };
+}
+
+function ComparisonTooltip({
+  active,
+  payload,
+  label,
+  benchmarkLabel,
+}: {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+  label?: string;
+  benchmarkLabel: string;
+}) {
+  if (!active || !payload || payload.length === 0 || !label) return null;
+
+  const data = payload[0].payload;
+  const dailyChange = data?.dailyChange;
+  const dividendsReceived = data?.dividendsReceived;
+  const dividendsByTicker = data?.dividendsByTicker;
+  const byTicker = dividendsByTicker ? Object.entries(dividendsByTicker) : [];
+  const rows = (['index', 'benchmark'] as const)
+    .map((key) => payload.find((entry) => entry.dataKey === key))
+    .filter((entry): entry is TooltipPayloadEntry => entry !== undefined && typeof entry.value === 'number');
+
+  return (
+    <div className="max-w-64 rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+      <p className="mb-1 text-muted-foreground">{formatDate(parseDay(label))}</p>
+      {rows.map((entry) => (
+        <p key={entry.dataKey} className="flex justify-between gap-4">
+          <span>{entry.dataKey === 'index' ? 'Índice' : benchmarkLabel}</span>
+          <span className="font-medium tabular-nums">{formatNumber(entry.value, { digits: 2 })} pts</span>
+        </p>
+      ))}
+      {typeof dailyChange === 'number' && (
+        <p className="mt-1 flex justify-between gap-4 border-t border-border pt-1">
+          <span className="text-muted-foreground">Variação do dia</span>
+          <span className={`font-medium tabular-nums ${dailyChange > 0 ? 'text-positive' : dailyChange < 0 ? 'text-negative' : ''}`}>
+            {formatDeltaPct(dailyChange / 100, { digits: 2 })}
+          </span>
+        </p>
+      )}
+      {typeof dividendsReceived === 'number' && dividendsReceived > 0 && (
+        <div className="mt-1 border-t border-border pt-1">
+          <p className="flex justify-between gap-4">
+            <span className="text-muted-foreground">Dividendos</span>
+            <span className="font-medium tabular-nums">{formatNumber(dividendsReceived, { digits: 2 })} pts</span>
+          </p>
+          {byTicker.slice(0, 3).map(([ticker, amount]) => (
+            <p key={ticker} className="flex justify-between gap-4 text-muted-foreground">
+              <span>{ticker}</span>
+              <span className="tabular-nums">{formatBRL(Number(amount))}</span>
+            </p>
+          ))}
+          {byTicker.length > 3 && <p className="text-muted-foreground">e mais {byTicker.length - 3}</p>}
+        </div>
+      )}
+    </div>
+  );
+}

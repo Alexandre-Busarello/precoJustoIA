@@ -4,27 +4,34 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { OptimizedCheckout } from '@/components/optimized-checkout'
+import { VALUATION_MODELS_SHORT_LABEL } from '@/lib/site-constants'
 
 export const metadata: Metadata = {
-  title: 'Checkout Premium - Preço Justo AI',
-  description: 'Assine o plano Premium e tenha acesso completo às análises avançadas de ações',
+  title: 'Assinar o Premium',
+  description: `Assine o plano Premium e tenha acesso aos ${VALUATION_MODELS_SHORT_LABEL}, aos relatórios de IA e ao uso ilimitado das ferramentas.`,
+  robots: {
+    index: false,
+    follow: false,
+  },
 }
 
 interface CheckoutPageProps {
-  searchParams: {
-    plan?: 'monthly' | 'annual'
+  searchParams: Promise<{
+    plan?: string
     redirect?: string
     email?: string
-  }
+  }>
 }
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
+  const params = await searchParams
+  const plan = params.plan === 'monthly' || params.plan === 'annual' ? params.plan : undefined
   const session = await getServerSession(authOptions)
 
   if (!session) {
     const checkoutParams = new URLSearchParams()
-    if (searchParams.plan) checkoutParams.set('plan', searchParams.plan)
-    if (searchParams.redirect) checkoutParams.set('redirect', searchParams.redirect)
+    if (plan) checkoutParams.set('plan', plan)
+    if (params.redirect) checkoutParams.set('redirect', params.redirect)
 
     const callbackUrl = checkoutParams.toString()
       ? `/checkout?${checkoutParams.toString()}`
@@ -49,7 +56,5 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     redirect(url.toString())
   }
 
-  const initialPlan = searchParams.plan || 'monthly'
-
-  return <OptimizedCheckout initialPlan={initialPlan} />
+  return <OptimizedCheckout initialPlan={plan} />
 }

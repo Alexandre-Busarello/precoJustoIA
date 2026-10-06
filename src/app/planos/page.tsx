@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/user-service"
 import { isTrialEnabled } from "@/lib/trial-service"
 import { isProdPhase } from "@/lib/alfa-service"
 import { formatPct } from "@/lib/format"
-import { COVERED_ASSETS_LABEL } from "@/lib/site-constants"
+import { COVERED_ASSETS_LABEL, UPDATE_FREQUENCY_LABEL, VALUATION_MODELS_SHORT_LABEL } from "@/lib/site-constants"
 import {
   calculateDiscount,
   FALLBACK_ANNUAL_PRICE_DECIMAL,
@@ -23,12 +23,12 @@ const ANNUAL_DISCOUNT_LABEL = formatPct(calculateDiscount(FALLBACK_MONTHLY_PRICE
 
 export const metadata: Metadata = {
   title: "Planos e preços",
-  description: `Plano gratuito com a Fórmula de Graham e Premium com os 8 modelos de valuation e IA a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês. No anual (${FALLBACK_ANNUAL_PRICE_FORMATTED}) você paga ${ANNUAL_DISCOUNT_LABEL} menos que 12 mensalidades.`,
+  description: `Plano gratuito com a Fórmula de Graham e Premium com os ${VALUATION_MODELS_SHORT_LABEL} e IA a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês. No anual (${FALLBACK_ANNUAL_PRICE_FORMATTED}) você paga ${ANNUAL_DISCOUNT_LABEL} menos que 12 mensalidades.`,
   keywords:
     "planos análise fundamentalista, preço análise de ações, análise fundamentalista gratuita, plano premium ações, assinatura valuation ações B3",
   openGraph: {
     title: "Planos e preços do Preço Justo AI",
-    description: `Grátis com a Fórmula de Graham ou Premium com 8 modelos e IA a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês.`,
+    description: `Grátis com a Fórmula de Graham ou Premium com ${VALUATION_MODELS_SHORT_LABEL} e IA a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês.`,
     type: "website",
     url: "https://precojusto.ai/planos",
     siteName: "Preço Justo AI",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Planos e preços do Preço Justo AI",
-    description: `Grátis com a Fórmula de Graham ou Premium com 8 modelos e IA a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês.`,
+    description: `Grátis com a Fórmula de Graham ou Premium com ${VALUATION_MODELS_SHORT_LABEL} e IA a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês.`,
   },
   robots: {
     index: true,
@@ -82,7 +82,7 @@ const FAQS = [
   },
   {
     question: "Quais empresas são analisadas?",
-    answer: `Todos os planos cobrem ${COVERED_ASSETS_LABEL} da B3, com cotações atualizadas 3 vezes ao dia e demonstrações atualizadas após cada divulgação de resultados.`,
+    answer: `Todos os planos cobrem ${COVERED_ASSETS_LABEL} da B3, entre ações, BDRs, FIIs e ETFs. ${UPDATE_FREQUENCY_LABEL}, e as demonstrações financeiras entram na base depois que as empresas publicam os resultados.`,
   },
 ]
 
@@ -102,16 +102,16 @@ export default async function PlanosPage() {
   const subtitle = currentPlan
     ? "Você já é assinante Premium. Veja abaixo o que está incluído."
     : isLoggedIn
-      ? "Você está no plano gratuito. Assine o Premium para liberar os 8 modelos, a IA e o uso ilimitado."
+      ? "Você está no plano gratuito. Assine o Premium para liberar todos os modelos, a IA e o uso ilimitado."
       : trialAvailable
         ? "Comece grátis. Contas novas testam o Premium por 1 dia, sem cartão de crédito."
-        : "Comece grátis e assine o Premium quando precisar dos 8 modelos e da IA."
+        : "Comece grátis e assine o Premium quando precisar de todos os modelos e da IA."
 
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: "Preço Justo AI Premium",
-    description: `Valuation de ações da B3 com 8 modelos, síntese com IA, rankings, comparador e backtest. Plano gratuito com a Fórmula de Graham.`,
+    description: `Valuation de ações da B3 com ${VALUATION_MODELS_SHORT_LABEL}, score de FIIs e ETFs, relatórios de IA, rankings, comparador e backtest. Plano gratuito com a Fórmula de Graham.`,
     brand: { "@type": "Brand", name: "Preço Justo AI" },
     offers: [
       { "@type": "Offer", name: "Grátis", price: "0", priceCurrency: "BRL", availability: "https://schema.org/InStock" },

@@ -10,6 +10,7 @@ import { getPlanPricing } from '@/components/landing/pricing-math'
 import { formatBRL, formatDate, formatPct } from '@/lib/format'
 import { FALLBACK_ANNUAL_PRICE_IN_CENTS, FALLBACK_MONTHLY_PRICE_IN_CENTS } from '@/lib/price-utils'
 import { cn } from '@/lib/utils'
+import { STOCK_VALUATION_MODELS_COUNT } from '@/lib/site-constants'
 
 export interface CurrentPlanInfo {
   /** Data de fim do acesso Premium (ISO) ou null quando não expira. */
@@ -39,7 +40,7 @@ const FREE_FEATURES = [
 ]
 
 export const PREMIUM_FEATURES = [
-  'Os 8 modelos de valuation em todas as ações',
+  `Todos os ${STOCK_VALUATION_MODELS_COUNT} modelos de valuation de ações`,
   'Análises, rankings e comparações ilimitados',
   'Screening e backtest ilimitados',
   'Síntese dos modelos com IA e relatórios',
@@ -142,7 +143,7 @@ export function LandingPricingSection({
           <div className="mb-10 max-w-2xl">
             <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Planos</h2>
             <p className="mt-2 text-base text-muted-foreground">
-              Comece grátis. O Premium libera os 8 modelos, a IA e o uso ilimitado.
+              Comece grátis. O Premium libera todos os modelos, a IA e o uso ilimitado.
             </p>
           </div>
         )}

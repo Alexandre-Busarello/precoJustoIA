@@ -1313,7 +1313,7 @@ Retorne um JSON com a ordenação de TODAS as empresas analisadas:
     }
     
     if (eligibleCount >= 4) {
-      reasoning += `. ${eligibleCount} de 7 modelos aprovaram a empresa`;
+      reasoning += `. ${eligibleCount} de ${Object.keys(strategies).length} modelos aprovaram a empresa`;
     }
     
     return reasoning + '. Não é recomendação de investimento.';

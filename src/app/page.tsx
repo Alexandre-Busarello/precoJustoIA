@@ -10,7 +10,14 @@ import { CTASection } from "@/components/landing/cta-section"
 import { FAQSection } from "@/components/landing/faq-section"
 import { FloatingCTA } from "@/components/landing/floating-cta"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
-import { COVERED_ASSETS_LABEL, DATA_SOURCES_LABEL } from "@/lib/site-constants"
+import {
+  COVERED_ASSETS_LABEL,
+  DATA_SOURCES_LABEL,
+  STOCK_VALUATION_MODELS_COUNT,
+  UPDATE_FREQUENCY_LABEL,
+  VALUATION_MODELS_EXAMPLES,
+  VALUATION_MODELS_SHORT_LABEL,
+} from "@/lib/site-constants"
 import { FALLBACK_MONTHLY_PRICE_FORMATTED } from "@/lib/price-utils"
 
 const HERO_ID = "home-hero"
@@ -18,7 +25,7 @@ const FINAL_CTA_ID = "home-final-cta"
 
 export const metadata: Metadata = {
   title: "Preço justo e valuation de ações da B3",
-  description: `Preço justo de ${COVERED_ASSETS_LABEL} da B3 calculado por 8 modelos de valuation (Graham, Barsi, Fórmula Mágica, FCD, Gordon e outros), com rankings, comparador e backtest. Comece grátis.`,
+  description: `Preço justo de ${COVERED_ASSETS_LABEL} da B3 calculado por ${VALUATION_MODELS_SHORT_LABEL} (${VALUATION_MODELS_EXAMPLES}), score de FIIs e ETFs, relatórios de IA, rankings, comparador e backtest. Comece grátis.`,
   keywords:
     "preço justo ações, valuation ações B3, análise fundamentalista, fórmula de Graham, método Barsi, fórmula mágica Greenblatt, fluxo de caixa descontado, ranking de ações, comparador de ações, backtest de carteira",
   publisher: "Preço Justo AI",
@@ -29,7 +36,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Preço Justo AI: preço justo e valuation de ações da B3",
-    description: "O preço justo de cada ação da B3, calculado por 8 modelos de valuation. Metodologia pública e plano gratuito.",
+    description: `O preço justo de cada ação da B3, calculado por ${VALUATION_MODELS_SHORT_LABEL}. Metodologia pública e plano gratuito.`,
     type: "website",
     url: "https://precojusto.ai",
     siteName: "Preço Justo AI",
@@ -46,7 +53,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Preço Justo AI: preço justo e valuation de ações da B3",
-    description: "O preço justo de cada ação da B3, calculado por 8 modelos de valuation.",
+    description: `O preço justo de cada ação da B3, calculado por ${VALUATION_MODELS_SHORT_LABEL}.`,
     creator: "@precojustoai",
     images: ["https://precojusto.ai/icons/og-default.png"],
   },
@@ -99,42 +106,43 @@ const MODELS = [
   { name: "Fórmula de Graham", measures: "Valor justo pelo lucro e pelo patrimônio por ação", plan: "Grátis" },
   { name: "Fluxo de caixa descontado", measures: "Valor presente do caixa que a empresa deve gerar", plan: "Premium" },
   { name: "Gordon", measures: "Valor pelos dividendos esperados e seu crescimento", plan: "Premium" },
-  { name: "Método Barsi", measures: "Preço-teto pelo dividendo mínimo desejado", plan: "Premium" },
+  { name: "Preço-teto (Bazin)", measures: "Preço máximo para receber 6% ao ano em proventos", plan: "Premium" },
+  { name: "Método Barsi", measures: "Preço-teto de Bazin aplicado a setores perenes", plan: "Premium" },
   { name: "Fórmula Mágica", measures: "Combina retorno sobre o capital e rendimento do lucro", plan: "Premium" },
   { name: "P/L baixo com qualidade", measures: "Múltiplo baixo com rentabilidade e margens sólidas", plan: "Premium" },
   { name: "Anti-armadilha de dividendos", measures: "Dividend yield alto com filtros de sustentabilidade", plan: "Premium" },
   { name: "Fundamentalista 3+1", measures: "Três indicadores essenciais adaptados ao perfil da empresa", plan: "Premium" },
+  { name: "Peter Lynch (PEG)", measures: "P/L comparado ao crescimento dos lucros", plan: "Premium" },
+  { name: "P/VP justo (bancos)", measures: "Valor de bancos e seguradoras pelo retorno sobre o patrimônio", plan: "Premium" },
 ]
 
 const FAQS = [
   {
     question: "Como o preço justo é calculado?",
-    answer:
-      "Aplicamos 8 modelos de valuation (Graham, fluxo de caixa descontado, Gordon, Barsi, Fórmula Mágica e outros) aos dados financeiros de cada empresa. Cada modelo gera uma estimativa própria, e a metodologia com fórmulas e premissas é pública.",
-  },
-  {
-    question: "De onde vêm os dados?",
-    answer:
-      "Cotações e demonstrações financeiras vêm da B3 e da CVM, consolidadas pela BRAPI. As demonstrações são atualizadas após cada divulgação trimestral.",
-  },
-  {
-    question: "Com que frequência os dados são atualizados?",
-    answer:
-      "As cotações são atualizadas 3 vezes ao dia (9h, 13h e 20h). Os dados fundamentalistas são atualizados depois que as empresas divulgam seus resultados.",
-  },
-  {
-    question: "Preciso pagar para usar?",
-    answer: `Não. O plano gratuito inclui a Fórmula de Graham em todas as ações e usos mensais das ferramentas. O Premium custa a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês, sem fidelidade.`,
+    answer: `Aplicamos ${VALUATION_MODELS_SHORT_LABEL} a ações e BDRs, como ${VALUATION_MODELS_EXAMPLES}, e cada um gera a própria estimativa. FIIs têm o score PJ-FII e um preço-teto pelo dividend yield alvo, e ETFs têm um score próprio. Fórmulas e premissas estão na metodologia pública.`,
   },
   {
     question: "O que a IA faz na plataforma?",
     answer:
-      "A IA (Google Gemini) resume o que os modelos indicam e o contexto da empresa em texto. É uma estimativa gerada por IA, que complementa os números e não substitui a sua análise.",
+      "A IA (Google Gemini) escreve o relatório mensal de fundamentos de cada empresa (completo no Premium), investiga quedas fortes de preço para avaliar se houve perda de fundamento e redige os alertas quando o score de um ativo que você acompanha muda. Também está por trás do Ben, o assistente que consulta os dados da plataforma para responder suas perguntas, e, no Premium, transforma texto em filtros de screening e em carteiras. Tudo isso é análise gerada por IA e não é recomendação de investimento.",
+  },
+  {
+    question: "De onde vêm os dados?",
+    answer:
+      "Cotações e demonstrações financeiras de empresas listadas na B3 e registradas na CVM, obtidas via BRAPI e Yahoo Finance. Selic, CDI e IPCA vêm das séries do Banco Central.",
+  },
+  {
+    question: "Com que frequência os dados são atualizados?",
+    answer: `${UPDATE_FREQUENCY_LABEL}, e as demonstrações financeiras entram na base depois que as empresas divulgam os resultados. Os alertas de preço e de mudança no score saem quando o processamento detecta a variação.`,
+  },
+  {
+    question: "Preciso pagar para usar?",
+    answer: `Não. O plano gratuito inclui a Fórmula de Graham em todas as ações, usos mensais das ferramentas, 3 alertas personalizados e 2 mensagens por dia com o Ben. O Premium libera os outros modelos, os relatórios completos de IA e o uso ilimitado, a partir de ${FALLBACK_MONTHLY_PRICE_FORMATTED}/mês, sem fidelidade.`,
   },
   {
     question: "Posso usar o preço justo como indicação de investimento?",
     answer:
-      "O preço justo é uma estimativa de modelos quantitativos com dados públicos e não é recomendação de investimento. Faça sua própria análise; rentabilidade passada não garante resultados futuros.",
+      "Não. O preço justo é uma estimativa de modelos quantitativos com dados públicos, e os textos da IA são análises geradas automaticamente: os dois não são recomendação de investimento. Faça sua própria análise; rentabilidade passada não garante resultados futuros.",
   },
 ]
 
@@ -218,7 +226,7 @@ export default async function Home() {
 
       <LandingHero
         id={HERO_ID}
-        headline="O preço justo de cada ação da B3, calculado por 8 modelos de valuation."
+        headline={`O preço justo de cada ação da B3, calculado por ${VALUATION_MODELS_SHORT_LABEL}.`}
         subheadline={`Preço, preço justo, margem de segurança e score de ${COVERED_ASSETS_LABEL}, com a metodologia aberta.`}
         actions={<HeroSearch />}
         showQuickAccess={false}
@@ -239,7 +247,7 @@ export default async function Home() {
             {DATA_SOURCES_LABEL}
           </Link>
           <span aria-hidden="true">·</span>
-          <span>Cotações atualizadas 3 vezes ao dia</span>
+          <span>{UPDATE_FREQUENCY_LABEL}</span>
           <span aria-hidden="true">·</span>
           <Link href="/metodologia" className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground md:min-h-0 md:no-underline md:hover:underline">
             Metodologia pública
@@ -273,7 +281,7 @@ export default async function Home() {
           <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
             <div>
               <h2 id="modelos" className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-                Os 8 modelos de valuation
+                Os {STOCK_VALUATION_MODELS_COUNT} modelos de valuation de ações
               </h2>
               <p className="mt-2 text-base text-muted-foreground">Cada um responde a uma pergunta diferente sobre o valor da empresa.</p>
             </div>
@@ -306,7 +314,7 @@ export default async function Home() {
             </table>
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            O Premium inclui também uma síntese dos modelos gerada por IA. Os valores são estimativas de modelo; não é recomendação de investimento.
+            FIIs têm score PJ-FII e preço-teto, e ETFs têm score próprio. O Premium inclui também uma síntese dos modelos gerada por IA. Os valores são estimativas de modelo; não é recomendação de investimento.
           </p>
         </div>
       </section>

@@ -42,9 +42,9 @@ export const metadata: Metadata = {
 
 const FAQS = [
   {
-    question: 'Como funciona a projeção de dividendos com IA?',
+    question: 'Como funciona a projeção de dividendos?',
     answer:
-      'O modelo analisa o histórico de proventos de cada empresa (frequência, meses de pagamento e valores) e estima as próximas datas ex e valores por ação para os meses seguintes. É uma estimativa: a empresa pode mudar a política de proventos a qualquer momento.',
+      'A projeção é estatística, sem IA: usa o histórico de proventos dos últimos anos de cada empresa (meses de pagamento e valores por ação) para estimar as próximas datas ex e valores. É uma estimativa: a empresa pode mudar a política de proventos a qualquer momento.',
   },
   {
     question: 'O radar de dividendos é gratuito?',

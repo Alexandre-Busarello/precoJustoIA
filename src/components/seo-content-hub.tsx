@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card"
+import { VALUATION_MODELS_SHORT_LABEL } from "@/lib/site-constants"
 import { 
   Target, 
   TrendingUp, 
@@ -161,7 +162,7 @@ export function SEOContentHub({ pageType }: SEOContentHubProps) {
           </h2>
           <div className="prose prose-slate dark:prose-invert max-w-none">
             <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-4">
-              <strong>Rankings de ações</strong> são listas ordenadas de empresas da Bolsa de Valores (B3) baseadas em critérios específicos de <strong>análise fundamentalista</strong>. Nossa plataforma utiliza <strong>8 modelos consagrados de valuation</strong> para identificar as melhores oportunidades de investimento em ações brasileiras e BDRs.
+              <strong>Rankings de ações</strong> são listas ordenadas de empresas da Bolsa de Valores (B3) baseadas em critérios específicos de <strong>análise fundamentalista</strong>. Nossa plataforma utiliza <strong>{VALUATION_MODELS_SHORT_LABEL} de ações</strong>, além de rankings de FIIs e ETFs, para ordenar ações brasileiras e BDRs pelos critérios de cada modelo.
             </p>
             <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-4">
               Cada modelo de <strong>ranking fundamentalista</strong> aplica uma metodologia diferente: desde a clássica <strong>Fórmula de Graham</strong> (gratuita) até análises avançadas com <strong>Inteligência Artificial</strong> que combinam múltiplas estratégias simultaneamente. Todos os rankings são gerados com dados financeiros reais da B3, processados através de <strong>análise fundamentalista rigorosa</strong>.
@@ -170,7 +171,7 @@ export function SEOContentHub({ pageType }: SEOContentHubProps) {
               Por que Usar Rankings de Ações?
             </h3>
             <ul className="list-disc list-inside space-y-2 text-slate-700 dark:text-slate-300">
-              <li><strong>Economize Tempo:</strong> Em vez de analisar centenas de ações manualmente, nossos rankings apresentam as melhores oportunidades já ordenadas</li>
+              <li><strong>Economize Tempo:</strong> Em vez de analisar centenas de ações manualmente, nossos rankings mostram as empresas que atendem aos critérios já ordenadas</li>
               <li><strong>Metodologias Comprovadas:</strong> Utilizamos estratégias criadas por investidores lendários como Benjamin Graham e Joel Greenblatt</li>
               <li><strong>Análise Profunda:</strong> Cada ação no ranking recebe uma análise detalhada explicando por que foi selecionada</li>
               <li><strong>Preço Justo Calculado:</strong> Descubra o valor intrínseco de cada ação e o potencial de valorização (upside)</li>
@@ -199,10 +200,10 @@ export function SEOContentHub({ pageType }: SEOContentHubProps) {
             <div>
               <h3 className="text-xl font-semibold mb-2 text-blue-900 dark:text-blue-100">
                 <Brain className="w-5 h-5 inline mr-2" />
-                Análise Preditiva com IA (Premium)
+                Síntese dos modelos com IA (Premium)
               </h3>
               <p className="text-slate-700 dark:text-slate-300">
-                <strong>Inteligência Artificial</strong> que combina TODAS as estratégias disponíveis. Usa machine learning para identificar padrões complexos e criar rankings preditivos personalizados. Considera análise técnica e fundamentalista simultaneamente.
+                A <strong>IA (Google Gemini)</strong> lê os resultados dos modelos determinísticos e os indicadores de cada empresa e devolve um ranking com score, nível de confiança e justificativa. O preço justo exibido é a mediana dos modelos; a IA não cria valores próprios. É análise gerada por IA e não é recomendação de investimento.
               </p>
             </div>
             <div>

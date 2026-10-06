@@ -1,4 +1,5 @@
 import Script from 'next/script'
+import { VALUATION_MODELS_LABEL, VALUATION_MODELS_SHORT_LABEL } from '@/lib/site-constants'
 
 interface SEOStructuredDataProps {
   type?: 'homepage' | 'article' | 'product' | 'organization'
@@ -104,12 +105,12 @@ export function SEOStructuredData({
               "price": "19.90",
               "priceCurrency": "BRL",
               "billingIncrement": "P1M",
-              "description": "8 modelos de valuation + análise com IA"
+              "description": `${VALUATION_MODELS_SHORT_LABEL} + análise com IA`
             }
           ],
           "featureList": [
             "Análise fundamentalista automatizada",
-            "8 modelos de valuation",
+            VALUATION_MODELS_LABEL,
             "Análise com inteligência artificial",
             "Mais de 600 ativos da B3 (ações, BDRs e FIIs)",
             "Comparador de ações",

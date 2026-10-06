@@ -38,14 +38,14 @@ const sections: NavSection[] = [
         title: "Radar de Dividendos",
         href: "/radar-dividendos",
         icon: DollarSign,
-        description: "Projeções de dividendos com IA.",
+        description: "Proventos confirmados e projeções estatísticas.",
         iconGradient: "bg-gradient-to-br from-blue-500 to-purple-500",
       },
       {
         title: "Rankings",
         href: "/ranking",
         icon: TrendingUp,
-        description: "As melhores ações segundo Graham, Bazin e outros.",
+        description: "Ações ordenadas por Graham, Bazin e outros modelos.",
         iconGradient: "bg-gradient-to-br from-blue-500 to-purple-500",
       },
       {

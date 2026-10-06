@@ -23,6 +23,7 @@ import {
 } from '@/lib/price-utils'
 import { isOfferActiveForPurchase } from '@/lib/offer-utils'
 import { cn } from '@/lib/utils'
+import { VALUATION_MODELS_SHORT_LABEL } from '@/lib/site-constants'
 
 type PlanType = 'monthly' | 'annual'
 type PaymentMethod = 'pix' | 'card'
@@ -150,7 +151,7 @@ export function OptimizedCheckout({ initialPlan }: OptimizedCheckoutProps) {
     ? `${currentPlan.name} · ${formatBRL(currentPlan.pixPriceCents / 100)} com 15% de desconto no PIX`
     : step === 'payment' && currentPlan
       ? `${currentPlan.name} · ${formatBRL(currentPlan.priceCents / 100)}${currentPlan.period}`
-      : 'Os 8 modelos de valuation, a síntese com IA e uso ilimitado das ferramentas.'
+      : `Os ${VALUATION_MODELS_SHORT_LABEL}, os relatórios de IA e uso ilimitado das ferramentas.`
 
   return (
     <div className="bg-background">

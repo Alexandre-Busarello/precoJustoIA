@@ -18,6 +18,7 @@ import { AppToaster } from "@/components/app-toaster";
 import { ShellProvider } from "@/components/shell-context";
 import { SiteFooter } from "@/components/footer";
 import { BenChatFAB } from "@/components/ben-chat-fab";
+import { COVERED_ASSETS_LABEL, STOCK_VALUATION_MODELS_COUNT } from "@/lib/site-constants";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { CacheCleanupOnLogin } from "@/components/cache-cleanup-on-login";
 import { GoogleAdsConversionPixel } from "@/components/google-ads-conversion-pixel";
@@ -35,13 +36,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_DESCRIPTION = `Análise fundamentalista de ações B3 com IA. ${STOCK_VALUATION_MODELS_COUNT} modelos de valuation, como Graham, Barsi, Bazin e Fórmula Mágica, além de score para FIIs e ETFs. Rankings e comparador de ${COVERED_ASSETS_LABEL} da B3.`;
+
 export const metadata: Metadata = {
   metadataBase: new URL('https://precojusto.ai'),
   title: {
     default: "Preço Justo AI - Análise Fundamentalista de Ações B3 com IA",
     template: "%s | Preço Justo AI"
   },
-  description: "Análise fundamentalista gratuita de ações B3 com IA. Modelos consagrados: Graham, Método Barsi, Fórmula Mágica + 5 estratégias. Rankings e comparador de mais de 600 ativos da B3.",
+  description: SITE_DESCRIPTION,
   keywords: "análise fundamentalista ações, ações B3, bovespa investimentos, como investir em ações, valuation ações, preço justo ações, dividend yield, fórmula mágica greenblatt, benjamin graham, ranking ações bovespa, comparador ações B3, investir bolsa valores, ações subvalorizadas, análise técnica fundamentalista",
   authors: [{ name: "Preço Justo AI" }],
   creator: "Preço Justo AI",
@@ -61,7 +64,7 @@ export const metadata: Metadata = {
     url: 'https://precojusto.ai',
     siteName: 'Preço Justo AI',
     title: 'Preço Justo AI - Análise Fundamentalista de Ações B3 com IA',
-    description: 'Análise fundamentalista gratuita de ações B3 com IA. Modelos consagrados: Graham, Método Barsi, Fórmula Mágica + 5 estratégias. Rankings e comparador de mais de 600 ativos da B3.',
+    description: SITE_DESCRIPTION,
     images: [
       {
         url: 'https://precojusto.ai/icons/og-default.png',

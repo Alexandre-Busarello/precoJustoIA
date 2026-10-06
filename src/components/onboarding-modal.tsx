@@ -74,7 +74,7 @@ const FIRST_STEPS = [
   {
     href: "/acao/petr4",
     title: "Abrir o valuation completo de uma ação",
-    description: "8 modelos de avaliação, preço justo estimado, margem de segurança e histórico. Exemplo: PETR4.",
+    description: "Modelos de valuation lado a lado, preço justo estimado, margem de segurança e histórico. Exemplo: PETR4.",
   },
   {
     href: "/dashboard/monitoramentos-customizados/criar",

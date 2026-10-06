@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import nodemailer from 'nodemailer'
 import { marked } from 'marked'
+import { STOCK_VALUATION_MODELS_COUNT } from '@/lib/site-constants'
 
 export type EmailProvider = 'RESEND' | 'GMAIL'
 
@@ -884,15 +885,15 @@ export function generatePaymentFailureEmailTemplate(retryUrl: string, userName?:
                   <div style="background-color: #ffffff; border-radius: 6px; padding: 16px; border: 1px solid #e5e7eb; display: flex; align-items: center; gap: 16px; text-align: left;">
                     <div style="width: 40px; height: 40px; background-color: #1e293b; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #ffffff;">🤖</div>
                     <div>
-                      <h4 style="color: #111827; font-weight: 600; margin: 0 0 4px 0; font-size: 15px;">Análise Preditiva com IA</h4>
-                      <p style="color: #64748b; margin: 0; font-size: 14px;">Google Gemini analisa 8 modelos + notícias</p>
+                      <h4 style="color: #111827; font-weight: 600; margin: 0 0 4px 0; font-size: 15px;">Relatórios com IA</h4>
+                      <p style="color: #64748b; margin: 0; font-size: 14px;">Relatórios de IA sobre fundamentos, quedas de preço e mudanças no score</p>
                     </div>
                   </div>
                   
                   <div style="background-color: #ffffff; border-radius: 6px; padding: 16px; border: 1px solid #e5e7eb; display: flex; align-items: center; gap: 16px; text-align: left;">
                     <div style="width: 40px; height: 40px; background-color: #1e293b; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #ffffff;">📊</div>
                     <div>
-                      <h4 style="color: #111827; font-weight: 600; margin: 0 0 4px 0; font-size: 15px;">8 Modelos de Valuation</h4>
+                      <h4 style="color: #111827; font-weight: 600; margin: 0 0 4px 0; font-size: 15px;">${STOCK_VALUATION_MODELS_COUNT} Modelos de Valuation</h4>
                       <p style="color: #64748b; margin: 0; font-size: 14px;">Graham, Fórmula Mágica, DCF e mais</p>
                     </div>
                   </div>
@@ -1477,7 +1478,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
                   </div>
                   <div class="feature-title">Análise com IA</div>
                   <div class="feature-desc">
-                    Use nossa IA para análises preditivas avançadas
+                    Gere rankings com a síntese dos modelos feita pela IA
                   </div>
                   <a href="${baseUrl}/ranking" class="feature-link">→ Criar Ranking</a>
                 </div>
@@ -1486,7 +1487,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
                   <div class="feature-icon-wrapper blue">
                     <span class="feature-icon">📊</span>
                   </div>
-                  <div class="feature-title">8 Modelos Premium</div>
+                  <div class="feature-title">${STOCK_VALUATION_MODELS_COUNT} Modelos de Valuation</div>
                   <div class="feature-desc">
                     Graham, Fórmula Mágica, DCF e muito mais
                   </div>
@@ -1544,7 +1545,7 @@ export function generateWelcomeEmailTemplate(userName?: string, isEarlyAdopter: 
                   <li>Comece criando um <strong>ranking com IA</strong> para descobrir as melhores oportunidades</li>
                   <li>Use o <strong>comparador</strong> para analisar suas ações favoritas lado a lado</li>
                   <li>Teste suas estratégias com o <strong>backtesting</strong> antes de investir</li>
-                  <li>Explore os <strong>8 modelos de valuation</strong> para diferentes perfis de investimento</li>
+                  <li>Explore os <strong>${STOCK_VALUATION_MODELS_COUNT} modelos de valuation</strong> para diferentes perfis de investimento</li>
                 </ul>
               </div>
               
@@ -1598,7 +1599,7 @@ ${userName ? `Olá, ${userName}!` : 'Olá!'} Parabéns! Sua assinatura ${planNam
 - Comece criando um ranking com IA para descobrir as melhores oportunidades
 - Use o comparador para analisar suas ações favoritas lado a lado
 - Teste suas estratégias com o backtesting antes de investir
-- Explore os 8 modelos de valuation para diferentes perfis
+- Explore os ${STOCK_VALUATION_MODELS_COUNT} modelos de valuation para diferentes perfis
 
 ${isEarlyAdopter ? '💬 Como Early Adopter, você receberá em breve o convite para o canal exclusivo WhatsApp com o CEO!' : ''}
 
@@ -1949,7 +1950,7 @@ export function generatePremiumExpirationEmailTemplate(userName?: string) {
                     <span class="benefit-icon">🤖</span>
                     <div class="benefit-content">
                       <div class="benefit-title">Acesso a todos os modelos de análise</div>
-                      <div class="benefit-desc">8 modelos Premium incluindo Graham, Fórmula Mágica, DCF e mais</div>
+                      <div class="benefit-desc">${STOCK_VALUATION_MODELS_COUNT} modelos de valuation, como Graham, Fórmula Mágica, FCD e Bazin</div>
                     </div>
                   </li>
                   <li class="benefit-item">
@@ -2022,7 +2023,7 @@ Informamos que sua assinatura Premium expirou. Você ainda pode usar a plataform
 Sua assinatura Premium expirou e você foi movido para o plano gratuito. Para continuar aproveitando todos os recursos Premium, considere renovar sua assinatura.
 
 O que você está perdendo:
-• Acesso a todos os modelos de análise - 8 modelos Premium incluindo Graham, Fórmula Mágica, DCF e mais
+• Acesso a todos os modelos de análise - ${STOCK_VALUATION_MODELS_COUNT} modelos de valuation, como Graham, Fórmula Mágica, FCD e Bazin
 • Relatórios completos de IA - Análises detalhadas e insights inteligentes sobre seus investimentos
 • Monitoramento avançado de ativos - Alertas personalizados e acompanhamento de ativos
 • Backtests e simulações - Teste suas estratégias com dados históricos reais
@@ -5157,7 +5158,7 @@ export function generateKiwifyWelcomeEmailTemplate(resetUrl: string, userName?: 
               </p>
               
               <ul class="features-list">
-                <li>8 Modelos de Valuation Premium (Graham, Fórmula Mágica, DCF, etc.)</li>
+                <li>${STOCK_VALUATION_MODELS_COUNT} Modelos de Valuation (Graham, Fórmula Mágica, FCD, Bazin e outros)</li>
                 <li>Análise com Inteligência Artificial</li>
                 <li>Comparador Avançado (até 10 ações lado a lado)</li>
                 <li>Backtesting de estratégias</li>
@@ -5208,7 +5209,7 @@ ${resetUrl}
 O link expira em 7 dias. Se você não configurar agora, pode solicitar um novo link a qualquer momento.
 
 ✨ O QUE VOCÊ TEM ACESSO AGORA:
-✓ 8 Modelos de Valuation Premium (Graham, Fórmula Mágica, DCF, etc.)
+✓ ${STOCK_VALUATION_MODELS_COUNT} Modelos de Valuation (Graham, Fórmula Mágica, FCD, Bazin e outros)
 ✓ Análise com Inteligência Artificial
 ✓ Comparador Avançado (até 10 ações lado a lado)
 ✓ Backtesting de estratégias

@@ -4,10 +4,11 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { OptimizedCheckout } from '@/components/optimized-checkout'
+import { VALUATION_MODELS_SHORT_LABEL } from '@/lib/site-constants'
 
 export const metadata: Metadata = {
   title: 'Assinar o Premium',
-  description: 'Assine o plano Premium e tenha acesso aos 8 modelos de valuation, à síntese com IA e ao uso ilimitado das ferramentas.',
+  description: `Assine o plano Premium e tenha acesso aos ${VALUATION_MODELS_SHORT_LABEL}, aos relatórios de IA e ao uso ilimitado das ferramentas.`,
   robots: {
     index: false,
     follow: false,

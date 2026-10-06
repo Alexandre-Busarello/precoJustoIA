@@ -1,3 +1,5 @@
+import { VALUATION_MODELS_SHORT_LABEL } from '@/lib/site-constants'
+
 export const LP_META = {
   title: 'Parceria com o Clube dos Dividendos',
   description:
@@ -127,7 +129,7 @@ export const FAQ_ITEMS = [
   {
     question: 'Quais vantagens tem o plano Premium para quem investe em dividendos?',
     answer:
-      'No Premium você acessa: radar de dividendos ilimitado com projeção de 12 meses, score de sustentabilidade dos dividendos, calendário de pagamentos por ativo, todos os modelos de valuation (incluindo Bazin e Gordon focados em dividendos), screening avançado com filtros de DY mínimo, e análise por IA para cada empresa.',
+      `No Premium você acessa os ${VALUATION_MODELS_SHORT_LABEL} de ações (incluindo Bazin, Barsi e Gordon, focados em dividendos), o ranking PJ-FII, screening sem limite com filtro de DY mínimo, monitores ilimitados de preço-teto e dividend yield e os relatórios completos de IA de cada empresa. O radar de dividendos, com proventos confirmados e projeções estatísticas, é gratuito.`,
   },
   {
     question: 'Como funciona o desconto exclusivo do Clube dos Dividendos?',

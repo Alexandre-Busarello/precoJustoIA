@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Check, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { PREMIUM_STOCK_MODELS_COUNT } from '@/lib/site-constants'
 
 type PlanKey = 'free' | 'monthly' | 'annual'
 type Cell = boolean | string
@@ -15,7 +16,7 @@ const PLANS: Array<{ key: PlanKey; label: string }> = [
 
 const ROWS: Array<{ feature: string; values: Record<PlanKey, Cell> }> = [
   { feature: 'Fórmula de Graham', values: { free: true, monthly: true, annual: true } },
-  { feature: 'Os outros 7 modelos de valuation', values: { free: false, monthly: true, annual: true } },
+  { feature: `Os outros ${PREMIUM_STOCK_MODELS_COUNT} modelos de valuation de ações`, values: { free: false, monthly: true, annual: true } },
   { feature: 'Análises completas de empresas', values: { free: '3 por mês', monthly: 'Ilimitadas', annual: 'Ilimitadas' } },
   { feature: 'Rankings', values: { free: '3 por mês, top 10', monthly: 'Ilimitados', annual: 'Ilimitados' } },
   { feature: 'Comparador (até 6 ações)', values: { free: '3 por mês', monthly: 'Ilimitado', annual: 'Ilimitado' } },

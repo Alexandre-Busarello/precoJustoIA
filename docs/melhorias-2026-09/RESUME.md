@@ -66,6 +66,18 @@ Depois da onda 2: logo em SVG (`127bb16`, fonte Ubuntu do logo original, ícones
 - Seed local: `free@local.test` tem 7 dias de trial (decisão do dono é 1 dia) — ajustar o script.
 - `scripts/local/screenshots.ts` ignora `--help` e grava em `<cwd>/shots` dentro do repo.
 
+## Ajustes pedidos pelo dono depois da onda 2 (05/10, já no branch)
+
+Logos das empresas nas listas (`1845214`), faixa de índices deslizando no desktop (`7a71606`), ranking abre o salvo do dia e a prévia não entra no histórico (`51806a1`), cobertura "mais de 600 ativos" (`b963121`), FAQ e contagem de modelos (11 para ações; `c3ce471`, `26c4502`), "Como funciona" por modelo no ranking e /metodologia com FIIs e ETFs (`32d0306`), Barsi sem petróleo nos setores perenes e anti-armadilha/P-L baixo exigindo Premium na API (`8783883`). `next build` de produção validado de novo.
+
+Bugs encontrados e ainda não corrigidos:
+- Estratégias de FII: fallbacks `maxPvp ?? 1.3`, `limit ?? 100` divergem do registro (1,1 / 50 / 30); `withRegistryDefaults` só cobre ações.
+- Pilar "Segmento e resiliência" dos FIIs: 60 no ranking × 80 na página (falta passar `lastFetchedAt`).
+- `etf-scoring` trata taxa/retorno = 0 como ausente; preset de renda fixa casa "ima" por substring.
+- `magicFormula` segue gratuito com 3 resultados na API (o registro diz premium) — decidir.
+- `yarn test` (glob `src/**/__tests__/**`) não roda `src/components/**/*.test.ts` — incluir no script/CI na onda 4.
+- Relatório mensal de IA só é gerado quando um Premium abre a página (o FAQ diz "de cada empresa"); LP do Clube dos Dividendos tem promessas não conferidas ("NAV", "score de sustentabilidade").
+
 ## Pendências conhecidas ao fim da onda 1 (a maioria tratada na onda 2; o que sobrou está acima)
 
 - **Funções financeiras (`src/lib/finance/*`)** — ajustar antes/durante a onda 2:

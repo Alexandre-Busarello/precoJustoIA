@@ -119,7 +119,7 @@ const MODELS = [
 const FAQS = [
   {
     question: "Como o preço justo é calculado?",
-    answer: `Aplicamos ${VALUATION_MODELS_SHORT_LABEL} a ações e BDRs, como ${VALUATION_MODELS_EXAMPLES}, e cada um gera a própria estimativa. FIIs têm o score PJ-FII e um preço-teto pelo dividend yield alvo, e ETFs têm um score próprio. Fórmulas e premissas estão na metodologia pública.`,
+    answer: `Aplicamos ${VALUATION_MODELS_SHORT_LABEL} a ações da B3, como ${VALUATION_MODELS_EXAMPLES}, e cada um gera a própria estimativa (em BDRs, só quando há dados de câmbio e paridade). FIIs têm o score PJ-FII e um preço-teto pelo dividend yield alvo, e ETFs têm um score próprio. Fórmulas e premissas estão na metodologia pública.`,
   },
   {
     question: "O que a IA faz na plataforma?",

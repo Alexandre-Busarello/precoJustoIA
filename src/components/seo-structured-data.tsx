@@ -115,13 +115,7 @@ export function SEOStructuredData({
             "Mais de 600 ativos da B3 (ações, BDRs e FIIs)",
             "Comparador de ações",
             "Rankings personalizados"
-          ],
-          "aggregateRating": {
-            "@type": "AggregateRating",
-            "ratingValue": "4.8",
-            "ratingCount": "1250",
-            "bestRating": "5"
-          }
+          ]
         })
         break
 

@@ -618,6 +618,26 @@
    ],
    "tasks": "See batches/w3-screening-filters.md",
    "testPlan": "See batches/w3-screening-filters.md"
+  },
+  {
+   "id": "w3-ibov-projections",
+   "wave": 3,
+   "title": "IBOV projections redone with statistics (historical ranges, calibration), AI only for commentary; fix stale updates",
+   "ownedPaths": [
+    "src/app/projecoes-ibov/**",
+    "src/app/api/ibov-projections/**",
+    "src/app/api/cron/calculate-ibov-projections/route.ts",
+    "src/app/api/ben/project-ibov/route.ts",
+    "src/app/actions/ibov-projection.ts",
+    "src/app/admin/ibov-projections/**",
+    "src/components/admin/ibov-projections-manager.tsx",
+    "src/components/dashboard-ibov-banner.tsx",
+    "src/lib/ibov-projection-helpers.ts",
+    "src/lib/ibov-projections/**",
+    "src/lib/__tests__/ibov-projections/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w3-ibov-projections.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w3-ibov-projections.md"
   }
  ],
  "deferred": [

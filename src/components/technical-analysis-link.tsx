@@ -41,9 +41,10 @@ export default function TechnicalAnalysisLink({
   )
 
   if (!canView) {
-    const cta = session?.user
-      ? { label: 'Desbloquear análise técnica', href: '/checkout' }
-      : { label: 'Desbloquear com 1 dia grátis', href: '/register' }
+    // Um único CTA primário por página (no cabeçalho do ativo): aqui só uma linha discreta com link
+    const upsellLink = session?.user
+      ? { label: 'Ver planos', href: '/planos' }
+      : { label: 'Criar conta grátis', href: '/register' }
 
     return (
       <div className="space-y-4">
@@ -54,15 +55,18 @@ export default function TechnicalAnalysisLink({
             <p className="text-muted-foreground">Faixa estimada (30 dias) R$ 00,00 – R$ 00,00</p>
             <p className="text-muted-foreground">Preço justo técnico R$ 00,00</p>
           </div>
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Lock className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-              Faixa estimada e preço justo técnico disponíveis no Premium.
-            </p>
-            <Button asChild size="sm" className="shrink-0">
-              <Link href={cta.href}>{cta.label}</Link>
-            </Button>
-          </div>
+          <p className="mt-4 flex items-start gap-1.5 text-sm text-muted-foreground">
+            <Lock className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            <span>
+              Faixa estimada e preço justo técnico disponíveis no Premium.{' '}
+              <Link
+                href={upsellLink.href}
+                className="whitespace-nowrap py-3 font-medium text-brand underline-offset-4 hover:underline"
+              >
+                {upsellLink.label}
+              </Link>
+            </span>
+          </p>
         </div>
         {note}
       </div>

@@ -55,22 +55,26 @@ function previewText(content: string): string {
     .join(' ')
 }
 
+/** Linha discreta de bloqueio: o CTA primário da página fica no cabeçalho do ativo. */
 function UnlockCta({ message }: { message: string }) {
   const { data: session } = useSession()
-  const cta = session?.user
-    ? { label: 'Desbloquear relatório completo', href: '/checkout' }
-    : { label: 'Desbloquear com 1 dia grátis', href: '/register' }
+  const link = session?.user
+    ? { label: 'Ver planos', href: '/planos' }
+    : { label: 'Criar conta grátis', href: '/register' }
 
   return (
-    <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-      <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
-        <Lock className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-        {message}
-      </p>
-      <Button asChild size="sm" className="shrink-0">
-        <Link href={cta.href}>{cta.label}</Link>
-      </Button>
-    </div>
+    <p className="flex items-start gap-1.5 border-t border-border pt-3 text-sm text-muted-foreground">
+      <Lock className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+      <span>
+        {message}{' '}
+        <Link
+          href={link.href}
+          className="whitespace-nowrap py-3 font-medium text-brand underline-offset-4 hover:underline"
+        >
+          {link.label}
+        </Link>
+      </span>
+    </p>
   )
 }
 

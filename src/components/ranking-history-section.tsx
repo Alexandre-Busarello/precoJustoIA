@@ -13,6 +13,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDate } from '@/lib/format'
 import { RANKING_MODELS, rankingModelLabel } from '@/lib/ranking-models'
+import { collapseRankingHistory, rankingHistoryLabel } from '@/lib/ranking-history-label'
 
 interface RankingHistoryItem {
   id: string
@@ -22,6 +23,9 @@ interface RankingHistoryItem {
   resultCount: number
   createdAt: string
   assetTypeFilter?: 'b3' | 'bdr' | 'both'
+  params?: Record<string, unknown> | null
+  /** Resultado salvo (usado só para os primeiros tickers). */
+  results?: unknown
 }
 
 interface RankingHistorySectionProps {
@@ -100,10 +104,12 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
 
   const hasActiveFilters = !!startDate || !!endDate || selectedModel !== 'all'
   const activeFilterCount = [startDate, endDate, selectedModel !== 'all' ? selectedModel : ''].filter(Boolean).length
-  const totalPages = Math.max(1, Math.ceil(history.length / ITEMS_PER_PAGE))
+  // Execuções repetidas (mesmos parâmetros, mesmo dia) viram uma linha com "×N"
+  const rows = collapseRankingHistory(history)
+  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE))
   const page = Math.min(currentPage, totalPages)
   const startIndex = (page - 1) * ITEMS_PER_PAGE
-  const currentItems = history.slice(startIndex, startIndex + ITEMS_PER_PAGE)
+  const currentItems = rows.slice(startIndex, startIndex + ITEMS_PER_PAGE)
 
   const clearFilters = () => {
     setStartDate('')
@@ -124,7 +130,9 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
         loading
           ? 'Carregando…'
           : totalCount > 0
-            ? `${totalCount} ${totalCount === 1 ? 'ranking salvo' : 'rankings salvos'}`
+            ? `${totalCount} ${totalCount === 1 ? 'ranking salvo' : 'rankings salvos'}${
+                rows.length < history.length ? ' · repetições do mesmo dia agrupadas' : ''
+              }`
             : 'Os rankings que você gera ficam salvos aqui.'
       }
       actions={
@@ -254,38 +262,48 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
       ) : (
         <>
           <ul className="divide-y divide-border rounded-lg border border-border bg-card">
-            {currentItems.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => openRanking(item.id)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
-                >
-                  <span className="min-w-0 flex-1 space-y-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">
-                        {rankingModelLabel(item.model) === item.model ? item.modelName : rankingModelLabel(item.model)}
+            {currentItems.map((item) => {
+              const modelLabel = rankingModelLabel(item.model) === item.model ? item.modelName : rankingModelLabel(item.model)
+              const { title, detail } = rankingHistoryLabel({ ...item, modelLabel })
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => openRanking(item.id)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+                  >
+                    <span className="min-w-0 flex-1 space-y-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">{title}</span>
+                        {item.assetTypeFilter && !item.model.startsWith('etfs-') && !item.model.startsWith('fii') && (
+                          <Badge variant="neutral">{UNIVERSE_LABEL[item.assetTypeFilter]}</Badge>
+                        )}
+                        {item.repeatCount > 1 && (
+                          <Badge variant="neutral" className="tabular-nums">
+                            ×{item.repeatCount}
+                            <span className="sr-only"> execuções iguais neste dia</span>
+                          </Badge>
+                        )}
                       </span>
-                      {item.assetTypeFilter && !item.model.startsWith('etfs-') && !item.model.startsWith('fii') && (
-                        <Badge variant="neutral">{UNIVERSE_LABEL[item.assetTypeFilter]}</Badge>
-                      )}
+                      {detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}
+                      <span className="block text-xs text-muted-foreground tabular-nums">
+                        {item.resultCount} {assetNoun(item.model, item.resultCount)} ·{' '}
+                        {formatDate(item.createdAt, { style: 'relative' })}
+                      </span>
                     </span>
-                    {item.description && <span className="block truncate text-xs text-muted-foreground">{item.description}</span>}
-                    <span className="block text-xs text-muted-foreground tabular-nums">
-                      {item.resultCount} {assetNoun(item.model, item.resultCount)} · {formatDate(item.createdAt, { style: 'relative' })}
-                    </span>
-                  </span>
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
-                  <span className="sr-only">Abrir ranking</span>
-                </button>
-              </li>
-            ))}
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                    <span className="sr-only">Abrir ranking</span>
+                  </button>
+                </li>
+              )
+            })}
           </ul>
 
           {totalPages > 1 && (
             <nav aria-label="Páginas do histórico" className="flex items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground tabular-nums">
-                {startIndex + 1}–{Math.min(startIndex + ITEMS_PER_PAGE, history.length)} de {history.length}
+                {startIndex + 1}–{Math.min(startIndex + ITEMS_PER_PAGE, rows.length)} de {rows.length}{' '}
+                {rows.length === 1 ? 'linha' : 'linhas'}
               </p>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => setCurrentPage(page - 1)} disabled={page === 1}>

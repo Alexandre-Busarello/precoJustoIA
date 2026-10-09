@@ -34,6 +34,19 @@ function preview(text: string, max = 160) {
   return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 0)) || cut}…`
 }
 
+/** Frases que revelam o tom (bloqueado para não-assinantes). */
+const TONE_PATTERN = /sentimento|tom\b|predominant|positiv|negativ|otimis|pessimis|neutr/i
+
+/**
+ * Prévia para não-assinantes sem revelar o tom: pula a 1ª frase (que costuma resumir o sentimento) e as
+ * frases que falam do tom; sem nada neutro para mostrar, usa uma linha genérica.
+ */
+function neutralPreview(summary: string, ticker: string) {
+  const sentences = summary.split(/(?<=[.!?])\s+/).slice(1).filter((sentence) => !TONE_PATTERN.test(sentence))
+  const text = sentences.join(' ').trim()
+  return text ? preview(text) : `Resumo de vídeos e análises públicas sobre ${ticker}.`
+}
+
 function PointList({ title, points, hiddenCount }: { title: string; points: string[]; hiddenCount: number }) {
   if (points.length === 0 && hiddenCount === 0) return null
   return (
@@ -55,7 +68,8 @@ function PointList({ title, points, hiddenCount }: { title: string; points: stri
 
 /**
  * "O que o mercado está falando": resumo por IA de vídeos e análises públicas. Bloco neutro,
- * visualmente separado do score: o sentimento não entra no score geral. Não-assinantes veem uma prévia e um único CTA.
+ * visualmente separado do score: o sentimento não entra no score geral. Não-assinantes veem uma prévia
+ * que não revela o tom e uma linha discreta com link (o CTA primário fica no cabeçalho do ativo).
  */
 export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIsPremium }: MarketSentimentSectionProps) {
   const [showPoints, setShowPoints] = useState(false)
@@ -77,8 +91,8 @@ export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIs
   const visibleNegative = userIsPremium ? negative : negative.slice(0, 1)
   const hasPoints = positive.length > 0 || negative.length > 0
   const pointsId = `sentiment-points-${ticker.toLowerCase()}`
-  const cta = session?.user
-    ? { label: 'Ver análise completa no Premium', href: '/checkout' }
+  const upsellLink = session?.user
+    ? { label: 'Ver planos', href: '/planos' }
     : { label: 'Criar conta grátis', href: '/register' }
 
   return (
@@ -106,7 +120,7 @@ export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIs
         </div>
 
         <p className="mt-3 text-sm leading-6 text-foreground">
-          {userIsPremium ? youtubeAnalysis.summary : preview(youtubeAnalysis.summary)}
+          {userIsPremium ? youtubeAnalysis.summary : neutralPreview(youtubeAnalysis.summary, ticker)}
         </p>
 
         {hasPoints && (
@@ -137,15 +151,18 @@ export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIs
         )}
 
         {!userIsPremium && (
-          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Lock className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-              Resumo completo e todos os pontos disponíveis no Premium.
-            </p>
-            <Button asChild size="sm" variant="outline" className="shrink-0">
-              <Link href={cta.href}>{cta.label}</Link>
-            </Button>
-          </div>
+          <p className="mt-4 flex items-start gap-1.5 border-t border-border pt-3 text-sm text-muted-foreground">
+            <Lock className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            <span>
+              Resumo completo e todos os pontos disponíveis no Premium.{' '}
+              <Link
+                href={upsellLink.href}
+                className="whitespace-nowrap py-3 font-medium text-brand underline-offset-4 hover:underline"
+              >
+                {upsellLink.label}
+              </Link>
+            </span>
+          </p>
         )}
       </div>
     </div>

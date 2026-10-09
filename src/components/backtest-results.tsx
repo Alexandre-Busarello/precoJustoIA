@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, FilePlus2, Loader2, WalletCards } from 'lucide-react';
 import {
   XAxis,
@@ -13,7 +14,9 @@ import {
   LineChart
 } from 'recharts';
 import { Button } from '@/components/ui/button';
+import { toast as sonnerToast } from 'sonner';
 import { useToast } from '@/hooks/use-toast';
+import { usePremiumStatus } from '@/hooks/use-premium-status';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Stat } from '@/components/ui/stat';
 import { SectionHeader } from '@/components/ui/section-header';
@@ -234,6 +237,26 @@ function monthsLabel(value: number): string {
   return `${formatNumber(value, { digits: 0 })} ${value === 1 ? 'mês' : 'meses'}`;
 }
 
+/**
+ * Duração da simulação: anos inteiros quando fecha (60 meses = "5 anos"), senão em meses.
+ * Recebe `monthlyReturns.length`: há um retorno por mês simulado (5 anos = 60 entradas), sem +1.
+ */
+function periodLabel(months: number): string {
+  if (months >= 12 && months % 12 === 0) {
+    const years = months / 12;
+    return `${formatNumber(years, { digits: 0 })} ${years === 1 ? 'ano' : 'anos'}`;
+  }
+  return monthsLabel(months);
+}
+
+/** Quantas carteiras o usuário já tem (o plano gratuito permite 1). */
+async function fetchPortfolioCount(): Promise<number> {
+  const response = await fetch('/api/portfolio');
+  if (!response.ok) throw new Error('Erro ao carregar carteiras');
+  const data = await response.json();
+  return Array.isArray(data?.portfolios) ? data.portfolios.length : 0;
+}
+
 interface MetricRow {
   label: ReactNode;
   value: ReactNode;
@@ -271,6 +294,15 @@ export function BacktestResults({ result, config, transactions, configId, onNewS
   const resultsTopRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [creatingPortfolio, setCreatingPortfolio] = useState(false);
+  const { isPremium, isLoading: premiumLoading } = usePremiumStatus();
+  // Grátis com 1 carteira já atingiu o limite: não oferece "Criar carteira" (evita o erro no clique)
+  const { data: portfolioCount } = useQuery({
+    queryKey: ['portfolios', 'count'],
+    queryFn: fetchPortfolioCount,
+    enabled: Boolean(configId) && !premiumLoading && !isPremium,
+    staleTime: 60 * 1000,
+  });
+  const canCreatePortfolio = Boolean(configId) && !premiumLoading && (isPremium || portfolioCount === 0);
 
   // Rola até o topo dos resultados quando um novo resultado é carregado (e leva o foco ao título no pouso)
   useEffect(() => {
@@ -299,6 +331,15 @@ export function BacktestResults({ result, config, transactions, configId, onNewS
         }),
       });
       const data = await response.json().catch(() => ({}));
+      if (response.status === 403 && data.requiresPremium) {
+        // Limite do plano gratuito (ex.: carteira criada em outra aba): aviso neutro com o caminho para os planos
+        sonnerToast('O plano gratuito inclui 1 carteira', {
+          description: 'Com o Premium você cria mais carteiras.',
+          action: { label: 'Ver planos', onClick: () => router.push('/planos') },
+        });
+        setCreatingPortfolio(false);
+        return;
+      }
       if (!response.ok || !data.portfolioId) throw new Error(data.error || 'Não foi possível criar a carteira.');
       toast({ title: 'Carteira criada', description: 'Os ativos e os pesos do backtest foram copiados para a nova carteira.' });
       router.push(`/carteira/${data.portfolioId}`);
@@ -907,9 +948,11 @@ export function BacktestResults({ result, config, transactions, configId, onNewS
       ? 'A carteira não teve quedas acima de 5% no período analisado.'
       : null,
   ].filter((text): text is string => Boolean(text));
+  const period = periodLabel(result.monthlyReturns?.length || 0);
 
   return (
-    <div ref={resultsTopRef} className="scroll-mt-24 space-y-6">
+    // scroll-mt: header fixo (64 px) + linha de abas da página, para as abas continuarem visíveis no pouso
+    <div ref={resultsTopRef} className="scroll-mt-36 space-y-6">
       {periodAdjusted && (
         <div className="flex items-start gap-3 rounded-lg border border-border bg-surface p-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" strokeWidth={1.75} aria-hidden="true" />
@@ -945,13 +988,18 @@ export function BacktestResults({ result, config, transactions, configId, onNewS
               <span className="whitespace-nowrap tabular-nums">
                 {config.assets?.length || 0} {(config.assets?.length || 0) === 1 ? 'ativo' : 'ativos'}
               </span>
-              <span aria-hidden="true">·</span>
-              <span className="whitespace-nowrap tabular-nums">{(result.monthlyReturns?.length || 0) + 1} meses</span>
+              {/* O nome do backtest rápido já traz o período ("PETR4 · 5 anos"): não repete */}
+              {!config.name.includes(period) && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="whitespace-nowrap tabular-nums">{period}</span>
+                </>
+              )}
             </p>
           </div>
-          {(configId || onNewSimulation) && (
+          {(canCreatePortfolio || onNewSimulation) && (
             <div className="flex shrink-0 flex-wrap gap-2">
-              {configId && (
+              {canCreatePortfolio && (
                 <Button variant="outline" size="sm" onClick={createPortfolio} disabled={creatingPortfolio} aria-busy={creatingPortfolio || undefined} className="max-md:h-11">
                   {creatingPortfolio ? (
                     <Loader2 className="size-4 animate-spin text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
@@ -1053,7 +1101,7 @@ export function BacktestResults({ result, config, transactions, configId, onNewS
                     tick={AXIS_TICK}
                     tickLine={false}
                     axisLine={false}
-                    width={56}
+                    width={64}
                   />
                   <Tooltip
                     cursor={{ stroke: 'var(--border)' }}

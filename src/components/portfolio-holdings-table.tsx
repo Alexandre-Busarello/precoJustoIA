@@ -75,11 +75,42 @@ function StatusBadge({ holding }: { holding: Holding }) {
   return <Badge variant={status === "ok" ? "neutral" : "warning"}>{STATUS_LABEL[status]}</Badge>;
 }
 
-function ReturnCell({ fraction, amount }: { fraction: number; amount: number }) {
+/** Retorno do preço (1ª linha) e retorno com dividendos (2ª linha). */
+function ReturnCell({ holding }: { holding: Holding }) {
   return (
     <div className="flex flex-col items-end leading-tight">
-      <span className={cn("font-medium", returnToneClass(fraction))}>{formatDeltaPct(fraction)}</span>
-      <span className={cn("text-xs", moneyToneClass(amount))}>{formatBRL(amount)}</span>
+      <span className={cn("font-medium", returnToneClass(holding.returnPercentage))}>
+        {formatDeltaPct(holding.returnPercentage)}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        c/ div.{" "}
+        <span className={returnToneClass(holding.returnWithDividendsPercentage)}>
+          {formatDeltaPct(holding.returnWithDividendsPercentage)}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/** Valor atual (1ª linha) e resultado em reais (2ª linha); o resultado com dividendos fica no title. */
+function ValueCell({ holding }: { holding: Holding }) {
+  return (
+    <div
+      className="flex flex-col items-end leading-tight"
+      title={`Resultado: ${formatBRL(holding.return)} · com dividendos: ${formatBRL(holding.returnWithDividends)}`}
+    >
+      <span className="font-medium">{formatBRL(holding.currentValue)}</span>
+      <span className={cn("text-xs", moneyToneClass(holding.return))}>{formatBRL(holding.return)}</span>
+    </div>
+  );
+}
+
+/** Preço atual (1ª linha) e preço médio (2ª linha). */
+function PriceCell({ holding }: { holding: Holding }) {
+  return (
+    <div className="flex flex-col items-end leading-tight">
+      <span>{formatBRL(holding.currentPrice)}</span>
+      <span className="text-xs text-muted-foreground">Médio {formatBRL(holding.averagePrice)}</span>
     </div>
   );
 }
@@ -312,7 +343,15 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
       key: "ticker",
       header: "Ativo",
       sortable: true,
-      cell: (h) => <AssetCell href={assetHref(h.ticker, h.assetType)} ticker={h.ticker} name={h.companyName} logoUrl={h.logoUrl} />,
+      cell: (h) => (
+        <AssetCell
+          href={assetHref(h.ticker, h.assetType)}
+          ticker={h.ticker}
+          name={h.companyName}
+          logoUrl={h.logoUrl}
+          className="sm:max-w-40"
+        />
+      ),
     },
     {
       key: "quantity",
@@ -321,29 +360,29 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
       sortable: true,
       cell: (h) => formatNumber(h.quantity, { digits: 0 }),
     },
-    { key: "averagePrice", header: "Preço médio", align: "right", sortable: true, cell: (h) => formatBRL(h.averagePrice) },
-    { key: "currentPrice", header: "Preço atual", align: "right", sortable: true, cell: (h) => formatBRL(h.currentPrice) },
+    {
+      key: "currentPrice",
+      header: "Preço",
+      align: "right",
+      sortable: true,
+      hint: "Preço atual; na 2ª linha, o seu preço médio.",
+      cell: (h) => <PriceCell holding={h} />,
+    },
     {
       key: "currentValue",
       header: "Valor atual",
       align: "right",
       sortable: true,
-      cell: (h) => <span className="font-medium">{formatBRL(h.currentValue)}</span>,
+      hint: "Valor da posição hoje; na 2ª linha, o resultado em reais (sem dividendos).",
+      cell: (h) => <ValueCell holding={h} />,
     },
     {
       key: "returnPercentage",
       header: "Retorno",
       align: "right",
       sortable: true,
-      cell: (h) => <ReturnCell fraction={h.returnPercentage} amount={h.return} />,
-    },
-    {
-      key: "returnWithDividendsPercentage",
-      header: "Retorno c/ div.",
-      align: "right",
-      sortable: true,
-      hint: "Inclui os dividendos recebidos do ativo.",
-      cell: (h) => <ReturnCell fraction={h.returnWithDividendsPercentage} amount={h.returnWithDividends} />,
+      hint: "Variação do preço sobre o seu preço médio; na 2ª linha, incluindo os dividendos recebidos.",
+      cell: (h) => <ReturnCell holding={h} />,
     },
     {
       key: "yieldOnCost",
@@ -374,9 +413,14 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
       cell: (h) => (
         <div className="flex items-center justify-end gap-1">
           {h.returnPercentage < 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setRecoverySheetHolding(h)}>
-              <Calculator strokeWidth={1.75} aria-hidden="true" />
-              Simular aporte
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setRecoverySheetHolding(h)}
+              aria-label={`Simular aporte em ${h.ticker}`}
+              title="Simular aporte"
+            >
+              <Calculator className="text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
             </Button>
           )}
           <AskBenButton

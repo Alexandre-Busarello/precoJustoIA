@@ -248,10 +248,14 @@ export function StockSummaryHeader({
       ? { label: 'Acompanhar', icon: Bell, href: `/dashboard/monitoramentos-customizados/criar?ticker=${ticker}` }
       : { label: 'Acompanhar', icon: Bell, onClick: scrollToFollow },
     { label: 'Comparar', icon: GitCompare, href: compareHref },
-    // Ocupado: mesmo rótulo (sem salto de largura), só o ícone vira spinner; o texto vai para a região viva
-    quickBacktest.busy
-      ? { label: 'Backtest', icon: SpinnerIcon, onClick: () => {} }
-      : { label: 'Backtest', icon: BarChart3, onClick: openBacktest },
+    // Ocupado: mesmo rótulo (sem salto de largura), o ícone vira spinner e o botão fica desabilitado;
+    // o texto vai para a região viva
+    {
+      label: 'Backtest',
+      icon: quickBacktest.busy ? SpinnerIcon : BarChart3,
+      onClick: openBacktest,
+      busy: quickBacktest.busy,
+    },
   ];
 
   const fairValueSlot = fairLocked ? (

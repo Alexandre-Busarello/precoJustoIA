@@ -5,7 +5,6 @@ import { Check, Lock, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatBRLCompact, formatDeltaPct, formatPct } from '@/lib/format'
 import { marginOfSafety, upside, valuationStatus } from '@/lib/valuation-metrics'
-import { Button } from '@/components/ui/button'
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table'
 import { Stat } from '@/components/ui/stat'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
@@ -406,9 +405,10 @@ export function ValuationTable({ price, strategies, access, isFinancial = false,
     },
   ]
 
-  const cta = access.isLoggedIn
-    ? { label: 'Desbloquear modelos Premium', href: '/checkout' }
-    : { label: 'Desbloquear com 1 dia grátis', href: '/register' }
+  // Um único CTA primário por página (no cabeçalho do ativo): aqui só uma linha discreta com link
+  const upsellLink = access.isLoggedIn
+    ? { label: 'Ver planos', href: '/planos' }
+    : { label: 'Criar conta grátis', href: '/register' }
 
   return (
     <div className="space-y-3">
@@ -427,18 +427,22 @@ export function ValuationTable({ price, strategies, access, isFinancial = false,
       />
 
       {!loading && lockedCount > 0 && (
-        <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
+        <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+          <Lock className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          <span>
             {!access.isLoggedIn
               ? 'Crie uma conta grátis para ver o Número de Graham e usar todos os modelos por 1 dia.'
               : lockedCount === 1
-                ? 'Um modelo está disponível só no Premium.'
-                : `${lockedCount} modelos estão disponíveis só no Premium.`}
-          </p>
-          <Button asChild size="sm" className="shrink-0">
-            <Link href={cta.href}>{cta.label}</Link>
-          </Button>
-        </div>
+                ? 'Um modelo disponível no Premium.'
+                : `${lockedCount} modelos disponíveis no Premium.`}{' '}
+            <Link
+              href={upsellLink.href}
+              className="whitespace-nowrap py-3 font-medium text-brand underline-offset-4 hover:underline"
+            >
+              {upsellLink.label}
+            </Link>
+          </span>
+        </p>
       )}
 
       <p className="text-xs text-muted-foreground">

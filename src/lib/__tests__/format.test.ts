@@ -79,6 +79,20 @@ test('formatDate curta, com hora e relativa', () => {
   assert.equal(formatDate(new Date('2026-06-04T16:00:00Z'), { style: 'relative', now }), 'há 4 meses')
 })
 
+test('formatDate mantém o dia civil das datas sem horário', () => {
+  // Data-com do TAEE11 gravada como meia-noite UTC (@db.Date): no fuso de Brasília seria 16 ago.
+  assert.equal(formatDate(new Date('2026-08-17T00:00:00.000Z')), '17 ago. 2026')
+  assert.equal(formatDate('2026-08-17T00:00:00.000Z'), '17 ago. 2026')
+  assert.equal(formatDate('2026-08-17'), '17 ago. 2026')
+  assert.equal(formatDate('2026-08-17T00:00:00.000Z', { dateOnly: true, style: 'datetime' }), '17 ago. 2026')
+  // Timestamps seguem no fuso de Brasília
+  assert.equal(formatDate('2026-08-17T02:30:00.000Z'), '16 ago. 2026')
+  assert.equal(formatDate('2026-08-17T00:00:00.000Z', { dateOnly: false }), '16 ago. 2026')
+  assert.equal(formatDate('2026-08-17T00:00:00.000Z', { style: 'datetime' }), '16 ago. 2026, 21:00')
+  // dateOnly explícito para datas sem horário que chegam com hora (ex.: 03:00Z)
+  assert.equal(formatDate('2026-08-17T03:00:00.000Z', { dateOnly: true }), '17 ago. 2026')
+})
+
 test('valores ausentes viram travessão em todas as funções', () => {
   for (const bad of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY]) {
     assert.equal(formatBRL(bad), EMPTY_VALUE)

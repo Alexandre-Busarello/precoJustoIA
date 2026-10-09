@@ -133,3 +133,30 @@ export function getAllPresetSlugs(): ScreeningPresetSlug[] {
   return Object.keys(SCREENING_PRESETS) as ScreeningPresetSlug[];
 }
 
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keysA = Object.keys(a).filter((key) => (a as Record<string, unknown>)[key] !== undefined);
+  const keysB = Object.keys(b).filter((key) => (b as Record<string, unknown>)[key] !== undefined);
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((key) => sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
+}
+
+/**
+ * Preset de screening cujos parâmetros a requisição reproduz (mesmo `sortBy` e os mesmos filtros do preset).
+ * O servidor só libera o modo preset (todos os filtros do preset para quem não é Premium) quando encontra um;
+ * um `sortBy` avulso não basta.
+ */
+export function findPresetForScreeningParams(params: unknown): ScreeningPreset<ScreeningPresetSlug> | null {
+  if (typeof params !== 'object' || params === null) return null;
+  const request = params as Record<string, unknown>;
+  if (typeof request.sortBy !== 'string' || !request.sortBy) return null;
+  const presets = Object.values(SCREENING_PRESETS) as ScreeningPreset<ScreeningPresetSlug>[];
+  return (
+    presets.find((preset) =>
+      Object.entries(preset.params).every(([key, value]) => sameValue(request[key], value))
+    ) ?? null
+  );
+}

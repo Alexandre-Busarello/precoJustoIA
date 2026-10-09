@@ -40,6 +40,7 @@ import {
 import { warmMacroAssumptions } from "@/lib/finance/macro";
 import { formatBRLCompact, formatMultiple, formatNumber, formatPct } from "@/lib/format";
 import { cache } from "@/lib/cache-service";
+import { findPresetForScreeningParams } from "@/lib/screening-presets";
 import {
   PREMIUM_SCREENING_METRICS,
   ScreeningStrategy,
@@ -404,18 +405,19 @@ export async function POST(request: NextRequest) {
       if (!isPremium) {
         const screeningParams = params as ScreeningParams;
 
-        // Verificar se é uma rota de marketing (preset) - identificada pela presença de sortBy
-        // Rotas de marketing têm sortBy definido e devem permitir todos os filtros necessários
-        const isMarketingRoute = !!screeningParams.sortBy;
+        // Rota de marketing (preset): só quando os parâmetros reproduzem um preset conhecido. Um `sortBy` avulso
+        // não libera os filtros Premium; nesse caso vale a mesma lista do modo ferramenta.
+        const preset = findPresetForScreeningParams(screeningParams);
 
-        if (isMarketingRoute) {
-          // Rotas de marketing: permitir todos os filtros necessários para funcionar corretamente
+        if (preset) {
+          // Os filtros vêm do preset no servidor (o que o cliente mandar além disso é descartado)
           // Backend sempre aplica limite de 3 para não-Premium (não confiar no frontend)
           body.params = {
-            ...screeningParams,
+            ...preset.params,
+            includeBDRs: screeningParams.includeBDRs,
             limit: 3,
             useTechnicalAnalysis: false, // Desabilitar análise técnica para não-Premium
-          };
+          } as ScreeningParams;
         } else {
           // Modo ferramenta normal: limitar apenas aos parâmetros de Valuation
           const restrictedParams: ScreeningParams = {

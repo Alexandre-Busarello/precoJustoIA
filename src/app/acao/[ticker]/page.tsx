@@ -314,7 +314,12 @@ export default async function TickerPage({ params }: PageProps) {
     },
   });
 
-  if (company && !company.isActive && company.successor) {
+  // Ticker inexistente: 404 antes de contar visualização, atualizar preço ou gerar projeções de proventos
+  if (!company) {
+    notFound()
+  }
+
+  if (!company.isActive && company.successor) {
     redirect(`/acao/${company.successor.ticker.toLowerCase()}`);
   }
 

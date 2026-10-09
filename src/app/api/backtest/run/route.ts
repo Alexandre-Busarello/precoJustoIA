@@ -97,8 +97,7 @@ export async function POST(request: NextRequest) {
           data: params.assets.map(asset => ({
             backtestId: body.configId!,
             ticker: asset.ticker,
-            targetAllocation: asset.allocation,
-            averageDividendYield: asset.averageDividendYield || null
+            targetAllocation: asset.allocation
           }))
         });
       }, { affectedTables: ['backtest_assets', 'backtest_configs'] });
@@ -123,8 +122,7 @@ export async function POST(request: NextRequest) {
       params = {
         assets: config.assets.map(a => ({
           ticker: a.ticker,
-          allocation: Number(a.targetAllocation),
-          averageDividendYield: (a as any).averageDividendYield ? Number((a as any).averageDividendYield) : undefined
+          allocation: Number(a.targetAllocation)
         })),
         startDate: new Date(config.startDate),
         endDate: new Date(config.endDate),

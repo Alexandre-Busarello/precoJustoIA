@@ -12,7 +12,7 @@ import { InfoHint } from '@/components/ui/info-hint';
 import { Trash2, RefreshCw, Loader2, Play, Save } from 'lucide-react';
 import { AssetSearchInput, CompanySearchResult } from '@/components/asset-search-input';
 import { BacktestLoadingOverlay } from '@/components/backtest-loading-overlay';
-import { formatBRL, formatNumber, formatPct } from '@/lib/format';
+import { formatBRL, formatPct } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import {
   formatBRLInput,
@@ -55,10 +55,6 @@ function isUnsaved(id?: string) {
   return !id || id.startsWith('temp-');
 }
 
-function dyToInput(dy?: number) {
-  return dy ? formatNumber(dy * 100, { digits: 2 }) : '';
-}
-
 function emptyConfig(): BacktestConfig {
   const now = new Date();
   return {
@@ -97,9 +93,6 @@ export function BacktestConfigForm({
   const [monthlyContributionInput, setMonthlyContributionInput] = useState(() => formatBRLInput(config.monthlyContribution));
   const [startYearInput, setStartYearInput] = useState(() => String(config.startDate.getFullYear()));
   const [endYearInput, setEndYearInput] = useState(() => String(config.endDate.getFullYear()));
-  const [dividendYieldInputs, setDividendYieldInputs] = useState<Record<string, string>>(() =>
-    Object.fromEntries(config.assets.map(asset => [asset.ticker, dyToInput(asset.averageDividendYield)]))
-  );
 
   const [isAddingAsset, setIsAddingAsset] = useState(false);
   const [isRemovingAsset, setIsRemovingAsset] = useState(false);
@@ -113,12 +106,6 @@ export function BacktestConfigForm({
     setMonthlyContributionInput(formatBRLInput(newConfig.monthlyContribution));
     setStartYearInput(newConfig.startDate.getFullYear().toString());
     setEndYearInput(newConfig.endDate.getFullYear().toString());
-
-    const newDividendYieldInputs: Record<string, string> = {};
-    newConfig.assets.forEach(asset => {
-      newDividendYieldInputs[asset.ticker] = dyToInput(asset.averageDividendYield);
-    });
-    setDividendYieldInputs(newDividendYieldInputs);
   };
 
   // Carrega a configuração inicial sempre que ela mudar de fato
@@ -167,7 +154,7 @@ export function BacktestConfigForm({
       ...prev,
       assets: withEqualAllocation([
         ...prev.assets,
-        { ticker: company.ticker, companyName: company.name, allocation: 0, averageDividendYield: undefined }
+        { ticker: company.ticker, companyName: company.name, allocation: 0 }
       ])
     }));
   };
@@ -215,12 +202,11 @@ export function BacktestConfigForm({
 
       const { config: updatedConfig } = await response.json();
 
-      // O backend devolve as alocações recalculadas e o DY médio de cada ativo
-      const updatedAssets: BacktestAsset[] = updatedConfig.assets.map((asset: { ticker: string; targetAllocation: number | string; averageDividendYield?: number | string | null }) => ({
+      // O backend devolve as alocações recalculadas
+      const updatedAssets: BacktestAsset[] = updatedConfig.assets.map((asset: { ticker: string; targetAllocation: number | string }) => ({
         ticker: asset.ticker,
         companyName: company.ticker === asset.ticker ? company.name : asset.ticker,
-        allocation: parseFloat(asset.targetAllocation.toString()),
-        averageDividendYield: asset.averageDividendYield ? parseFloat(asset.averageDividendYield.toString()) : undefined
+        allocation: parseFloat(asset.targetAllocation.toString())
       }));
 
       setConfig(prev => ({
@@ -228,12 +214,6 @@ export function BacktestConfigForm({
         id: updatedConfig.id,
         assets: updatedAssets
       }));
-
-      const newDYInputs: Record<string, string> = {};
-      updatedAssets.forEach(asset => {
-        newDYInputs[asset.ticker] = dyToInput(asset.averageDividendYield);
-      });
-      setDividendYieldInputs(newDYInputs);
     } catch (error) {
       console.error('Erro ao adicionar ativo:', error);
       addAssetLocally(company);
@@ -258,23 +238,16 @@ export function BacktestConfigForm({
 
         const { config: updatedConfig } = await response.json();
 
-        const updatedAssets: BacktestAsset[] = updatedConfig.assets.map((asset: { ticker: string; targetAllocation: number | string; averageDividendYield?: number | string | null }) => ({
+        const updatedAssets: BacktestAsset[] = updatedConfig.assets.map((asset: { ticker: string; targetAllocation: number | string }) => ({
           ticker: asset.ticker,
           companyName: config.assets.find(a => a.ticker === asset.ticker)?.companyName ?? asset.ticker,
-          allocation: parseFloat(asset.targetAllocation.toString()),
-          averageDividendYield: asset.averageDividendYield ? parseFloat(asset.averageDividendYield.toString()) : undefined
+          allocation: parseFloat(asset.targetAllocation.toString())
         }));
 
         setConfig(prev => ({ ...prev, assets: updatedAssets }));
       } else {
         setConfig(prev => ({ ...prev, assets: withEqualAllocation(prev.assets.filter(a => a.ticker !== ticker)) }));
       }
-
-      setDividendYieldInputs(prev => {
-        const newInputs = { ...prev };
-        delete newInputs[ticker];
-        return newInputs;
-      });
     } catch (error) {
       console.error('Erro ao remover ativo:', error);
     } finally {
@@ -284,22 +257,12 @@ export function BacktestConfigForm({
 
   const clearAssets = () => {
     setConfig(prev => ({ ...prev, assets: [] }));
-    setDividendYieldInputs({});
   };
 
   const updateAllocation = (ticker: string, allocation: number) => {
     setConfig(prev => ({
       ...prev,
       assets: prev.assets.map(asset => (asset.ticker === ticker ? { ...asset, allocation } : asset))
-    }));
-  };
-
-  const updateDividendYield = (ticker: string, dividendYieldPercent: number) => {
-    setConfig(prev => ({
-      ...prev,
-      assets: prev.assets.map(asset =>
-        asset.ticker === ticker ? { ...asset, averageDividendYield: dividendYieldPercent / 100 } : asset
-      )
     }));
   };
 
@@ -502,58 +465,20 @@ export function BacktestConfigForm({
                       </Button>
                     </div>
 
-                    <div className="mt-2 grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-end sm:gap-6">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Peso</span>
-                          <span className="font-medium tabular-nums text-foreground">{formatPct(asset.allocation)}</span>
-                        </div>
-                        <Slider
-                          value={[asset.allocation * 100]}
-                          onValueChange={(value) => updateAllocation(asset.ticker, value[0] / 100)}
-                          max={100}
-                          min={0}
-                          step={0.1}
-                          aria-label={`Peso de ${asset.ticker}`}
-                          className="py-2"
-                        />
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Peso</span>
+                        <span className="font-medium tabular-nums text-foreground">{formatPct(asset.allocation)}</span>
                       </div>
-
-                      <div className="space-y-1">
-                        <Label htmlFor={`dy-${asset.ticker}`} className="text-xs font-normal text-muted-foreground">
-                          DY médio anual
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id={`dy-${asset.ticker}`}
-                            inputMode="decimal"
-                            enterKeyHint="done"
-                            autoComplete="off"
-                            value={dividendYieldInputs[asset.ticker] || ''}
-                            onChange={(e) => {
-                              const rawValue = e.target.value.replace(/[^\d,.]/g, '');
-                              setDividendYieldInputs(prev => ({ ...prev, [asset.ticker]: rawValue }));
-                              const numericValue = parseFloat(rawValue.replace(',', '.')) || 0;
-                              if (numericValue >= 0 && numericValue <= 50) {
-                                updateDividendYield(asset.ticker, numericValue);
-                              }
-                            }}
-                            onBlur={() => {
-                              const numericValue = parseFloat((dividendYieldInputs[asset.ticker] || '').replace(',', '.')) || 0;
-                              setDividendYieldInputs(prev => ({
-                                ...prev,
-                                [asset.ticker]: numericValue > 0 ? formatNumber(numericValue, { digits: 2 }) : ''
-                              }));
-                            }}
-                            onKeyDown={blurOnEnter}
-                            placeholder="0,00"
-                            className="pr-8 text-right tabular-nums"
-                          />
-                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
-                            %
-                          </span>
-                        </div>
-                      </div>
+                      <Slider
+                        value={[asset.allocation * 100]}
+                        onValueChange={(value) => updateAllocation(asset.ticker, value[0] / 100)}
+                        max={100}
+                        min={0}
+                        step={0.1}
+                        aria-label={`Peso de ${asset.ticker}`}
+                        className="py-2"
+                      />
                     </div>
                   </li>
                 ))}
@@ -564,7 +489,7 @@ export function BacktestConfigForm({
                   Proventos simulados
                   <InfoHint
                     label="Como os proventos são simulados"
-                    content="O DY médio anual de cada ativo é pago em três parcelas (março, agosto e outubro) e reinvestido. Deixe o campo vazio para não simular proventos."
+                    content="A simulação usa os proventos efetivamente pagos por cada ativo no período (dividendos e JCP líquido de IR), creditados pela data-com e reinvestidos no mês seguinte."
                   />
                 </div>
                 <div className="flex items-center gap-2 text-sm">

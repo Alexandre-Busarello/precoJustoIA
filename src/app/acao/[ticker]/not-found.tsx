@@ -1,5 +1,11 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+
+// Só o noindex: sobrescreve o `index, follow` herdado do layout raiz (sem robots duplicado e contraditório no 404)
+export const metadata: Metadata = {
+  robots: { index: false },
+}
 
 export default function NotFound() {
   return (

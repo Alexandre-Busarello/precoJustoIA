@@ -126,8 +126,7 @@ function configFromPreview(preview: any, name = preview.name): BacktestConfig {
     assets: preview.assets.map((asset: any) => ({
       ticker: asset.ticker,
       companyName: asset.ticker,
-      allocation: asset.targetAllocation,
-      averageDividendYield: asset.averageDividendYield
+      allocation: Number(asset.targetAllocation)
     })),
     startDate: dateFromApi(preview.startDate),
     endDate: dateFromApi(preview.endDate),
@@ -140,7 +139,7 @@ function configFromPreview(preview: any, name = preview.name): BacktestConfig {
 const SIDE_NOTES = [
   'Rebalanceamento automático na frequência escolhida.',
   'Aportes mensais regulares ou apenas o capital inicial.',
-  'Proventos simulados pelo DY médio informado, pagos em março, agosto e outubro e reinvestidos. Com o campo vazio, a simulação considera só a variação de preço.',
+  'Proventos reais de cada ativo no período (dividendos e JCP líquido de IR), creditados pela data-com e reinvestidos no mês seguinte.',
   'Métricas: retorno total e anualizado, volatilidade, Sharpe, drawdown máximo e consistência mensal, com comparação com CDI e Ibovespa.',
 ];
 
@@ -154,7 +153,7 @@ function toSaveParams(config: BacktestConfig) {
   return {
     name: config.name,
     description: config.description,
-    assets: config.assets,
+    assets: config.assets.map(({ ticker, allocation }) => ({ ticker, allocation })),
     startDate: config.startDate.toISOString(),
     endDate: config.endDate.toISOString(),
     initialCapital: config.initialCapital,
@@ -352,7 +351,7 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
     setIsRunning(true);
     try {
       const params = {
-        assets: config.assets,
+        assets: config.assets.map(({ ticker, allocation }) => ({ ticker, allocation })),
         startDate: config.startDate.toISOString(),
         endDate: config.endDate.toISOString(),
         initialCapital: config.initialCapital,
@@ -614,8 +613,8 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
                 ))}
               </ul>
               <p className="border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
-                Resultados passados não garantem resultados futuros. Custos, spread e impostos não são considerados. Não é
-                recomendação de investimento.
+                Resultados passados não garantem resultados futuros. Inclui custo estimado de 0,03% por operação; spread e IR
+                sobre ganho de capital não são considerados. Não é recomendação de investimento.
               </p>
             </aside>
           </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, Suspense, useEffect } from "react"
-import { signIn } from "next-auth/react"
+import { signIn, useSession } from "next-auth/react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
@@ -11,14 +11,31 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthFallback, AuthShell, GoogleButton, OrDivider, PasswordInput } from "./auth-ui"
 
+/**
+ * Destino depois do login, sempre neste site: caminhos internos passam; URLs absolutas (o NextAuth manda a URL
+ * completa) viram só o caminho, o que impede redirecionar para outro domínio.
+ */
+function safeCallbackUrl(value: string | null): string {
+  if (!value) return "/dashboard"
+  if (value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\")) return value
+  try {
+    const url = new URL(value)
+    if (url.protocol === "http:" || url.protocol === "https:") return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    // valor inválido: usa o padrão
+  }
+  return "/dashboard"
+}
+
 function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { status } = useSession()
 
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard"
+  const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"))
   const oauthError = searchParams.get("error")
   const registerHref = `/register${callbackUrl !== "/dashboard" ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`
 
@@ -27,6 +44,11 @@ function LoginForm() {
       toast.error("Esta conta Google já está vinculada a outra conta. Entre com e-mail e senha primeiro para vincular o Google.")
     }
   }, [oauthError])
+
+  // Já está logado: segue para o destino pedido (ou o dashboard) em vez de mostrar o formulário
+  useEffect(() => {
+    if (status === "authenticated") router.replace(callbackUrl)
+  }, [status, callbackUrl, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,6 +77,8 @@ function LoginForm() {
     setIsLoading(true)
     await signIn("google", { callbackUrl })
   }
+
+  if (status === "authenticated") return <AuthFallback />
 
   return (
     <AuthShell

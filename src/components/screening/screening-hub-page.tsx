@@ -39,6 +39,7 @@ import {
   sortResults,
   stockParamsFromQuery,
   stockParamsToQuery,
+  stripPremiumStockParams,
   type FiiScreeningFormParams,
   type MobileSortKey,
   type ScreeningResponse,
@@ -165,6 +166,20 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
   const [fiiParams, setFiiParams] = useState<FiiScreeningFormParams>(() =>
     isFiisHub ? fiiParamsFromQuery(new URLSearchParams(searchParams.toString())) : DEFAULT_FII_PARAMS
   )
+  // Link compartilhado com filtros Premium aberto sem Premium: o backend os ignora, então saem do painel
+  // assim que o plano é conhecido (antes da primeira busca) e um aviso explica a remoção.
+  const [planChecked, setPlanChecked] = useState(false)
+  const [droppedPremiumFilters, setDroppedPremiumFilters] = useState(false)
+  if (!planChecked && status !== "loading") {
+    setPlanChecked(true)
+    if (!isFiisHub && !hasFullAccess) {
+      const freeParams = stripPremiumStockParams(params)
+      if (stockParamsToQuery(freeParams).toString() !== stockParamsToQuery(params).toString()) {
+        setParams(freeParams)
+        setDroppedPremiumFilters(true)
+      }
+    }
+  }
   const [prevUrlAssetType, setPrevUrlAssetType] = useState(urlAssetType)
   if (urlAssetType !== prevUrlAssetType) {
     setPrevUrlAssetType(urlAssetType)
@@ -456,6 +471,11 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
                   </span>
                 )}
               </div>
+              {droppedPremiumFilters && (
+                <p role="status" className="w-full text-xs text-muted-foreground">
+                  Filtros Premium do link não aplicados: no plano gratuito valem valuation, upside Graham, porte e liquidez.
+                </p>
+              )}
               {insufficientData > 0 && (
                 <p className="flex w-full items-center gap-1 text-xs tabular-nums text-muted-foreground">
                   {insufficientData.toLocaleString("pt-BR")} sem dados suficientes

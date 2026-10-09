@@ -345,6 +345,26 @@ export function defaultStockParams(assetTypeFilter: StockAssetType): ExtendedScr
   return { companySize: "all", useTechnicalAnalysis: true, assetTypeFilter }
 }
 
+/** Faixas que o plano gratuito aplica (espelha `/api/rank-builder`, que descarta as demais fora do Premium). */
+const FREE_STOCK_RANGE_KEYS = ["plFilter", "pvpFilter", "evEbitdaFilter", "psrFilter", "grahamUpsideFilter"] as const
+
+/**
+ * Remove os filtros Premium (ex.: vindos de um link compartilhado) para quem não tem Premium,
+ * para o painel não mostrar como ativo um filtro que o backend ignora.
+ */
+export function stripPremiumStockParams(params: ExtendedScreeningParams): ExtendedScreeningParams {
+  const next: ExtendedScreeningParams = {
+    companySize: params.companySize ?? "all",
+    useTechnicalAnalysis: params.useTechnicalAnalysis,
+    assetTypeFilter: params.assetTypeFilter,
+  }
+  if (params.minLiquidity !== undefined) next.minLiquidity = params.minLiquidity
+  for (const key of FREE_STOCK_RANGE_KEYS) {
+    if (params[key] !== undefined) next[key] = params[key]
+  }
+  return next
+}
+
 export const DEFAULT_FII_PARAMS: FiiScreeningFormParams = { tipoFii: "both" }
 
 // ─────────────────────────────────────────────────────────────────────────────

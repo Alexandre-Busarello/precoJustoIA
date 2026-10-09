@@ -9,6 +9,8 @@ import {
   parseDecimal,
   resultUpside,
   sortResults,
+  stockParamsToQuery,
+  stripPremiumStockParams,
   STOCK_METRIC_ORDER,
   translateMetricName,
   visibleMetricKeys,
@@ -133,4 +135,32 @@ test("parseDecimal trata pontos agrupados de três em três como milhar (placeho
   // Ponto único fora do padrão de milhar continua decimal.
   assert.equal(parseDecimal("1.00"), 1)
   assert.equal(parseDecimal("2.25"), 2.25)
+})
+
+test("stripPremiumStockParams: mantém só os filtros do plano gratuito", () => {
+  const stripped = stripPremiumStockParams({
+    companySize: "small_caps",
+    useTechnicalAnalysis: true,
+    assetTypeFilter: "b3",
+    minLiquidity: 1_000_000,
+    plFilter: { enabled: true, max: 10 },
+    grahamUpsideFilter: { enabled: true, min: 20 },
+    roeFilter: { enabled: true, min: 0.15 },
+    pegFilter: { enabled: true, max: 1 },
+    bazinTargetYield: 0.08,
+    dipWithIntactFundamentals: true,
+    selectedSectors: ["Energia"],
+  })
+  assert.deepEqual(stripped, {
+    companySize: "small_caps",
+    useTechnicalAnalysis: true,
+    assetTypeFilter: "b3",
+    minLiquidity: 1_000_000,
+    plFilter: { enabled: true, max: 10 },
+    grahamUpsideFilter: { enabled: true, min: 20 },
+  })
+  assert.equal(countActiveStockFilters(stripped), 4)
+  // Sem filtro Premium, a query não muda.
+  const free = { companySize: "all" as const, useTechnicalAnalysis: true, assetTypeFilter: "b3" as const, pvpFilter: { enabled: true, max: 1.5 } }
+  assert.equal(stockParamsToQuery(stripPremiumStockParams(free)).toString(), stockParamsToQuery(free).toString())
 })

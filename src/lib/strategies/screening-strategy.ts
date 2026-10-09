@@ -816,7 +816,7 @@ Configure ao menos um filtro nas categorias disponíveis para fazer o screening.
       signalFilters.push(`• **PEG (Peter Lynch)**: ${rangeText(params.pegFilter, (v) => formatNumber(v, { digits: 2 }))}; fora do modelo (financeiras, cíclicas, prejuízo ou crescimento ≤ 0) não entra`);
     }
     if (params.dipWithIntactFundamentals) {
-      signalFilters.push('• **Queda com fundamentos intactos**: preço abaixo da MM200 ou ≥ 20% abaixo da máxima de 52 semanas, com lucro, ROE, margem e endividamento preservados nos últimos 12 meses');
+      signalFilters.push('• **Queda com fundamentos intactos**: preço abaixo da MM200 ou ≥ 20% abaixo da máxima de 52 semanas, sem piora relevante de lucro, ROE, margem e endividamento nos últimos 12 meses');
     }
     if (signalFilters.length > 0) {
       sections.push({ title: '**Modelos e sinais**', filters: signalFilters });

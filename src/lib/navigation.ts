@@ -58,6 +58,7 @@ const MARKETING_TOOLS: NavSection = {
     { label: 'Backtest', href: '/backtest', description: 'Simule carteiras no passado' },
     { label: 'Análise setorial', href: '/analise-setorial', description: 'Múltiplos por setor' },
     { label: 'P/L da bolsa', href: '/pl-bolsa', description: 'Histórico do P/L do Ibovespa' },
+    { label: 'Projeções do Ibovespa', href: '/projecoes-ibov', description: 'Faixas estatísticas do índice' },
     ...CALCULATORS,
   ],
 }
@@ -77,7 +78,7 @@ const APP_TOOLS: NavSection = {
     { label: 'Comparador', href: '/comparador', description: 'Indicadores de ações lado a lado' },
     { label: 'Análise setorial', href: '/analise-setorial', description: 'Múltiplos por setor' },
     { label: 'P/L da bolsa', href: '/pl-bolsa', description: 'Histórico do P/L do Ibovespa' },
-    { label: 'Projeções do Ibovespa', href: '/projecoes-ibov', description: 'Faixas estimadas para o índice' },
+    { label: 'Projeções do Ibovespa', href: '/projecoes-ibov', description: 'Faixas estatísticas do índice' },
     ...CALCULATORS,
   ],
 }

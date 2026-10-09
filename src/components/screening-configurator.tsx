@@ -157,7 +157,7 @@ const PEG_FILTER: RangeFilterDefinition = {
 const DEFAULT_BAZIN_TARGET_YIELD = 0.06
 
 const DIP_HINT =
-  "Preço abaixo da média móvel de 200 pregões ou pelo menos 20% abaixo da máxima de 52 semanas, com lucro, ROE, margem e endividamento preservados no último período de 12 meses. Ações sem histórico suficiente ficam de fora."
+  "Preço abaixo da média móvel de 200 pregões ou pelo menos 20% abaixo da máxima de 52 semanas, sem piora relevante em 12 meses: lucro até 15% menor, ROE e margem líquida até 3 p.p. menores e dívida líquida/EBITDA até 1x maior. Ações sem histórico suficiente ficam de fora."
 
 interface ScreeningConfiguratorProps {
   params: ExtendedScreeningParams

@@ -25,7 +25,7 @@ const FORBIDDEN = [
 
 export function buildCommentaryPrompt(report: Pick<IbovProjectionReport, 'lastClose' | 'lastCloseDate' | 'horizons' | 'context'>): string {
   const lines: string[] = []
-  lines.push(`Último fechamento do Ibovespa: ${formatNumber(report.lastClose, { digits: 0 })} pontos em ${formatDate(report.lastCloseDate)}.`)
+  lines.push(`Último fechamento do Ibovespa: ${formatNumber(report.lastClose, { digits: 0 })} pontos em ${formatDate(`${report.lastCloseDate}T12:00:00Z`)}.`)
   for (const h of report.horizons) {
     if (h.status !== 'ok' || !h.levels || h.positiveShare === null) continue
     const vol = h.volatility?.ratio ? `; volatilidade recente ${formatNumber(h.volatility.ratio, { digits: 2 })}x a mediana de 10 anos` : ''

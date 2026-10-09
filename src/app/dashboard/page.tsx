@@ -35,14 +35,15 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <div className="mx-auto w-full max-w-6xl px-4 pt-6">
-        <DashboardAporteBlock
-          isPremium={!!user?.isPremium}
-          portfolios={portfolios.map((p) => ({ id: p.id, name: p.name }))}
-          radarCount={radarCount}
-        />
-      </div>
-      <DashboardClient />
+      <DashboardClient
+        aporte={
+          <DashboardAporteBlock
+            isPremium={!!user?.isPremium}
+            portfolios={portfolios.map((p) => ({ id: p.id, name: p.name }))}
+            radarCount={radarCount}
+          />
+        }
+      />
       <div className="mx-auto w-full max-w-6xl px-4 pt-2 pb-6">
         <DashboardAgendaWidget />
       </div>

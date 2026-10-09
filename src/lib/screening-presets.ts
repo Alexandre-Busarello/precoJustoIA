@@ -109,8 +109,8 @@ export const SCREENING_PRESETS: { [S in ScreeningPresetSlug]: ScreeningPreset<S>
     slug: 'queda-com-fundamentos-intactos',
     title: 'Queda com fundamentos intactos',
     shortTitle: 'Queda com fundamentos intactos',
-    hook: 'Ações da B3 com preço abaixo da média móvel de 200 pregões ou pelo menos 20% abaixo da máxima de 52 semanas, cujo lucro, ROE, margem e endividamento não pioraram no último período de 12 meses.',
-    description: 'Ações da B3 em queda de preço (abaixo da média de 200 pregões ou 20% abaixo da máxima de 52 semanas) com lucro, ROE, margem e endividamento preservados nos últimos 12 meses. Filtro quantitativo, não é recomendação.',
+    hook: 'Ações da B3 com preço abaixo da média móvel de 200 pregões ou pelo menos 20% abaixo da máxima de 52 semanas, sem piora relevante nos últimos 12 meses: lucro até 15% menor, ROE e margem líquida até 3 p.p. menores e dívida líquida/EBITDA até 1x maior.',
+    description: 'Ações da B3 em queda de preço (abaixo da média de 200 pregões ou 20% abaixo da máxima de 52 semanas) sem piora relevante de lucro, ROE, margem e endividamento nos últimos 12 meses. Filtro quantitativo, não é recomendação.',
     keywords: ['ações em queda', 'média móvel 200', 'máxima de 52 semanas', 'fundamentos', 'correção de preço', 'screening de ações'],
     params: {
       dipWithIntactFundamentals: true,

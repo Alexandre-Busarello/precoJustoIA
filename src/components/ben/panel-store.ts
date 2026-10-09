@@ -79,6 +79,11 @@ export function setBenConversation(conversationId: string | null, conversationKe
   setState({ conversationId, conversationKey })
 }
 
+/** A conversa foi excluída (ou não existe mais): se é a do painel, o painel passa para uma conversa nova. */
+export function forgetBenConversation(conversationId: string): void {
+  if (state.conversationId === conversationId) setState({ conversationId: null, conversationKey: null })
+}
+
 export function setBenSheetSnap(snap: BenSheetSnap): void {
   if (state.snap !== snap) setState({ snap })
 }

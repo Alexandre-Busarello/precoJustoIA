@@ -154,6 +154,8 @@ export interface BenRun {
   phase: BenRunPhase
   tools: BenToolCall[]
   error: string | null
+  /** A conversa não existe mais (excluída em outra aba ou tela): quem mostra começa uma nova. */
+  gone?: boolean
   /** Mensagens salvas quando a pergunta saiu; acima disso, a versão salva já chegou. */
   baseCount: number
   startedAt: number
@@ -210,6 +212,7 @@ export function dismissBenRun(conversationId: string): void {
 function humanError(status: number | null): string {
   if (status === null) return 'Sem conexão com o servidor. Verifique a internet e tente de novo.'
   if (status === 401) return 'Sua sessão expirou. Entre de novo para continuar a conversa.'
+  if (status === 404) return 'Esta conversa não existe mais. Comece uma nova.'
   if (status === 429) return 'Muitas mensagens em pouco tempo. Espere um pouco e tente de novo.'
   return 'O Ben não conseguiu responder agora. Tente de novo em instantes.'
 }
@@ -282,7 +285,9 @@ async function streamRun(queryClient: QueryClient, conversationId: string, reque
     })
     if (!response.ok) {
       failed = true
-      updateRun(conversationId, { phase: 'error', error: humanError(response.status) })
+      const gone = response.status === 404
+      if (gone) queryClient.removeQueries({ queryKey: messagesKey(conversationId) })
+      updateRun(conversationId, { phase: 'error', error: humanError(response.status), gone })
       return
     }
 

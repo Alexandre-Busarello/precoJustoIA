@@ -29,6 +29,7 @@ import type { BenPageContext } from '@/lib/ben-context/types'
 import type { BenSuggestion } from '@/lib/ben-context/questions'
 import { formatDate } from '@/lib/format'
 import { BenMarkdown } from './ben-markdown'
+import { forgetBenConversation } from './panel-store'
 import {
   contextHint,
   followUpSuggestions,
@@ -78,8 +79,39 @@ export function BenConversation({
   const { send, isCreating } = useBenSend()
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
+
+  // A resposta parou ou terminou com o foco no botão de parar: o foco vai para o campo, não para o <body>.
+  // A limpeza do ref roda antes de o botão sair do DOM, quando ele ainda tem o foco.
+  const stopRef = useCallback(
+    (node: HTMLButtonElement | null) => {
+      if (!node) return
+      return () => {
+        if (document.activeElement !== node) return
+        window.requestAnimationFrame(() => {
+          const composer = composerRef.current
+          const current = document.activeElement
+          if (composer && !composer.disabled && (!current || current === document.body)) composer.focus({ preventScroll: true })
+        })
+      }
+    },
+    [composerRef]
+  )
+
+  // A conversa não existe mais (excluída em outra tela): volta para uma conversa nova, com a pergunta no campo
+  useEffect(() => {
+    if (!conversationId || !run?.gone) return
+    dismissBenRun(conversationId)
+    forgetBenConversation(conversationId)
+    setNotice(run.error)
+    setDraft((current) => current || run.question)
+  }, [conversationId, run])
+
+  useEffect(() => {
+    if (conversationId) setNotice(null)
+  }, [conversationId])
 
   const saved = useMemo(() => messages ?? [], [messages])
   // A resposta em curso some quando a versão salva chega
@@ -148,11 +180,22 @@ export function BenConversation({
         }}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
-        <div className="w-full min-w-0 space-y-5 px-4 py-4">
+        <div className="w-full min-w-0 space-y-5 px-4 py-3 md:py-4">
+          {notice && !hasContent && (
+            <p role="status" className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground">
+              {notice}
+            </p>
+          )}
+          {/* Empilhado sempre: o painel do desktop tem 400 px e os breakpoints da janela não valem aqui dentro */}
           {mismatch && hasContent && (
-            <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm">
               <p className="text-muted-foreground">Esta conversa começou em outra tela.</p>
-              <Button variant="outline" size="sm" className="w-fit shrink-0" onClick={onNewConversationHere}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-10 max-w-full py-1.5 text-left whitespace-normal break-words md:h-auto md:min-h-8"
+                onClick={onNewConversationHere}
+              >
                 Nova conversa sobre {mismatch.pageLabel}
               </Button>
             </div>
@@ -232,12 +275,13 @@ export function BenConversation({
               rows={1}
               className="field-sizing-content max-h-40 min-h-11 flex-1 resize-none"
             />
+            {/* Chaves distintas: o botão de parar sai do DOM em vez de virar o de enviar desabilitado (que perderia o foco) */}
             {active ? (
-              <Button type="submit" variant="outline" size="icon" aria-label="Parar resposta" title="Parar resposta">
+              <Button key="stop" ref={stopRef} type="submit" variant="outline" size="icon" aria-label="Parar resposta" title="Parar resposta">
                 <Square className="size-4" strokeWidth={1.75} />
               </Button>
             ) : (
-              <Button type="submit" size="icon" disabled={!draft.trim() || busy} aria-label="Enviar mensagem" title="Enviar">
+              <Button key="send" type="submit" size="icon" disabled={!draft.trim() || busy} aria-label="Enviar mensagem" title="Enviar">
                 {sending || isCreating ? (
                   <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
                 ) : (
@@ -274,7 +318,7 @@ function runAnnouncement(run: BenRun | null, visible: boolean): string {
 
 function StartScreen({ context, disabled, onPick }: { context: BenPageContext; disabled: boolean; onPick: (item: BenSuggestion) => void }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 md:space-y-4">
       <div className="flex items-start gap-3">
         <BenAvatar />
         <p className="pt-1 text-sm leading-6 text-foreground">{contextHint(context)}</p>

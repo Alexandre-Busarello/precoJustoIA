@@ -150,6 +150,22 @@ export function BenPanel() {
     }
   }, [open, isDesktop])
 
+  // Desktop: com o foco perdido no <body> (o painel não é modal), o Esc ainda fecha o painel,
+  // desde que nenhum outro diálogo ou menu esteja aberto (esses tratam o próprio Esc)
+  useEffect(() => {
+    if (!open || !isDesktop) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      const active = document.activeElement
+      if (active && active !== document.body && active !== document.documentElement) return
+      if (document.querySelector('[role="dialog"]:not([data-ben-panel]), [role="alertdialog"], [role="menu"]')) return
+      event.preventDefault()
+      closeBenPanel()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open, isDesktop])
+
   useEffect(() => {
     setShareOpen(false)
   }, [conversationId])
@@ -323,7 +339,8 @@ export function BenPanel() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SNAP_HEIGHT: Record<BenSheetSnap, string> = {
-  half: '62dvh',
+  // Em telas baixas (320x640), a metade não mostraria as sugestões e o aviso: a folha sobe até 30rem
+  half: 'max(62dvh, min(30rem, calc(100dvh - 7rem)))',
   full: 'calc(100dvh - env(safe-area-inset-top) - 0.5rem)',
 }
 

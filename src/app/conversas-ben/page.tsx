@@ -37,10 +37,12 @@ import {
   useSearchBenConversations,
   useUpdateBenConversationTitle,
   useDeleteBenConversation,
+  dismissBenRun,
+  stopBenRun,
 } from '@/hooks/use-ben-chat'
 import { useToast } from '@/hooks/use-toast'
 import { contextKeyFromUrl, contextLabel } from '@/components/ben/ben-chat-utils'
-import { openBenPanel } from '@/components/ben/panel-store'
+import { forgetBenConversation, openBenPanel } from '@/components/ben/panel-store'
 import { contextFromPath } from '@/lib/ben-context/builders'
 import { formatDate, formatNumber } from '@/lib/format'
 
@@ -132,6 +134,10 @@ export default function ConversasBenPage() {
     if (!deletingId) return
     try {
       await deleteConversation.mutateAsync(deletingId)
+      // Se é a conversa aberta no painel, o painel passa para uma conversa nova (em vez de ficar preso nela)
+      stopBenRun(deletingId)
+      dismissBenRun(deletingId)
+      forgetBenConversation(deletingId)
       setDeletingId(null)
       toast({ title: 'Conversa excluída' })
     } catch {

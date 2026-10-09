@@ -75,3 +75,11 @@ Owner request (2026-09-29): "deixar CLARO para o usuário onde alocar capital no
 - Screenshots (mobile + desktop, light + dark, anon + premium): /onde-aportar empty, filled result, all-excluded state, locked state (free > 3 tickers); /dashboard top block; / hero; /carteira/<seeded id> suggestions page.
 - Playwright flow: fill amount + 3 tickers → calculate → table rows sum ≤ amount; switch preset → result changes deterministically; premium → register purchases → transactions appear as PENDING.
 - Sanity of numbers: pick 2 seeded tickers and verify by hand that margin of safety and qty × price match the table.
+
+## Carry-over from wave 2 and the owner adjustments (added before launching wave 3)
+- Fair-value models available for allocation: Graham, FCD, Gordon, Preço-teto (Bazin) and P/VP justo (bancos). **Peter Lynch has no fair value anymore** (relative PEG indicator; `fairValue: null`); use it only as an optional quality/price signal, never as a price target. Barsi was removed from the asset page (same ceiling as Bazin) — do not show it as a separate model.
+- Bazin excludes extraordinary dividends by default (`excludeExtraordinary ?? true`).
+- **Consistency:** the asset page and the ranking currently feed different CompanyData/params for the same ticker (e.g. Gordon VALE3 R$ 86,80 on the page × R$ 80,08 in the ranking). "Onde aportar" must use the SAME data path and params as the asset page (`/api/company-analysis/[ticker]` → `executeCompanyAnalysis` in src/lib/company-analysis-service.ts), so the numbers a user sees in "Onde aportar" match /acao/<ticker>.
+- BDRs: valuation models are "não aplicável" without FX/parity data — exclude BDRs from fair-value-based scoring with an explicit reason.
+- The site now says "mais de 600 ativos" (COVERED_ASSETS_LABEL) and "11 modelos" (VALUATION_MODELS_LABEL in src/lib/site-constants.ts); reuse those constants in any copy.
+- `yarn test` only runs src/**/__tests__/**; put your tests there. Run every test with `timeout 300`; unit tests must not import Prisma/DB modules (they hang on exit).

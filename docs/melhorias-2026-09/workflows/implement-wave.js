@@ -140,6 +140,9 @@ await Promise.all(Array.from({ length: Math.min(CONC, batches.length) }, async (
   }
 }))
 
+// skipIntegration: rodar um lote por vez e deixar a integração para o fim da onda.
+if (args.skipIntegration) return { wave: args.wave, results }
+
 phase('Integração')
 const integ = await agent(`${CTX}
 ROLE: Integration tester + fixer for wave ${args.wave}. Several batches were implemented in parallel in the same working tree and committed separately. Results:

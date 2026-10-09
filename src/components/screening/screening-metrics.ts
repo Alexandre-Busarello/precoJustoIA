@@ -9,7 +9,7 @@ import {
   formatNumber,
   formatPct,
 } from "@/lib/format"
-import { upside } from "@/lib/valuation-metrics"
+import { marginOfSafety } from "@/lib/valuation-metrics"
 
 /** Parâmetros do formulário de screening de FIIs (enviados ao modelo `fiiScreening`). */
 export interface FiiScreeningFormParams {
@@ -34,7 +34,7 @@ export interface ScreeningResult {
   currentPrice: number
   logoUrl?: string | null
   fairValue: number | null
-  /** Em pontos percentuais (24,6 = 24,6%), como vem da API. Prefira `resultUpside`. */
+  /** Em pontos percentuais (24,6 = 24,6%), como vem da API. Na UI vale a margem de segurança (`resultMargin`). */
   upside: number | null
   marginOfSafety: number | null
   rational: string
@@ -65,7 +65,7 @@ export interface ScreeningResponse {
  * - `multiple`: múltiplo (P/L 9,05 → "9,1x")
  * - `ratio`: número simples com 2 casas (liquidez corrente)
  * - `pct`: fração (0,177 → "17,7%")
- * - `pctPoints`: pontos percentuais (24,6 → "+24,6%"), usado nos upsides por modelo
+ * - `pctPoints`: pontos percentuais (24,6 → "+24,6%"), usado no potencial (upside) por modelo
  * - `pctDelta`: fração com sinal (−0,12 → "−12,0%"), usado em variações e descontos
  * - `ratio2`: número com 2 casas (PEG)
  * - `brl` / `brlCompact`: reais
@@ -79,6 +79,10 @@ interface MetricDefinition {
   /** Ajuda exibida no cabeçalho da coluna. */
   hint?: string
 }
+
+/** Potencial = preço justo ÷ preço − 1, por modelo. Definição em /metodologia#definicoes. */
+const POTENTIAL_HINT =
+  "Quanto o preço justo do modelo está acima (ou abaixo) do preço atual: preço justo ÷ preço − 1. É uma estimativa e não é recomendação."
 
 export const METRICS: Record<string, MetricDefinition> = {
   pl: { label: "P/L", kind: "multiple" },
@@ -118,9 +122,9 @@ export const METRICS: Record<string, MetricDefinition> = {
   dividaLiquidaEbitda: { label: "Dív. líq./EBITDA", kind: "multiple" },
   liquidezCorrente: { label: "Liquidez corrente", kind: "ratio" },
   marketCap: { label: "Valor de mercado", kind: "brlCompact" },
-  grahamUpside: { label: "Upside Graham", kind: "pctPoints" },
-  fcdUpside: { label: "Upside FCD", kind: "pctPoints" },
-  gordonUpside: { label: "Upside Gordon", kind: "pctPoints" },
+  grahamUpside: { label: "Potencial Graham", kind: "pctPoints", hint: POTENTIAL_HINT },
+  fcdUpside: { label: "Potencial FCD", kind: "pctPoints", hint: POTENTIAL_HINT },
+  gordonUpside: { label: "Potencial Gordon", kind: "pctPoints", hint: POTENTIAL_HINT },
   lpa: { label: "LPA", kind: "brl" },
   vpa: { label: "VPA", kind: "brl" },
   overallScore: { label: "Score geral", kind: "score" },
@@ -204,7 +208,7 @@ export function formatMetricValue(key: string, value: number | null | undefined)
 
 export type MetricTone = "positive" | "negative" | "neutral"
 
-/** Verde/vermelho só para upside (resultado de valuation), nunca para múltiplos ou preço. */
+/** Verde/vermelho só para o potencial (resultado de valuation), nunca para múltiplos ou preço. */
 export function metricTone(key: string, value: number | null | undefined): MetricTone {
   if (METRICS[key]?.kind !== "pctPoints" || typeof value !== "number" || !Number.isFinite(value)) return "neutral"
   if (value > 0) return "positive"
@@ -249,19 +253,22 @@ export function dipReason(keyMetrics: Record<string, number | null> | undefined)
   return parts.length > 0 ? parts.join(" · ") : null
 }
 
-/** Upside como fração (`preço justo / preço − 1`), recalculado a partir dos valores brutos. */
-export function resultUpside(result: Pick<ScreeningResult, "currentPrice" | "fairValue">): number | null {
-  return upside(result.currentPrice, result.fairValue)
+/**
+ * Margem de segurança como fração (`1 − preço / preço justo`), recalculada a partir dos valores brutos. É a mesma
+ * métrica do cabeçalho do ativo e do ranking, para o mesmo preço justo dar o mesmo número em todas as telas.
+ */
+export function resultMargin(result: Pick<ScreeningResult, "currentPrice" | "fairValue">): number | null {
+  return marginOfSafety(result.currentPrice, result.fairValue)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ordenação dos cards no mobile
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type MobileSortKey = "relevance" | "upside" | "pl" | "peg" | "dy" | "marketCap" | "pjFiiScore" | "pvp"
+export type MobileSortKey = "relevance" | "margin" | "pl" | "peg" | "dy" | "marketCap" | "pjFiiScore" | "pvp"
 
 function sortValue(result: ScreeningResult, key: MobileSortKey): number | null {
-  if (key === "upside") return resultUpside(result)
+  if (key === "margin") return resultMargin(result)
   const value = result.key_metrics?.[key]
   return typeof value === "number" && Number.isFinite(value) ? value : null
 }

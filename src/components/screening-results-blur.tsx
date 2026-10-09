@@ -9,11 +9,12 @@ import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { CompanyLogo } from "@/components/company-logo"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatBRL, formatDeltaPct } from "@/lib/format"
+import { formatBRL } from "@/lib/format"
+import { formatMarginOfSafety } from "@/lib/valuation-metrics"
 import { cn } from "@/lib/utils"
 import {
   formatMetricValue,
-  resultUpside,
+  resultMargin,
   translateMetricName,
   type ScreeningResult,
 } from "@/components/screening/screening-metrics"
@@ -51,7 +52,7 @@ function ResultRow({
   metricKey: string | null
   detail: string | null
 }) {
-  const value = resultUpside(result)
+  const value = resultMargin(result)
   const tone = value === null || value === 0 ? "text-foreground" : value > 0 ? "text-positive" : "text-negative"
   return (
     <Link
@@ -77,8 +78,8 @@ function ResultRow({
             <dd className="text-sm font-medium tabular-nums text-foreground">{formatBRL(result.currentPrice)}</dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-xs text-muted-foreground">Upside</dt>
-            <dd className={cn("text-sm font-medium tabular-nums", tone)}>{formatDeltaPct(value)}</dd>
+            <dt className="break-words text-xs leading-tight text-muted-foreground">Margem de segurança</dt>
+            <dd className={cn("text-sm font-medium tabular-nums", tone)}>{formatMarginOfSafety(value)}</dd>
           </div>
           {metricKey && (
             <div className="min-w-0">

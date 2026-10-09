@@ -28,9 +28,12 @@ export function PortfolioEmptyState({
           <Plus strokeWidth={1.75} aria-hidden="true" />
           Criar carteira
         </Button>
-        <Button onClick={onConvertBacktestClick} variant="outline">
-          Criar a partir de um backtest
-        </Button>
+        {/* Converter um backtest salvo é Premium; sem Premium o botão levaria a uma lista vazia. */}
+        {isPremium && (
+          <Button onClick={onConvertBacktestClick} variant="outline">
+            Criar a partir de um backtest
+          </Button>
+        )}
       </div>
       <PortfolioTutorialLink className="mt-4" />
       {!isPremium && (

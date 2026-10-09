@@ -10,8 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table'
 import { SectionHeader } from '@/components/ui/section-header'
 import { useRadar } from '@/hooks/use-radar'
-import { formatBRL, formatDeltaPct, formatNumber, formatPct } from '@/lib/format'
-import { marginOfSafety, valuationStatus, VALUATION_STATUS_LABEL, VALUATION_STATUS_TONE } from '@/lib/valuation-metrics'
+import { formatBRL, formatDeltaPct, formatNumber } from '@/lib/format'
+import { formatMarginOfSafety, marginOfSafety, valuationStatus, VALUATION_STATUS_LABEL, VALUATION_STATUS_TONE } from '@/lib/valuation-metrics'
 import { BlockEmpty, BlockError } from '@/app/dashboard/_components/block-state'
 import type { RadarAssetData } from './radar-grid'
 
@@ -97,11 +97,11 @@ export function DashboardRadarSection() {
       : []),
     {
       key: 'margin',
-      header: 'Margem',
-      hint: 'Margem de segurança: 1 − preço ÷ preço justo estimado (melhor entre Graham, FCD e Gordon).',
+      header: 'Margem de segurança',
+      hint: '1 − preço ÷ preço justo estimado (melhor entre Graham, FCD e Gordon). Abaixo de −100%, o preço passa do dobro do preço justo.',
       align: 'right',
       sortable: true,
-      cell: (row) => <span className={signTone(row.margin)}>{formatPct(row.margin)}</span>,
+      cell: (row) => <span className={signTone(row.margin)}>{formatMarginOfSafety(row.margin)}</span>,
     },
     {
       key: 'score',

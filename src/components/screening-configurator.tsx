@@ -54,11 +54,11 @@ const FILTER_GROUPS: FilterGroupDefinition[] = [
     filters: [
       {
         key: "grahamUpsideFilter",
-        label: "Upside Graham",
+        label: "Potencial Graham",
         factor: 1,
         suffix: "%",
         premium: false,
-        hint: "Diferença entre o preço justo pela fórmula de Graham (√(22,5 × LPA × VPA)) e o preço atual. É uma estimativa e não é recomendação.",
+        hint: "Quanto o preço justo pela fórmula de Graham (√(22,5 × LPA × VPA)) está acima do preço atual: preço justo ÷ preço − 1. É uma estimativa e não é recomendação.",
       },
       {
         key: "overallScoreFilter",

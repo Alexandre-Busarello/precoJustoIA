@@ -112,7 +112,7 @@ async function postSimulation(path: string, body: SimulateRequestInput) {
 export function OndeAportarClient({ isLoggedIn, isPremium, portfolios, radarCount, initial }: OndeAportarClientProps) {
   const { toast } = useToast()
   const [amount, setAmount] = useState<number | undefined>(initial.amount ?? 2000)
-  const [universe, setUniverse] = useState<UniverseKind>(initial.universe ?? (isPremium && portfolios.length > 0 ? 'portfolio' : 'tickers'))
+  const [universe, setUniverse] = useState<UniverseKind>(initial.universe ?? (portfolios.length > 0 ? 'portfolio' : 'tickers'))
   const [portfolioId, setPortfolioId] = useState(initial.portfolioId ?? portfolios[0]?.id ?? '')
   const [tickers, setTickers] = useState<string[]>(initial.tickers ?? [])
   const [chosenPreset, setPreset] = useState<AllocationPresetId | null>(initial.preset ?? (initial.universe === 'market' ? null : 'equilibrio'))
@@ -236,7 +236,7 @@ export function OndeAportarClient({ isLoggedIn, isPremium, portfolios, radarCoun
   const toggle = <T,>(list: T[], value: T, on: boolean) => (on ? [...new Set([...list, value])] : list.filter((v) => v !== value))
 
   const universeOptions = [
-    { value: 'portfolio' as const, label: 'Minha carteira', disabled: isLoggedIn && portfolios.length === 0, locked: !isPremium },
+    { value: 'portfolio' as const, label: 'Minha carteira', disabled: isLoggedIn && portfolios.length === 0 },
     { value: 'radar' as const, label: 'Meu radar', disabled: isLoggedIn && radarCount === 0, locked: !isPremium },
     { value: 'tickers' as const, label: 'Digitar tickers' },
     { value: 'market' as const, label: 'Todo o mercado', locked: !isPremium },

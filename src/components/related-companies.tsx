@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { formatBRL, formatDeltaPct, formatNumber } from '@/lib/format';
-import { marginOfSafety, valuationStatus } from '@/lib/valuation-metrics';
+import { formatBRL, formatNumber } from '@/lib/format';
+import { formatMarginOfSafety, marginOfSafety, valuationStatus } from '@/lib/valuation-metrics';
 import { CompanyLogo } from '@/components/company-logo';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { SectionHeader } from '@/components/ui/section-header';
@@ -107,14 +107,14 @@ export function RelatedCompanies({
     },
     {
       key: 'margin',
-      header: 'Margem (Graham)',
+      header: 'Margem de segurança (Graham)',
       align: 'right',
       hint: 'Margem de segurança pelo Número de Graham: 1 − preço ÷ preço justo.',
       cell: (company) => {
         if (!showMargin) return <Blurred>+00,0%</Blurred>;
         const margin = marginOfSafety(company.price, company.fairValue);
         const status = valuationStatus(margin);
-        return <span className={cn('font-medium', status && MARGIN_TONE[status])}>{formatDeltaPct(margin)}</span>;
+        return <span className={cn('font-medium', status && MARGIN_TONE[status])}>{formatMarginOfSafety(margin)}</span>;
       },
     },
     {

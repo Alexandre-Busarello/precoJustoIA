@@ -83,7 +83,10 @@ const APP_TOOLS: NavSection = {
   ],
 }
 
-/** No app, as ferramentas entram em "Descobrir" para o menu ficar em 5 itens de topo com "Onde aportar". */
+/**
+ * No app, as ferramentas entram em "Descobrir" para o menu ficar em 5 itens de topo com "Onde aportar".
+ * Regra: cada rota aparece uma vez por menu e com o mesmo rótulo nos dois menus (teste em navigation.test.ts).
+ */
 const APP_DISCOVER: NavSection = {
   label: 'Descobrir',
   items: [...(DISCOVER.items ?? []), ...(APP_TOOLS.items ?? [])],
@@ -100,15 +103,16 @@ export const navigation: { marketing: NavSection[]; app: NavSection[] } = {
       items: [
         { label: 'Minhas carteiras', href: '/carteira', description: 'Posições, aportes e rentabilidade' },
         { label: 'Agenda de proventos', href: '/agenda-proventos', description: 'Datas ex, pagamentos e renda mensal' },
+        // Backtest fica em "Ferramentas" no marketing e em "Carteiras" no app de propósito: o app não tem grupo
+        // "Ferramentas" (elas entram em "Descobrir" para caber em 5 itens de topo), e para quem já tem conta o backtest
+        // é a simulação de uma carteira, ao lado de "Minhas carteiras" (de onde sai o "Simular no backtest").
         { label: 'Backtest', href: '/backtest', description: 'Simule carteiras no passado' },
-        { label: 'Índices teóricos', href: '/indices', description: 'Carteiras teóricas com histórico' },
       ],
     },
     {
       label: 'Alertas',
       items: [
-        { label: 'Meu radar', href: '/radar', description: 'Ativos que você acompanha' },
-        { label: 'Agenda de proventos', href: '/agenda-proventos', description: 'Proventos do radar e da carteira' },
+        { label: 'Meu radar', href: '/radar', description: 'Radar de oportunidades dos ativos que você acompanha' },
         { label: 'Alertas de preço', href: '/dashboard/subscriptions', description: 'Aviso por e-mail por ticker' },
         { label: 'Monitoramentos', href: '/dashboard/monitoramentos-customizados', description: 'Alertas por indicador' },
         { label: 'Notificações', href: '/notificacoes', description: 'Avisos da plataforma' },
@@ -180,7 +184,7 @@ function sectionMatchLength(pathname: string | null | undefined, section: NavSec
 }
 
 /**
- * Item de topo ativo: o de link mais específico; em empate (mesmo link em dois grupos, ex. /indices), o primeiro.
+ * Item de topo ativo: o de link mais específico; em empate, o primeiro.
  * Garante um único item de topo destacado no header.
  */
 export function getActiveSection(pathname: string | null | undefined, sections: NavSection[]): NavSection | undefined {

@@ -32,7 +32,7 @@ const FREE_RESULT_LIMIT = 3
 const SORT_LABELS: Record<string, string> = {
   pl_asc: "Menor P/L primeiro",
   dy_desc: "Maior dividend yield primeiro",
-  upside_desc: "Maior upside primeiro",
+  upside_desc: "Maior potencial primeiro",
   magic_score_desc: "Maior score da Fórmula Mágica primeiro",
 }
 
@@ -76,7 +76,7 @@ function describeFilters(preset: ScreeningPreset): string[] {
         )
       : null,
     p.grahamUpsideFilter?.enabled
-      ? range("Upside até o preço justo de Graham", points(p.grahamUpsideFilter.min), points(p.grahamUpsideFilter.max))
+      ? range("Potencial até o preço justo de Graham", points(p.grahamUpsideFilter.min), points(p.grahamUpsideFilter.max))
       : null,
     p.overallScoreFilter?.enabled ? range("Score geral", score(p.overallScoreFilter.min), score(p.overallScoreFilter.max)) : null,
     p.assetTypeFilter === "b3" ? "Apenas ações da B3" : null,
@@ -193,7 +193,7 @@ export function ScreeningConversionPage({ preset }: ScreeningConversionPageProps
               highlightMetric={HIGHLIGHT_METRIC[preset.slug]}
             />
             <p className="text-xs text-muted-foreground">
-              Preço justo e upside são estimativas baseadas em modelos e dados públicos. Não é recomendação de investimento.
+              Preço justo, margem de segurança e potencial são estimativas baseadas em modelos e dados públicos. Não é recomendação de investimento.
             </p>
           </section>
         )}

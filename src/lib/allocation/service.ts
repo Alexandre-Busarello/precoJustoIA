@@ -178,10 +178,12 @@ export async function simulateAllocation(request: SimulateRequest, viewer: Alloc
       const loaded = await loadPortfolioUniverse(universe.portfolioId, viewer.userId)
       const options = buildOptions(request, premium, loaded.hasTargets)
       const result = runAllocation({ amount: request.amount, assets: loaded.contexts, options, meta: await loadAllocationMeta(loaded.dataDate) })
+      // A carteira é liberada no plano gratuito (decisão do dono, onda 7): é a premissa central do "Onde aportar".
+      // Sem Premium, só o modelo gratuito entra no cálculo (buildOptions) e "Registrar compras" continua Premium.
       return {
         tier,
-        result: premium ? result : maskResult(result, { hideTickers: false }),
-        locked: premium ? null : 'premium-universe',
+        result,
+        locked: null,
         universeLabel: loaded.name,
         unknownTickers: loaded.unknown,
         portfolioId: universe.portfolioId,

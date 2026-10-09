@@ -2,18 +2,18 @@ import { Metadata } from 'next'
 import { ComparadorHub, comparadorFaqs } from './comparador-hub'
 
 export const metadata: Metadata = {
-  title: 'Comparador de Ações B3 Gratuito | Compare Ações e ETFs da Bovespa',
+  title: 'Comparador de ações e ETFs da B3',
   description: 'Compare até 6 ações ou ETFs da B3 lado a lado. Análise fundamentalista com P/L, ROE, dividend yield e mais de 25 indicadores. Versão gratuita disponível; o Premium inclui CAGR, margem líquida, ROIC e médias históricas.',
   keywords: 'comparador ações B3, comparar ações bovespa grátis, comparador ETF, análise comparativa ações, P/L ROE dividend yield, comparação fundamentalista, ferramenta comparar investimentos, comparar empresas B3, análise lado a lado ações',
   openGraph: {
-    title: 'Comparador de Ações B3 | Análise Fundamentalista Gratuita',
+    title: 'Comparador de ações e ETFs da B3',
     description: 'Compare ações e ETFs da B3 lado a lado, com o melhor valor de cada indicador destacado.',
     type: 'website',
     url: '/comparador',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Comparador de Ações B3 | Preço Justo AI',
+    title: 'Comparador de ações e ETFs da B3',
     description: 'Compare até 6 ações ou ETFs da Bovespa com análise fundamentalista gratuita.',
   },
   alternates: {

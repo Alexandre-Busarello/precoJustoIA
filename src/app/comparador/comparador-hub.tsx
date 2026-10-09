@@ -207,7 +207,6 @@ export function ComparadorHub({ tipo }: { tipo: ComparadorTipo }) {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:py-8">
       <PageHeader
-        breadcrumb={[{ label: 'Início', href: '/' }, { label: 'Comparador' }]}
         title="Comparador de ações e ETFs"
         description="Compare até 6 ativos da B3 lado a lado, indicador por indicador."
       />

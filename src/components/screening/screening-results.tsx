@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table"
-import { formatBRL, formatDeltaPct } from "@/lib/format"
+import { formatBRL } from "@/lib/format"
+import { formatMarginOfSafety } from "@/lib/valuation-metrics"
 import { cn } from "@/lib/utils"
 import {
   dipReason,
@@ -16,7 +17,7 @@ import {
   formatMetricValue,
   metricHint,
   metricTone,
-  resultUpside,
+  resultMargin,
   STOCK_METRIC_ORDER,
   translateMetricName,
   visibleMetricKeys,
@@ -25,7 +26,7 @@ import {
 
 const TONE_CLASS = { positive: "text-positive", negative: "text-negative", neutral: "text-foreground" } as const
 
-function upsideTone(value: number | null) {
+function marginTone(value: number | null) {
   if (value === null || value === 0) return TONE_CLASS.neutral
   return value > 0 ? TONE_CLASS.positive : TONE_CLASS.negative
 }
@@ -42,8 +43,8 @@ function LowLiquidityBadge() {
   )
 }
 
-const UPSIDE_HINT =
-  "Diferença entre o preço justo estimado e o preço atual. É uma estimativa baseada em modelos e não é recomendação de investimento."
+const MARGIN_HINT =
+  "1 − preço ÷ preço justo, pelo modelo indicado abaixo do preço justo. Positiva quando o preço está abaixo do preço justo. É uma estimativa baseada em modelos e não é recomendação de investimento."
 
 interface ScreeningResultsProps {
   results: ScreeningResult[]
@@ -111,15 +112,15 @@ export function ScreeningResults({ results, isFii, compact, loading }: Screening
       ),
     },
     {
-      key: "upside",
-      header: "Upside",
+      key: "marginOfSafety",
+      header: "Margem de segurança",
       align: "right",
       sortable: true,
-      hint: UPSIDE_HINT,
-      sortValue: (row) => resultUpside(row),
+      hint: MARGIN_HINT,
+      sortValue: (row) => resultMargin(row),
       cell: (row) => {
-        const value = resultUpside(row)
-        return <span className={cn("font-medium", upsideTone(value))}>{formatDeltaPct(value)}</span>
+        const value = resultMargin(row)
+        return <span className={cn("font-medium", marginTone(value))}>{formatMarginOfSafety(value)}</span>
       },
     },
     ...(showDipReason
@@ -204,7 +205,7 @@ function CardStat({ label, value, detail, className }: { label: string; value: s
 
 function ResultCard({ result, isFii, metricKeys }: { result: ScreeningResult; isFii: boolean; metricKeys: string[] }) {
   const [open, setOpen] = useState(false)
-  const value = resultUpside(result)
+  const value = resultMargin(result)
   const reason = dipReason(result.key_metrics)
   const withValues = metricKeys.filter((key) => result.key_metrics?.[key] !== undefined)
   const primary = withValues.slice(0, 4)
@@ -234,8 +235,8 @@ function ResultCard({ result, isFii, metricKeys }: { result: ScreeningResult; is
           <p className="truncate text-sm text-muted-foreground">{result.name}</p>
         </Link>
         <div className="shrink-0 text-right">
-          <p className="text-xs text-muted-foreground">Upside</p>
-          <p className={cn("text-sm font-semibold tabular-nums", upsideTone(value))}>{formatDeltaPct(value)}</p>
+          <p className="text-xs text-muted-foreground">Margem de segurança</p>
+          <p className={cn("text-sm font-semibold tabular-nums", marginTone(value))}>{formatMarginOfSafety(value)}</p>
         </div>
       </div>
 

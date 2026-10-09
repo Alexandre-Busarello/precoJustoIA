@@ -463,12 +463,12 @@ export default function PerfilPage() {
         )}
         <LinkRow
           href="/dashboard/subscriptions"
-          title="Minhas inscrições"
+          title="Alertas de preço"
           description="Alertas simples por ticker: um e-mail quando o ativo mudar de forma relevante."
         />
         <LinkRow
           href="/dashboard/monitoramentos-customizados"
-          title="Monitoramentos customizados"
+          title="Monitoramentos"
           description="Alertas avançados por preço ou indicador."
         />
       </AccountSection>

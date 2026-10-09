@@ -81,7 +81,6 @@ export default async function RadarDividendosPage() {
     <>
       <div className="mx-auto max-w-6xl space-y-6 px-4 pt-4 pb-12">
         <PageHeader
-          breadcrumb={[{ label: 'Início', href: '/' }, { label: 'Radar de dividendos' }]}
           title="Radar de dividendos"
           description="Proventos confirmados nos últimos meses e datas estimadas estatisticamente para os próximos, empresa por empresa."
         />

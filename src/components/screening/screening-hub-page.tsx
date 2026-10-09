@@ -132,7 +132,7 @@ function buildRequestBody(isFii: boolean, params: ExtendedScreeningParams, fiiPa
 
 const STOCK_SORT_OPTIONS: { value: MobileSortKey; label: string }[] = [
   { value: "relevance", label: "Relevância" },
-  { value: "upside", label: "Maior upside" },
+  { value: "margin", label: "Maior margem de segurança" },
   { value: "pl", label: "Menor P/L" },
   { value: "peg", label: "Menor PEG" },
   { value: "dy", label: "Maior DY 12m" },
@@ -144,7 +144,7 @@ const FII_SORT_OPTIONS: { value: MobileSortKey; label: string }[] = [
   { value: "pjFiiScore", label: "Maior score PJ-FII" },
   { value: "dy", label: "Maior DY 12m" },
   { value: "pvp", label: "Menor P/VP" },
-  { value: "upside", label: "Maior upside" },
+  { value: "margin", label: "Maior margem de segurança" },
 ]
 
 export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) {
@@ -375,7 +375,6 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
     <div className="bg-background">
       <div className="mx-auto max-w-7xl px-4 pt-6 pb-10 sm:px-6 lg:px-8">
         <PageHeader
-          breadcrumb={[{ label: "Ferramentas", href: "/ranking" }, { label: isFiisHub ? "Screening de FIIs" : "Screening de ações" }]}
           title={isFiisHub ? "Screening de FIIs" : "Screening de ações"}
           description={
             isFiisHub
@@ -488,7 +487,7 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
               </div>
               {droppedPremiumFilters && (
                 <p role="status" className="w-full text-xs text-muted-foreground">
-                  Filtros Premium do link não aplicados: no plano gratuito valem valuation, upside Graham, porte e liquidez.
+                  Filtros Premium do link não aplicados: no plano gratuito valem valuation, potencial Graham, porte e liquidez.
                 </p>
               )}
               {insufficientData > 0 && (
@@ -557,8 +556,8 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
             )}
 
             <p className="text-xs text-muted-foreground">
-              Filtros quantitativos sobre dados públicos. Não é recomendação de investimento. Preço justo, preço-teto e
-              upside são estimativas baseadas em modelos.
+              Filtros quantitativos sobre dados públicos. Não é recomendação de investimento. Preço justo, preço-teto,
+              margem de segurança e potencial são estimativas baseadas em modelos.
             </p>
           </section>
         </div>

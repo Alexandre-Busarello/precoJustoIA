@@ -100,7 +100,6 @@ export default async function PLBolsaPage() {
 
       <div className="container mx-auto max-w-6xl space-y-8 px-4 py-6 sm:py-8">
         <PageHeader
-          breadcrumb={[{ label: 'Início', href: '/' }, { label: 'P/L histórico da Bovespa' }]}
           title="P/L histórico da Bovespa"
           description="Evolução do P/L (preço/lucro) agregado da bolsa brasileira desde 2010, com filtros por período, setor e score."
         />

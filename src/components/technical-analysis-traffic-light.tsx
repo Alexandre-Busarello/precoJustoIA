@@ -29,7 +29,7 @@ const DOT: Record<Tone, string> = {
 
 /**
  * Posição do preço em relação à faixa estimada pela análise técnica (sem linguagem de compra/venda).
- * Dentro da faixa e abaixo do preço justo técnico = positivo; acima da faixa = negativo; demais = atenção.
+ * Dentro da faixa e abaixo da referência técnica = positivo; acima da faixa = negativo; demais = atenção.
  */
 export function technicalPosition(
   analysis: Pick<TechnicalAnalysisData, 'aiFairEntryPrice' | 'aiMinPrice' | 'aiMaxPrice'>,
@@ -44,9 +44,9 @@ export function technicalPosition(
     return { tone: price <= fair ? 'positive' : 'warning', label: 'Técnica: dentro da faixa estimada' }
   }
   const diff = price / fair - 1
-  if (diff <= 0) return { tone: 'positive', label: 'Técnica: abaixo do preço justo técnico' }
-  if (diff <= 0.1) return { tone: 'warning', label: 'Técnica: próximo do preço justo técnico' }
-  return { tone: 'negative', label: 'Técnica: acima do preço justo técnico' }
+  if (diff <= 0) return { tone: 'positive', label: 'Técnica: abaixo da referência' }
+  if (diff <= 0.1) return { tone: 'warning', label: 'Técnica: próximo da referência' }
+  return { tone: 'negative', label: 'Técnica: acima da referência' }
 }
 
 export default function TechnicalAnalysisTrafficLight({
@@ -112,7 +112,7 @@ export default function TechnicalAnalysisTrafficLight({
           </div>
         )}
         <div className="flex flex-wrap items-baseline gap-x-1.5">
-          <dt className="text-muted-foreground">Preço justo técnico</dt>
+          <dt className="text-muted-foreground">Referência técnica</dt>
           <dd className="font-medium tabular-nums text-foreground">{formatBRL(analysis.aiFairEntryPrice)}</dd>
         </div>
         {!compact && (

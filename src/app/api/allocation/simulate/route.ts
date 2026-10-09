@@ -9,8 +9,9 @@ export const maxDuration = 60
 
 /**
  * POST /api/allocation/simulate — distribuição simulada de um aporte (determinística, sem IA).
- * Visitantes e plano gratuito: até 3 tickers e o modelo gratuito (Graham); acima disso, ou com carteira, radar ou
- * "Todo o mercado", a resposta vem com `locked` e uma prévia sem ativos nem valores. Premium: tudo liberado.
+ * Visitantes: até 3 tickers e o modelo gratuito (Graham). Plano gratuito: o mesmo, mais a própria carteira. Acima do
+ * limite de tickers, ou com radar ou "Todo o mercado", a resposta vem com `locked` e uma prévia sem ativos nem valores.
+ * Premium: tudo liberado.
  */
 export async function POST(request: NextRequest) {
   return withRateLimit(request, ALLOCATION_RATE_LIMIT, async () => {

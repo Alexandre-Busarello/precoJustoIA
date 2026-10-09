@@ -361,7 +361,9 @@ export function QuickRanker({
       : "Calculando o ranking…"
     : outcome
       ? `${shownCount} ${resultNoun(headerModel, outcomeUniverse, shownCount)}${
-          totalCount > shownCount ? ` de ${totalCount} encontrados` : ""
+          totalCount > shownCount
+            ? ` de ${totalCount} ${resultNoun(headerModel, outcomeUniverse, totalCount).startsWith("aç") ? "encontradas" : "encontrados"}`
+            : ""
         }`
       : undefined
 

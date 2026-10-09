@@ -731,6 +731,103 @@
    ],
    "tasks": "See docs/melhorias-2026-09/batches/w6-ben-ui.md",
    "testPlan": "See docs/melhorias-2026-09/batches/w6-ben-ui.md"
+  },
+  {
+   "id": "w7-backtest-flow",
+   "wave": 7,
+   "title": "Quick backtest: one click from asset/ranking/comparador/carteira runs with defaults and lands on the result, with 'Ajustar configuração'; legacy selectors removed",
+   "ownedPaths": [
+    "src/lib/backtest/quick-backtest.ts",
+    "src/lib/__tests__/backtest/**",
+    "src/components/backtest/**",
+    "src/components/add-to-backtest-button.tsx",
+    "src/components/backtest-config-selector.tsx",
+    "src/components/batch-backtest-selector.tsx",
+    "src/components/backtest-page-client.tsx",
+    "src/components/backtest-results.tsx",
+    "src/components/strategic-analysis-client.tsx",
+    "src/components/quick-ranker.tsx",
+    "src/components/ranking-wizard/ranking-results-table.tsx",
+    "src/app/compara-acoes/[...tickers]/page.tsx",
+    "src/components/portfolio-backtest-action.tsx",
+    "src/components/portfolio-detail-page.tsx",
+    "src/app/api/backtest/quick/route.ts"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w7-backtest-flow.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w7-backtest-flow.md"
+  },
+  {
+   "id": "w7-ux-coherence",
+   "wave": 7,
+   "title": "Coherence: honest free-plan copy, one valuation vocabulary (margem de segurança / potencial), margin floor, menu without duplicates, breadcrumbs",
+   "ownedPaths": [
+    "src/components/landing-pricing-section.tsx",
+    "src/app/planos/plan-comparison.tsx",
+    "src/app/planos/page.tsx",
+    "src/components/portfolio-empty-state.tsx",
+    "src/components/portfolio-list-page.tsx",
+    "src/lib/valuation-metrics.ts",
+    "src/lib/__tests__/valuation-metrics*",
+    "src/components/screening/screening-results.tsx",
+    "src/components/screening/screening-metrics.ts",
+    "src/components/screening/screening-metrics.test.ts",
+    "src/components/screening-results-blur.tsx",
+    "src/components/screening-configurator.tsx",
+    "src/components/screening-conversion-page.tsx",
+    "src/components/screening/screening-hub-page.tsx",
+    "src/components/radar-grid.tsx",
+    "src/components/dashboard-radar-section.tsx",
+    "src/components/related-companies.tsx",
+    "src/components/technical-analysis-traffic-light.tsx",
+    "src/lib/navigation.ts",
+    "src/lib/__tests__/navigation*",
+    "src/app/perfil/page.tsx",
+    "src/app/analise-setorial/page.tsx",
+    "src/app/radar-dividendos/page.tsx",
+    "src/app/pl-bolsa/page.tsx",
+    "src/app/comparador/comparador-hub.tsx",
+    "src/app/comparador/page.tsx"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w7-ux-coherence.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w7-ux-coherence.md"
+  },
+  {
+   "id": "w7-backtest-showcase",
+   "wave": 7,
+   "title": "Backtest showcase: 3 rule-based, dated, cached example backtests (BOVA11, DIVO11, example portfolio) on /backtest landing, upgrade card and home; /metodologia#backtest; revalidation cron",
+   "ownedPaths": [
+    "src/lib/backtest-showcase/**",
+    "src/lib/__tests__/backtest-showcase/**",
+    "src/components/backtest-showcase/**",
+    "src/app/api/cron/backtest-showcase/route.ts",
+    "src/app/backtest/backtest-landing.tsx",
+    "src/app/backtest/backtest-upgrade-card.tsx",
+    "src/app/backtest/example-portfolio-card.tsx",
+    "src/app/page.tsx",
+    "src/app/metodologia/page.tsx"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w7-backtest-showcase.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w7-backtest-showcase.md"
+  },
+  {
+   "id": "w7-mobile-polish",
+   "wave": 7,
+   "title": "Mobile polish: Ben button never covers content, carteira table fits at 1440, one upsell per asset page, readable ranking history, ETF actions",
+   "ownedPaths": [
+    "src/components/ben-chat-fab.tsx",
+    "src/components/portfolio-holdings-table.tsx",
+    "src/app/etf/[ticker]/page.tsx",
+    "src/components/compact-score.tsx",
+    "src/components/asset/valuation-table.tsx",
+    "src/components/ai-analysis-dual.tsx",
+    "src/components/market-sentiment-section.tsx",
+    "src/components/technical-analysis-link.tsx",
+    "src/components/ranking-history-section.tsx",
+    "src/lib/ranking-history-label.ts",
+    "src/lib/__tests__/ranking-history-label.test.ts"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w7-mobile-polish.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w7-mobile-polish.md"
   }
  ],
  "deferred": [
@@ -753,6 +850,8 @@
   "Scheduling the /api/cron/macro-indicators job in vercel.json — owner deploy step (endpoint delivered in w1-finance-foundation).",
   "Weekly dividend summary e-mail and monthly \"sua carteira vs CDI\" e-mail — e-mail sending cannot be exercised in this environment; build after agenda/returns ship.",
   "Unifying acao and bdr page implementations into a shared AssetPageLayout (80% duplicated) — P2 refactor after the redesign stabilizes.",
-  "Production verifications for the owner (read-only): curl -I https://precojusto.ai/upgrade and /fundador before/after deploy; SELECT DISTINCT sector, industry to validate the sector dictionary."
+  "Production verifications for the owner (read-only): curl -I https://precojusto.ai/upgrade and /fundador before/after deploy; SELECT DISTINCT sector, industry to validate the sector dictionary.",
+  "Wave 7 audit (reports/auditoria-onda7.md) — owner decisions: free plan gets 1 quick backtest/month (C-01 option) and 'Minha carteira' as a free source in Onde aportar (C-15).",
+  "Wave 7 audit P2 backlog: regenerate home product captures for ranking (light + dark, current UI) (C-14); FII margin/preço-teto in the dashboard radar (C-16); sentence-case score labels 'Muito Bom' (C-17); content reflow when the Ben desktop panel opens below 1600 px (C-18); single suggestions notice on the carteira (C-19); route loading.tsx skeletons for heavy SSR pages (C-21); compact footer inside the logged-in app on mobile (C-22)."
  ]
 }

@@ -1,10 +1,11 @@
 import { AbstractStrategy, notApplicableAnalysis, toNumber } from './base-strategy';
 import { BazinParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 import {
+  dedupeDividends,
+  dedupedDividendEvents,
   fullYearTotals,
   netAmount,
   removeExtraordinary,
-  toDividendEvents,
   type DividendEvent,
 } from '@/lib/finance/dividends';
 import { isFinancial } from '@/lib/finance/sector-classification';
@@ -62,19 +63,22 @@ interface DividendRow {
   type?: string | null;
 }
 
-/** Proventos com datas como `Date` (o cache de queries serializa em JSON e devolve datas como string). */
+/**
+ * Proventos com datas como `Date` (o cache de queries serializa em JSON e devolve datas como string), sem as cópias do
+ * mesmo provento gravadas por fontes diferentes (`dedupeDividends`).
+ */
 export function toDividendHistory(rows: readonly DividendRow[]): NonNullable<CompanyData['dividendHistory']> {
-  return rows.map((row) => ({
+  return dedupeDividends(rows.map((row) => ({
     exDate: new Date(row.exDate),
     paymentDate: row.paymentDate ? new Date(row.paymentDate) : null,
     amount: row.amount,
     type: row.type ?? null,
-  }));
+  })));
 }
 
 /** Proventos por ação do `CompanyData` (valores brutos), já convertidos para number. */
 export function dividendEventsOf(companyData: CompanyData): DividendEvent[] {
-  return toDividendEvents(companyData.dividendHistory ?? []);
+  return dedupedDividendEvents(companyData.dividendHistory ?? []);
 }
 
 /** Resultado de ranking a partir de uma análise com preço justo (upside em p.p., margem = 1 − P/VJ em p.p.). */
@@ -216,6 +220,8 @@ export class BazinStrategy extends AbstractStrategy<BazinParams> {
         isEligible ? 'Atende a todos os critérios do método.' : `Não atende: ${failed.join('; ')}.`,
       ].filter(Boolean).join(' ');
     }
+    const bdrNote = this.bdrConversionNote(companyData);
+    if (bdrNote) reasoning = `${reasoning} ${bdrNote}`;
 
     return {
       isEligible,

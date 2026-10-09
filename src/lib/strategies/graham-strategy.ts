@@ -153,6 +153,8 @@ export class GrahamStrategy extends AbstractStrategy<GrahamParams> {
       if (fairValue !== null && !hasMinimumUpside) reasons.push(`potencial de ${formatPercent((upside ?? 0) / 100)}, abaixo de 10%`);
       reasoning = `${GRAHAM_LABEL}${fairValue !== null ? `: ${formatCurrency(fairValue)}` : ''}. Não atende ao modelo: ${reasons.join('; ')}. ${epsNote}`;
     }
+    const bdrNote = this.bdrConversionNote(companyData);
+    if (bdrNote) reasoning = `${reasoning} ${bdrNote}`;
 
     return {
       isEligible,

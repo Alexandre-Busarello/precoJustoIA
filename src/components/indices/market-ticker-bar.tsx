@@ -150,7 +150,7 @@ function IndexItem({ index }: { index: MarketIndex }) {
       </span>
     </>
   );
-  const itemClass = 'inline-flex min-h-10 items-center gap-2 whitespace-nowrap';
+  const itemClass = 'inline-flex min-h-10 items-center gap-2 whitespace-nowrap pointer-coarse:min-h-11';
 
   if (index.url && index.isCustom) {
     return (

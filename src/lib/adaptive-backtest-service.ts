@@ -1,7 +1,7 @@
 import { BacktestDataValidator, type BacktestDataValidation, type DataAvailability } from './backtest-data-validator';
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/strategies/base-strategy';
-import { netAmount, toDividendEvents } from '@/lib/finance/dividends';
+import { dedupedDividendEvents, netAmount } from '@/lib/finance/dividends';
 import {
   annualizedVolatility,
   cdiLevel,
@@ -597,7 +597,7 @@ export class AdaptiveBacktestService {
       );
       pricesData.set(ticker, series.prices);
 
-      const events = toDividendEvents(dividendRows.filter(row => row.company.ticker === ticker));
+      const events = dedupedDividendEvents(dividendRows.filter(row => row.company.ticker === ticker));
       dividendsData.set(
         ticker,
         events.map(event => ({ exDate: event.exDate, amountPerShare: netAmount(event) * series.factorAt(event.exDate) }))

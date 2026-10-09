@@ -121,8 +121,8 @@ function TabsTrigger({
       className={cn(
         "inline-flex shrink-0 snap-start items-center justify-center gap-1.5 whitespace-nowrap text-sm font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         variant === "underline"
-          ? "relative min-h-11 px-0.5 text-muted-foreground hover:text-foreground data-[state=active]:text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent data-[state=active]:after:bg-brand md:min-h-10"
-          : "flex-1 self-stretch rounded-md px-3 py-1 text-muted-foreground hover:text-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:ring-1 data-[state=active]:ring-border",
+          ? "relative min-h-11 px-0.5 text-muted-foreground hover:text-foreground data-[state=active]:text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent data-[state=active]:after:bg-brand md:pointer-fine:min-h-10"
+          : "flex-1 self-stretch rounded-md px-3 py-1 pointer-coarse:min-h-11 text-muted-foreground hover:text-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:ring-1 data-[state=active]:ring-border",
         className
       )}
       {...props}

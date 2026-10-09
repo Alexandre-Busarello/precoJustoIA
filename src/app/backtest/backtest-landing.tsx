@@ -77,7 +77,7 @@ export const BACKTEST_FAQS = [
   {
     question: 'De onde vêm os dados e quais são as limitações?',
     answer:
-      'Usamos cotações mensais históricas das ações da B3. Proventos podem ser simulados a partir do dividend yield médio informado para cada ativo. Custos de corretagem, spread e impostos não são considerados, e resultados passados não garantem resultados futuros.',
+      'Usamos cotações mensais históricas das ações da B3 e o histórico real de proventos de cada ativo: cada provento é creditado pela data-com (JCP líquido de IRRF) e, no mês seguinte, reinvestido junto do aporte ou mantido em caixa, conforme a sua escolha. Cada operação da carteira paga um custo de 0,03% do valor negociado (corretagem e emolumentos). Spread e imposto sobre ganho de capital não são considerados, e resultados passados não garantem resultados futuros.',
   },
 ]
 
@@ -157,8 +157,8 @@ export function BacktestLanding() {
             ))}
           </ol>
           <p className="mt-8 max-w-[68ch] text-xs leading-5 text-muted-foreground">
-            A simulação não considera custos de corretagem, spread nem impostos. Resultados passados não garantem resultados
-            futuros. O backtest é uma ferramenta de estudo e não é recomendação de investimento.
+            A simulação usa os proventos reais de cada ativo e desconta 0,03% de custo por operação; spread e imposto sobre
+            ganho de capital não são considerados. Resultados passados não garantem resultados futuros. O backtest é uma ferramenta de estudo e não é recomendação de investimento.
           </p>
         </div>
       </section>

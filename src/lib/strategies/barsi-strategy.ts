@@ -2,7 +2,7 @@ import { AbstractStrategy, notApplicableAnalysis, toNumber } from './base-strate
 import { dividendEventsOf, resolveTargetYield, upsidePoints } from './bazin-strategy';
 import { BarsiParams, CompanyData, StrategyAnalysis, RankBuilderResult } from './types';
 import { prisma } from '@/lib/prisma';
-import { fullYearTotals, removeExtraordinary, toDividendEvents } from '@/lib/finance/dividends';
+import { dedupedDividendEvents, fullYearTotals, removeExtraordinary } from '@/lib/finance/dividends';
 import { isFinancial, isUtility } from '@/lib/finance/sector-classification';
 import { formatBRL, formatMultiple, formatPct } from '@/lib/format';
 import { marginOfSafety } from '@/lib/valuation-metrics';
@@ -31,7 +31,7 @@ export class BarsiStrategy extends AbstractStrategy<BarsiParams> {
           select: { exDate: true, paymentDate: true, amount: true, type: true },
           orderBy: { exDate: 'desc' },
         });
-        events = toDividendEvents(rows);
+        events = dedupedDividendEvents(rows);
       }
       // Mesma base do preço-teto Bazin: proventos extraordinários não entram na média.
       const totals = fullYearTotals(removeExtraordinary(events), { years: BARSI_FULL_YEARS });

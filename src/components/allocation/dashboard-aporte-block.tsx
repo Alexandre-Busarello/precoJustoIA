@@ -57,6 +57,7 @@ export function DashboardAporteBlock({ isPremium, portfolios, radarCount }: Dash
           <p className="text-sm text-muted-foreground">Simule a distribuição do seu aporte segundo os seus critérios, com o motivo de cada ativo.</p>
         </div>
         <form
+          data-ben-fab-avoid
           className="grid gap-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,16rem)_auto] sm:items-end"
           onSubmit={(event) => {
             event.preventDefault()

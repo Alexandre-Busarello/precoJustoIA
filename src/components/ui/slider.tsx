@@ -67,7 +67,7 @@ function Slider({
           }
           aria-labelledby={ariaLabelledBy}
           aria-describedby={ariaDescribedBy}
-          className="relative pointer-coarse:after:absolute pointer-coarse:after:-inset-3.5 pointer-coarse:after:rounded-full border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+          className="relative pointer-coarse:after:absolute pointer-coarse:after:-inset-[15px] pointer-coarse:after:rounded-full border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
     </SliderPrimitive.Root>

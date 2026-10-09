@@ -150,7 +150,8 @@ export function AssetHeader({
         </div>
         <Stat
           label="Margem de segurança"
-          value={formatDeltaPct(marginOfSafety)}
+          // Abaixo de −100% o número vira ruído (ex.: −1.196%); mostra só o limite, como na tabela de modelos.
+          value={marginOfSafety !== null && marginOfSafety !== undefined && marginOfSafety < -1 ? '< −100%' : formatDeltaPct(marginOfSafety)}
           tone={marginTone}
           caption={statusCaption ?? undefined}
           locked={fairLocked}

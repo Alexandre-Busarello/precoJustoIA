@@ -14,6 +14,7 @@ import { getAverageDailyTradedValue } from '@/lib/finance/liquidity';
 import { LIQUIDITY_DEFAULTS, isIlliquid, toLiquidityAssetType } from '@/lib/finance/liquidity-rules';
 import { applyLiquidityRules } from '@/lib/ranking-models';
 import { formatBRLCompact } from '@/lib/format';
+import { BDRDataService } from '@/lib/bdr-data-service';
 
 /** Campos de cada ano de `FinancialData` levados para `historicalFinancials` (inclui o payout e o lucro, usados nas médias e em "lucros consistentes"). */
 const HISTORICAL_FINANCIAL_FIELDS = [
@@ -91,6 +92,28 @@ function technicalAnalysisFrom(prices: MonthlyPrice[], ticker: string): CompanyD
   }
 }
 
+type BdrConversionInputs = NonNullable<Awaited<ReturnType<typeof BDRDataService.getBdrConversionInputs>>>;
+
+/**
+ * Moeda, paridade e câmbio de cada BDR (`BDRDataService.getBdrConversionInputs`), para Graham, FCD, Gordon e Bazin
+ * converterem o preço justo para reais por recibo, como na página do ativo. BDRs sem paridade ou câmbio ficam de fora.
+ */
+async function loadBdrConversionInputs(tickers: readonly string[]): Promise<Map<string, BdrConversionInputs>> {
+  const result = new Map<string, BdrConversionInputs>();
+  if (tickers.length === 0) return result;
+  try {
+    // Uma busca do câmbio antes do lote: as chamadas por ticker leem o cache do dia.
+    if (!(await BDRDataService.getUsdBrlRate())) return result;
+    const entries = await Promise.all(
+      tickers.map(async (ticker) => [ticker, await BDRDataService.getBdrConversionInputs(ticker)] as const)
+    );
+    for (const [ticker, inputs] of entries) if (inputs) result.set(ticker, inputs);
+  } catch (error) {
+    console.warn('⚠️ [RANKING] Paridade e câmbio dos BDRs indisponíveis:', error);
+  }
+  return result;
+}
+
 /**
  * Ações e BDRs com dados para os rankings: até 8 anos de `FinancialData` (atual + 7), cotação, proventos dos últimos
  * 6 anos completos, preços mensais (análise técnica), demonstrações (Overall Score) e o volume financeiro médio diário.
@@ -146,6 +169,7 @@ export async function getCompaniesData(assetTypeFilter?: 'b3' | 'bdr' | 'both'):
   );
 
   const liquidity = await getAverageDailyTradedValue(companies.map((company) => company.id));
+  const bdrInputs = await loadBdrConversionInputs(companies.filter((company) => company.assetType === 'BDR').map((company) => company.ticker));
 
   return companies.map((company) => {
     // Último provento: o da empresa, ou o mais recente do histórico.
@@ -172,6 +196,7 @@ export async function getCompaniesData(assetTypeFilter?: 'b3' | 'bdr' | 'both'):
         ...(company.financialData[0] || {}),
         ...(ultimoDividendo !== undefined && ultimoDividendo !== null && { ultimoDividendo }),
         ...(dataUltimoDividendo !== undefined && dataUltimoDividendo !== null && { dataUltimoDividendo }),
+        ...bdrInputs.get(company.ticker),
       },
       historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : undefined,
       technicalAnalysis: technicalAnalysisFrom(company.historicalPrices, company.ticker),

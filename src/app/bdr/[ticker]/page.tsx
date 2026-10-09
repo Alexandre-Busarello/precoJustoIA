@@ -22,6 +22,7 @@ import { cache } from '@/lib/cache-service'
 import { getSectorCompetitors } from '@/lib/competitor-service'
 import { DividendRadarCompact } from '@/components/dividend-radar-compact'
 import { DividendService } from '@/lib/dividend-service'
+import { BDRDataService } from '@/lib/bdr-data-service'
 import { DividendRadarService } from '@/lib/dividend-radar-service'
 import { ensureTodayPrice } from '@/lib/quote-service'
 import { StrategyFactory } from '@/lib/strategies/strategy-factory'
@@ -145,7 +146,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const currentPrice = toNumber(company.dailyQuotes?.[0]?.price) ?? 0
     const anoAtual = new Date().getFullYear()
     
-    // Tentar calcular preço justo via Graham (leve, não bloqueia)
+    // Tentar calcular preço justo via Graham (leve, não bloqueia), convertido por paridade e câmbio
+    const bdrInputs = await BDRDataService.getBdrConversionInputs(ticker).catch(() => null)
     let fairPrice: number | null = null
     let upside: number | null = null
     try {
@@ -184,6 +186,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           capex: null,
           sharesOutstanding: null,
           marketCap: toNumber(latestFinancials?.marketCap) || null,
+          ...bdrInputs,
         },
         historicalFinancials: []
       }
@@ -490,6 +493,9 @@ export default async function BdrPage({ params }: PageProps) {
     updatedAt: youtubeAnalysis.updatedAt
   } : null
 
+  // Paridade e câmbio para o Graham do FAQ converter o preço justo para reais por recibo
+  const bdrInputs = session ? null : await BDRDataService.getBdrConversionInputs(ticker).catch(() => null)
+
   // Função para gerar FAQ Schema (apenas para usuários deslogados)
   const generateFAQSchema = () => {
     if (session) return null // Não gerar para usuários logados
@@ -531,6 +537,7 @@ export default async function BdrPage({ params }: PageProps) {
           capex: toNumber((latestFinancials as any)?.capex) || null,
           sharesOutstanding: toNumber(latestFinancials?.sharesOutstanding) || null,
           marketCap: toNumber(latestFinancials?.marketCap) || null,
+          ...bdrInputs,
         },
         historicalFinancials: []
       }

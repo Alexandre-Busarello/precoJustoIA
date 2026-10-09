@@ -474,7 +474,7 @@ export function QuickRanker({
         )}
 
         {showParams && model && (
-          <Collapsible open={paramsOpen} onOpenChange={setParamsOpen} className="rounded-lg border border-border bg-card">
+          <Collapsible open={paramsOpen} onOpenChange={setParamsOpen} data-ben-fab-avoid className="rounded-lg border border-border bg-card">
             <CollapsibleTrigger className="min-h-11 gap-3 rounded-lg px-4 py-2 text-left hover:no-underline focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none">
               <span className="flex min-w-0 items-center gap-2">
                 <SlidersHorizontal className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />

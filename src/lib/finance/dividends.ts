@@ -45,6 +45,14 @@ export function toDividendEvents(rows: readonly DividendHistoryRow[]): DividendE
   return events
 }
 
+/**
+ * `toDividendEvents` depois de `dedupeDividends`: leitura padrão do histórico cru de `DividendHistory`, que pode ter o
+ * mesmo provento gravado por mais de uma fonte (o gravador não apaga linhas). Passe as linhas de um único ativo.
+ */
+export function dedupedDividendEvents(rows: readonly DividendHistoryRow[]): DividendEvent[] {
+  return toDividendEvents(dedupeDividends(rows))
+}
+
 // ─── Duplicatas entre fontes ────────────────────────────────────────────────
 
 /** Distância máxima (dias) entre datas-com de duas linhas que descrevem o mesmo provento em fontes diferentes. */

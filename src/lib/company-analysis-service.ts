@@ -14,6 +14,7 @@ import { toHistoricalFinancial } from '@/lib/rank-builder-service';
 import { BANK_PVP_DEFAULTS } from '@/lib/strategies/bank-pvp-strategy';
 import type { CompanyData, HistoricalFinancialData } from '@/lib/strategies/types';
 import { getValuationModel } from '@/components/asset/valuation-models';
+import { isBDRTickerSymbol } from '@/lib/strategies/base-strategy';
 import { isFinancial } from '@/lib/finance/sector-classification';
 import { warmMacroAssumptions } from '@/lib/finance/macro';
 
@@ -144,6 +145,23 @@ function withRankingInputs(
     historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : companyData.historicalFinancials,
     ...(dividendHistory && { dividendHistory }),
   };
+}
+
+/**
+ * BDR: moeda dos demonstrativos, paridade e câmbio do dia em `financials` (`BDRDataService.getBdrConversionInputs`),
+ * para Graham, FCD, Gordon e Bazin converterem o preço justo para reais por recibo, como no ranking. Sem paridade ou
+ * câmbio, segue sem eles e os modelos explicam por que não se aplicam.
+ */
+async function withBdrConversionInputs(companyData: CompanyAnalysisData): Promise<CompanyAnalysisData> {
+  if (companyData.assetType !== 'BDR' && !isBDRTickerSymbol(companyData.ticker)) return companyData;
+  try {
+    const { BDRDataService } = await import('@/lib/bdr-data-service');
+    const inputs = await BDRDataService.getBdrConversionInputs(companyData.ticker);
+    return inputs ? { ...companyData, financials: { ...companyData.financials, ...inputs } } : companyData;
+  } catch (error) {
+    console.warn(`⚠️ Paridade e câmbio indisponíveis para ${companyData.ticker}:`, error);
+    return companyData;
+  }
 }
 
 /** Carrega do banco os insumos do ranking para uma empresa e os aplica à análise (ver `withRankingInputs`). */
@@ -450,6 +468,8 @@ export async function executeCompanyAnalysis(
       console.warn(`⚠️ Falha ao carregar histórico e proventos de ${companyData.ticker}, seguindo sem eles:`, error);
     }
   }
+
+  if (isPremium || isLoggedIn) analysisData = await withBdrConversionInputs(analysisData);
 
   // Modelos de preço justo com os mesmos padrões do ranking (registro em ranking-models.ts) no universo do ativo.
   const universe = universeForAssetType(analysisData.assetType);

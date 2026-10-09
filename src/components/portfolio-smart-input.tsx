@@ -33,6 +33,7 @@ export function PortfolioSmartInput({
         type="button"
         aria-expanded={!isCollapsed}
         aria-controls={contentId}
+        data-ben-fab-avoid
         onClick={() => setIsCollapsed((value) => !value)}
         className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-4 py-3 text-left hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none sm:px-5"
       >

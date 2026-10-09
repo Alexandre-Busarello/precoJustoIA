@@ -5,7 +5,7 @@ import { GrahamStrategy } from './graham-strategy';
 import { BazinStrategy, resolveTargetYield, BAZIN_DEFAULTS } from './bazin-strategy';
 import { LynchStrategy } from './lynch-strategy';
 import { applyLiquidityRules } from '@/lib/ranking-models';
-import { sumTTM, toDividendEvents } from '@/lib/finance/dividends';
+import { dedupedDividendEvents, sumTTM } from '@/lib/finance/dividends';
 import { dipWithIntactFundamentals } from '@/lib/finance/signals';
 import { isFinancial } from '@/lib/finance/sector-classification';
 import { fundamentalsStatus, type AnnualFundamentals } from '@/lib/allocation/fundamentals';
@@ -44,7 +44,7 @@ export const PREMIUM_SCREENING_METRICS = ['bazinCeiling', 'bazinDiscount', 'peg'
  */
 export function dividendYield12m(company: CompanyData, asOf: Date = new Date()): number | null {
   if (!company.dividendHistory || !(company.currentPrice > 0)) return null;
-  return sumTTM(toDividendEvents(company.dividendHistory), asOf) / company.currentPrice;
+  return sumTTM(dedupedDividendEvents(company.dividendHistory), asOf) / company.currentPrice;
 }
 
 export interface BazinScreening {

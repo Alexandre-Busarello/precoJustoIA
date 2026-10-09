@@ -1,4 +1,4 @@
-import { annualizeFromLast12, toDividendEvents } from '@/lib/finance/dividends';
+import { annualizeFromLast12, dedupedDividendEvents } from '@/lib/finance/dividends';
 import { getMacroAssumptionsSync, MACRO_FALLBACK, type MacroAssumptions } from '@/lib/finance/macro';
 import { ceilingPrice } from '@/lib/finance/valuation';
 import { formatNumber, formatPct } from '@/lib/format';
@@ -62,7 +62,7 @@ const MAX_HISTORY_STALENESS_DAYS = 400;
 
 function annualIncomeFromHistory(c: CompanyData, asOf: Date): number | null {
   if (!c.dividendHistory?.length) return null;
-  const events = toDividendEvents(c.dividendHistory);
+  const events = dedupedDividendEvents(c.dividendHistory);
   if (events.length === 0) return null;
   const latest = Math.max(...events.map((e) => e.exDate.getTime()));
   if (asOf.getTime() - latest > MAX_HISTORY_STALENESS_DAYS * 86_400_000) return null;

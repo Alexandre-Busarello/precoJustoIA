@@ -48,3 +48,8 @@ Read docs/melhorias-2026-09/backlog-rules.md first, plus the findings table in d
 - Unit: ranking history label builder (screening params, model presets, missing params) and duplicate collapsing.
 - Playwright rect check for the FAB on the six routes (mobile 390 + small 360, light + dark).
 - Screenshots: `--routes /dashboard,/acao/petr4,/bdr/aapl34,/etf/bova11,/ranking,/screening-acoes,/onde-aportar,/comparador,/carteira/<id> --auth all --viewports small,mobile,desktop --theme both`.
+
+## Added after w7-backtest-flow (f5e88b6)
+- src/components/asset/asset-header.tsx: add an optional `busy?: boolean` to AssetHeaderAction, and render `disabled={busy}` and `aria-busy={busy}` on ActionButton. Then pass `busy: quickBacktest.busy` from strategic-analysis-client.tsx. At 390 px the 3 actions (Acompanhar, Comparar, Backtest) overflow the row by 7 px: tighten the gap/padding. These two files are approved for this batch, for these changes only.
+- Backtest results: the landing autoscroll puts the tab row under the 64 px sticky header. Add scroll-mt to the results top. The chart Y-axis first digit is clipped ('!20.000'). The meta line says '61 meses' for a 5-year period. These are in src/components/backtest-results.tsx, approved for this batch.
+- For free users with 1 carteira already, hide "Criar carteira com estes ativos" on the quick result, or route it to the upgrade path (no destructive toast).

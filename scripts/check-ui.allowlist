@@ -6,7 +6,5 @@
 # Painel administrativo interno: fora do escopo do redesign e sempre no tema claro (FORCED_LIGHT_PREFIXES).
 src/app/admin/
 src/components/admin/
-
-# Landing pages de parceiros seguem a identidade visual do parceiro.
-src/app/parceiros/
-src/components/parceiros/
+src/components/admin-quiz-details-page-client.tsx
+src/components/admin-quizzes-page-client.tsx

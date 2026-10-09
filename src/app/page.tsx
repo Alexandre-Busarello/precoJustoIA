@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import CompanySearch from "@/components/company-search"
+import { Button } from "@/components/ui/button"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { CTASection } from "@/components/landing/cta-section"
 import { FAQSection } from "@/components/landing/faq-section"
@@ -149,6 +150,10 @@ const FAQS = [
 function HeroSearch() {
   return (
     <div className="max-w-lg space-y-3">
+      <Button size="lg" asChild className="w-full sm:w-auto">
+        <Link href="/onde-aportar">Calcular onde aportar</Link>
+      </Button>
+      <p className="pt-2 text-sm text-muted-foreground">Ou veja o preço justo de uma ação:</p>
       <CompanySearch
         placeholder="Digite um ticker, ex.: PETR4"
         className="max-w-lg [&_input]:h-12 [&_input]:text-base md:[&_input]:h-12 md:[&_input]:text-base"
@@ -226,8 +231,8 @@ export default async function Home() {
 
       <LandingHero
         id={HERO_ID}
-        headline={`O preço justo de cada ação da B3, calculado por ${VALUATION_MODELS_SHORT_LABEL}.`}
-        subheadline={`Preço, preço justo, margem de segurança e score de ${COVERED_ASSETS_LABEL}, com a metodologia aberta.`}
+        headline="Descubra onde aportar"
+        subheadline={`Calcule em segundos a distribuição do seu aporte entre os ativos que você escolher, com o preço justo de ${COVERED_ASSETS_LABEL} calculado por ${VALUATION_MODELS_SHORT_LABEL} e a metodologia aberta.`}
         actions={<HeroSearch />}
         showQuickAccess={false}
         media={

@@ -42,6 +42,9 @@ const DISCOVER: NavSection = {
   ],
 }
 
+/** Premissa central do produto: item de topo nos dois menus. */
+const ONDE_APORTAR: NavSection = { label: 'Onde aportar', href: '/onde-aportar' }
+
 const CALCULATORS: NavLink[] = [
   { label: 'Calculadora de dividend yield', href: '/calculadoras/dividend-yield', description: 'Preço-teto e rendimento' },
   { label: 'Calculadora de recuperação', href: '/calculadoras/recuperacao', description: 'Aporte para recuperar uma perda' },
@@ -79,11 +82,18 @@ const APP_TOOLS: NavSection = {
   ],
 }
 
+/** No app, as ferramentas entram em "Descobrir" para o menu ficar em 5 itens de topo com "Onde aportar". */
+const APP_DISCOVER: NavSection = {
+  label: 'Descobrir',
+  items: [...(DISCOVER.items ?? []), ...(APP_TOOLS.items ?? [])],
+}
+
 export const navigation: { marketing: NavSection[]; app: NavSection[] } = {
-  marketing: [DISCOVER, MARKETING_TOOLS, LEARN, { label: 'Planos', href: '/planos' }],
+  marketing: [ONDE_APORTAR, DISCOVER, MARKETING_TOOLS, LEARN, { label: 'Planos', href: '/planos' }],
   app: [
     { label: 'Início', href: '/dashboard', exact: true },
-    DISCOVER,
+    ONDE_APORTAR,
+    APP_DISCOVER,
     {
       label: 'Carteiras',
       items: [
@@ -103,7 +113,6 @@ export const navigation: { marketing: NavSection[]; app: NavSection[] } = {
         { label: 'Notificações', href: '/notificacoes', description: 'Avisos da plataforma' },
       ],
     },
-    APP_TOOLS,
   ],
 }
 
@@ -124,7 +133,14 @@ export interface FooterSection {
 }
 
 export const FOOTER_SECTIONS: FooterSection[] = [
-  { label: 'Descobrir', links: [...(DISCOVER.items ?? []), { label: 'Planos', href: '/planos' }] },
+  {
+    label: 'Descobrir',
+    links: [
+      { label: 'Onde aportar', href: '/onde-aportar' },
+      ...(DISCOVER.items ?? []),
+      { label: 'Planos', href: '/planos' },
+    ],
+  },
   { label: 'Ferramentas', links: MARKETING_TOOLS.items ?? [] },
   {
     label: 'Empresa',

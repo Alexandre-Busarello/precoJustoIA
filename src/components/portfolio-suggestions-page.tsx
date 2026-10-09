@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useState, useEffect, useRef, type MouseEvent, type ReactNode } from 'react';
+import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,10 +37,10 @@ interface Suggestion {
   reason: string;
   cashBalanceBefore: number;
   cashBalanceAfter: number;
-  // Campos opcionais para análise técnica
-  fairPrice?: number; // Preço justo técnico (aiFairEntryPrice)
-  isAttractivePrice?: boolean; // Se preço está abaixo/igual ao justo
-  priceVsFairPrice?: number; // Percentual de diferença (negativo = abaixo, positivo = acima)
+  /** Legado: preço justo técnico das sugestões antigas. */
+  fairPrice?: number;
+  /** Desconto mediano positivo vs. valor estimado (motor do "Onde aportar"). */
+  isAttractivePrice?: boolean;
   // For combined rebalancing
   sellTransaction?: Suggestion | null;
   sellTransactions?: Suggestion[]; // Support multiple sell transactions
@@ -207,6 +208,31 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
     },
   });
 
+  // Descarta uma compra registrada pelo "Onde aportar" (transação PENDENTE criada pelo usuário).
+  const discardMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const response = await fetch(`/api/portfolio/${portfolioId}/transactions/${transactionId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || 'Erro ao descartar transação');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Transação descartada' });
+      handleRefresh();
+      queryClient.invalidateQueries({ queryKey: ['portfolio-metrics', portfolioId] });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro', description: error.message || 'Erro ao descartar transação', variant: 'destructive' });
+    },
+  });
+
+  const handleDiscard = (e: MouseEvent, suggestion: Suggestion) => {
+    e.stopPropagation();
+    if (suggestion.transactionId) discardMutation.mutate(suggestion.transactionId);
+  };
+
   const handleReject = (e: MouseEvent, suggestion: Suggestion) => {
     e.stopPropagation();
     if (suggestion.transactionId) {
@@ -310,6 +336,17 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
     </div>
   );
 
+  const pendingActions = (suggestion: Suggestion) => (
+    <div className="flex gap-2">
+      <Button size="sm" onClick={(e) => handleConfirm(e, suggestion)} disabled={confirmMutation.isPending}>
+        Confirmar
+      </Button>
+      <Button size="sm" variant="outline" onClick={(e) => handleDiscard(e, suggestion)} disabled={discardMutation.isPending}>
+        Descartar
+      </Button>
+    </div>
+  );
+
   const reviewButton = (suggestion: Suggestion) => (
     <Button size="sm" variant="outline" onClick={() => handleSuggestionClick(suggestion)}>
       Revisar e registrar
@@ -324,10 +361,15 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
       crumb="Sugestões"
       description="Aportes, ajustes para a sua alocação-alvo e dividendos a registrar."
       actions={
-        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
-          <RefreshCw className={isLoading ? 'animate-spin' : undefined} strokeWidth={1.75} aria-hidden="true" />
-          Atualizar
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/onde-aportar?carteira=${portfolioId}`}>Simular um aporte</Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
+            <RefreshCw className={isLoading ? 'animate-spin' : undefined} strokeWidth={1.75} aria-hidden="true" />
+            Atualizar
+          </Button>
+        </div>
       }
     >
       <section aria-label="Resumo das sugestões" className="rounded-lg border border-border bg-card p-4 sm:p-5">
@@ -338,7 +380,12 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
           <Stat label="Dividendos" value={isLoading ? '—' : formatNumber(dividendSuggestions.length)} />
         </div>
         <p className="mt-4 text-xs text-muted-foreground">
-          As sugestões seguem a alocação-alvo e o aporte mensal que você definiu. Não são recomendação de investimento.
+          As compras seguem a alocação-alvo e o aporte mensal que você definiu, priorizando os ativos mais distantes do alvo, com
+          desconto em relação ao valor estimado e boa nota de qualidade (o motivo aparece em cada linha).{' '}
+          <Link href={`/onde-aportar?carteira=${portfolioId}`} className="text-brand underline-offset-4 hover:underline">
+            Ver a distribuição completa
+          </Link>
+          . Não são recomendação de investimento.
         </p>
       </section>
 
@@ -368,18 +415,25 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
             {contributionSuggestions.map((suggestion, index) => {
               const isMonthlyContribution = suggestion.type === 'MONTHLY_CONTRIBUTION';
               const showActionButtons = isMonthlyContribution && !!suggestion.transactionId;
+              const fromOndeAportar = !isMonthlyContribution && !!suggestion.transactionId;
               return (
                 <SuggestionItem
                   key={`contribution-${index}`}
                   label={
                     isMonthlyContribution ? (
                       <Badge variant="brand">Aporte mensal</Badge>
+                    ) : fromOndeAportar && suggestion.type === 'CASH_CREDIT' ? (
+                      <Badge variant="brand">Aporte registrado</Badge>
                     ) : (
                       <AllocationAdjustment action="comprar" quantity={suggestion.quantity} ticker={suggestion.ticker} />
                     )
                   }
                   extraBadge={
-                    suggestion.isAttractivePrice ? <Badge variant="neutral">Abaixo do preço justo técnico</Badge> : undefined
+                    fromOndeAportar ? (
+                      <Badge variant="neutral">Pendente do Onde aportar</Badge>
+                    ) : suggestion.isAttractivePrice ? (
+                      <Badge variant="neutral">Abaixo do valor estimado</Badge>
+                    ) : undefined
                   }
                   reason={suggestion.reason}
                   details={
@@ -389,12 +443,12 @@ export function PortfolioSuggestionsPage({ portfolioId }: PortfolioSuggestionsPa
                           {formatNumber(suggestion.quantity)} × {formatBRL(suggestion.price)}
                         </span>
                       ) : null}
-                      {suggestion.fairPrice ? <span>Preço justo técnico (estimativa): {formatBRL(suggestion.fairPrice)}</span> : null}
+                      {suggestion.fairPrice ? <span>Preço justo (estimativa): {formatBRL(suggestion.fairPrice)}</span> : null}
                     </>
                   }
                   amount={suggestion.amount}
                   cashAfter={suggestion.cashBalanceAfter}
-                  action={showActionButtons ? inlineActions(suggestion) : reviewButton(suggestion)}
+                  action={showActionButtons ? inlineActions(suggestion) : fromOndeAportar ? pendingActions(suggestion) : reviewButton(suggestion)}
                 />
               );
             })}

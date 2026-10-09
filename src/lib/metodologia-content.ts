@@ -412,7 +412,10 @@ export const METODOLOGIA_INTRO_SECTIONS = [
   { id: 'liquidez', label: 'Liquidez mínima' },
 ] as const
 
-export const METODOLOGIA_OUTRO_SECTIONS = [{ id: 'limitacoes', label: 'Limitações gerais' }] as const
+export const METODOLOGIA_OUTRO_SECTIONS = [
+  { id: 'onde-aportar', label: 'Onde aportar' },
+  { id: 'limitacoes', label: 'Limitações gerais' },
+] as const
 
 /** Todos os ids de seção da página (âncoras válidas em `/metodologia#…`). */
 export function metodologiaSectionIds(): string[] {

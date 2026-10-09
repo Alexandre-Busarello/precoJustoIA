@@ -15,6 +15,7 @@ import {
   type MethodologyDoc,
 } from "@/lib/metodologia-content"
 import { formatLiquidityLimit } from "@/lib/ranking-methodology"
+import { ALLOCATION_PRESETS, DEFAULT_ALLOCATION_OPTIONS, DEFAULT_MARKET_OPTIONS, FREE_MAX_TICKERS } from "@/lib/allocation/constants"
 
 // As premissas vêm do banco (BCB SGS) com cache de 1 hora; a página acompanha esse ritmo.
 export const revalidate = 3600
@@ -386,6 +387,60 @@ export default async function MetodologiaPage() {
                 ))}
               </section>
             ))}
+
+            <Section id="onde-aportar" title="Onde aportar">
+              <p className="text-base text-foreground">
+                A calculadora distribui um valor entre os ativos que você escolher (ou, no Premium, entre todos os ativos da
+                plataforma) segundo os critérios que você definir. É uma conta determinística sobre os mesmos preços justos da
+                página de cada ativo, sem IA nos números. O resultado é uma simulação, não uma indicação de compra.
+              </p>
+              <SubHeading>1. Filtros</SubHeading>
+              <List
+                items={[
+                  `Liquidez média diária mínima: ${formatLiquidityLimit(LIQUIDITY_DEFAULTS.stock)} para ações e ${formatLiquidityLimit(LIQUIDITY_DEFAULTS.fii)} para FIIs.`,
+                  `Dados suficientes: a nota de qualidade precisa usar pelo menos ${formatPct(DEFAULT_ALLOCATION_OPTIONS.minCoverage, { digits: 0 })} dos critérios aplicáveis. Dado ausente exclui o ativo.`,
+                  `Nota de qualidade mínima de ${DEFAULT_ALLOCATION_OPTIONS.minQualityScore} (de 0 a 100).`,
+                  "Fundamentos preservados: lucro líquido 12 meses sem queda maior que 15%, ROE e margem líquida sem queda maior que 3 p.p. e dívida líquida/EBITDA sem alta maior que 1,0x em relação aos 12 meses anteriores (em bancos e seguradoras, a alavancagem por EBITDA não se aplica).",
+                  "Preço abaixo do valor estimado em pelo menos um dos modelos escolhidos (Graham, FCD, Gordon, preço-teto de Bazin, P/VP justo para bancos e preço-teto de FIIs). Peter Lynch não entra porque não tem preço-alvo.",
+                  "ETFs e BDRs ficam de fora: a plataforma não calcula preço justo para eles.",
+                ]}
+              />
+              <SubHeading>2. Prioridade</SubHeading>
+              <Formula>{`prioridade = peso_desconto × min(margem mediana ÷ 50%, 1)
+           + peso_qualidade × nota ÷ 100
+           + peso_alvo × (distância até o peso-alvo ÷ maior distância)
+margem de segurança = 1 − preço ÷ preço justo`}</Formula>
+              <dl className="grid gap-3 sm:grid-cols-3">
+                {ALLOCATION_PRESETS.map((preset) => (
+                  <div key={preset.id} className="rounded-lg border border-border bg-card p-4">
+                    <dt className="text-sm font-medium text-foreground">{preset.label}</dt>
+                    <dd className="mt-1 text-sm tabular-nums text-muted-foreground">
+                      Desconto {formatPct(preset.weights.valuation, { digits: 0 })} · qualidade {formatPct(preset.weights.quality, { digits: 0 })} ·
+                      pesos-alvo {formatPct(preset.weights.targetGap, { digits: 0 })}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-sm text-muted-foreground">
+                Sem carteira com pesos-alvo, o peso dos alvos é redistribuído entre desconto e qualidade. No modo “Complementar
+                minha carteira”, a prioridade cai à metade quando o setor ou o ativo já passou do limite na sua carteira.
+              </p>
+              <SubHeading>3. Distribuição</SubHeading>
+              <List
+                items={[
+                  "Cada ativo recebe uma parte do valor proporcional à prioridade, em quantidades inteiras (mercado fracionário, a partir de 1 ação; sem fracionário, lotes de 100 ações).",
+                  `Limites: até ${formatPct(DEFAULT_ALLOCATION_OPTIONS.maxPerAssetPct, { digits: 0 })} do aporte por ativo e, com carteira, até ${formatPct(DEFAULT_ALLOCATION_OPTIONS.maxPortfolioPct, { digits: 0 })} da carteira depois do aporte (ou o peso-alvo, se for maior). Seguindo pesos-alvo, nenhum ativo passa do alvo.`,
+                  `Todo o mercado: ${DEFAULT_MARKET_OPTIONS.maxAssets} ativos por padrão (de 1 a 10), até ${DEFAULT_MARKET_OPTIONS.sectorMaxAssets} por setor e ${formatPct(DEFAULT_MARKET_OPTIONS.sectorMaxPct, { digits: 0 })} do aporte no mesmo setor.`,
+                  "O que sobra vai, uma ação por vez, a quem ficou mais longe da sua parte e depois na ordem de prioridade, até os limites. O valor que não cabe em ações inteiras aparece como sobra.",
+                  "Desempate: maior desconto, depois maior liquidez, depois ordem alfabética do ticker. Os mesmos dados e critérios sempre dão o mesmo resultado.",
+                ]}
+              />
+              <SubHeading>Limites do plano</SubHeading>
+              <p className="text-base text-foreground">
+                Sem assinatura, a simulação aceita até {FREE_MAX_TICKERS} ativos e usa o modelo de Graham. O Premium libera todos os
+                modelos, a carteira, o radar e o modo “Todo o mercado”.
+              </p>
+            </Section>
 
             <Section id="limitacoes" title="Limitações gerais">
               <List

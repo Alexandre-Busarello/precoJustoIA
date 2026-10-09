@@ -18,7 +18,7 @@ Plano de melhoria de UX/UI, mobile, correções financeiras e novas features do 
 | 3 | `w3-onde-aportar`, `w3-screening-filters`, `w3-ibov-projections` | **Concluída** (08/10) — `407e805` (Onde aportar, 2 ciclos), `1c9af1d` (screening, 1 ciclo), `61481fa` (IBOV estatístico, 1 ciclo) + integração `8a8f442` (tsc/eslint limpos, 326 testes). Tokens dos agentes: 878k + 496k + 412k + integração |
 | 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` | **Concluída** (09/10) — `ad4cc22` (código morto, deps, CI `.github/workflows/quality.yml`), `85eeb53` (compliance), `e0c3907` (**dark mode liberado**, padrão = sistema, seletor no header/menu/perfil) + integração `57fc0f1` (tsc/eslint/check-ui/check-compliance limpos, 343 testes; prompts de IA reescritos sem "recomendação") |
 | 5 | `w5-data-consistency`, `w5-platform-fixes`, `w5-dividends-bdr-data`, `w5-mobile-ben-a11y` | **Concluída** (09/10) — `0c8c9ca`+`3836ac7` (mesmos números página × ranking), `44aa012`+`86ffed8` (plataforma; rate limit em modo log), `4782de7`+`f15d22f` (dedupe de proventos sem apagar dados; BDR por paridade/câmbio), `6e7d08c` (Ben no mobile, toques 44 px) + integração `0940f2c` (384 testes; BDRs com preço justo convertido) |
-| 6 | `w6-ben-context` → `w6-ben-ui` (Ben mais fácil e contextualizado com a tela; em sequência) | Pendente |
+| 6 | `w6-ben-context` → `w6-ben-ui` | **Concluída** (10/10) — `87a519a`+`d683517` (contexto de cada tela, "Perguntar ao Ben", links nas respostas), `d926413` (painel lateral/folha, sugestões por tela, streaming, limites, histórico) + integração `10df504` (foco após parar, layout do aviso, conversa excluída; 405 testes) |
 
 Lotes da mesma onda não compartilham arquivos (verificado), então rodam em paralelo na mesma working tree.
 
@@ -67,6 +67,16 @@ Depois da onda 2: logo em SVG (`127bb16`, fonte Ubuntu do logo original, ícones
 - Mobile: `Button size="sm"` 40 px e abas do `rentability-selector` 38 px; botão do Ben cobre a fila de abas do índice a 390 px; tabela de valuation rola 16 px a 1440 com o status "Dentro da faixa estimada".
 - Seed local: `free@local.test` tem 7 dias de trial (decisão do dono é 1 dia) — ajustar o script.
 - `scripts/local/screenshots.ts` ignora `--help` e grava em `<cwd>/shots` dentro do repo.
+
+## Fechamento (10/10) — o que fazer no deploy
+- Branch `melhorias/ux-ui-mobile`: 29 commits locais à frente do GitHub (ondas 3–6), aguardando push. Schema do Prisma **não mudou** em nenhuma onda. `next build` de produção validado contra o banco local em 10/10 (passou).
+- Variáveis/infra: `API_RATE_LIMIT_MODE` (padrão `log`; `enforce` depois de olhar os logs). Agendar no agendador externo: `/api/cron/aporte-mensal`, `/api/cron/macro-indicators`, `/api/cron/calculate-ibov-projections` (opcional, 1×/dia após 18h30).
+- Depois do deploy: testar login/rotas protegidas (middleware em `src/`), `/upgrade` → `/checkout`, `/fundador` 410, o seletor de tema e o painel do Ben no celular.
+- Gasto das ondas 3–6 (tokens dos agentes): onda 3 1,92 mi · onda 4 1,00 mi · onda 5 2,06 mi · onda 6 1,41 mi · **total ≈ 6,39 mi**. Planilha por lote em `token-ledger.tsv` no scratch da sessão.
+
+## Pendências ao fim da onda 6
+- `src/components/ui/section-header.tsx` mudou (ações quebram linha; afeta todos os usos) — conferir telas com cabeçalho de seção.
+- Conversas vazias (pergunta interrompida antes da resposta) ficam no banco, só escondidas na UI — limpeza no servidor.
 
 ## Pendências ao fim da onda 5 (09/10)
 - **Produção:** rate limit da API em modo `log` por padrão — depois de olhar os logs, ligar com `API_RATE_LIMIT_MODE=enforce` na Vercel.

@@ -18,6 +18,7 @@ Plano de melhoria de UX/UI, mobile, correções financeiras e novas features do 
 | 3 | `w3-onde-aportar` (premissa central: onde aportar, incl. modo premium "Todo o mercado") + `w3-screening-filters` + `w3-ibov-projections` (projeções do IBOV por estatística; em paralelo, arquivos disjuntos) | Pendente |
 | 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` (libera o toggle de tema) | Pendente |
 | 5 | `w5-data-consistency`, `w5-platform-fixes`, `w5-dividends-bdr-data`, `w5-mobile-ben-a11y` (pendências acumuladas das ondas 0–3; um lote por vez) | Pendente |
+| 6 | `w6-ben-context` → `w6-ben-ui` (Ben mais fácil e contextualizado com a tela; em sequência) | Pendente |
 
 Lotes da mesma onda não compartilham arquivos (verificado), então rodam em paralelo na mesma working tree.
 

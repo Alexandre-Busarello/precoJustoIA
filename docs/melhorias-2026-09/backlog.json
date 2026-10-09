@@ -699,6 +699,38 @@
    ],
    "tasks": "See docs/melhorias-2026-09/batches/w5-mobile-ben-a11y.md",
    "testPlan": "See docs/melhorias-2026-09/batches/w5-mobile-ben-a11y.md"
+  },
+  {
+   "id": "w6-ben-context",
+   "wave": 6,
+   "title": "Ben page context for every surface, server-side use, Perguntar ao Ben entry points, answer links",
+   "ownedPaths": [
+    "src/lib/ben-context/**",
+    "src/lib/ben-service.ts",
+    "src/lib/ben-tools.ts",
+    "src/lib/ben-interaction-service.ts",
+    "src/app/api/ben/chat/route.ts",
+    "src/app/api/ben/interactions/route.ts",
+    "src/hooks/use-ben-chat.ts",
+    "src/components/ben/ask-ben-button.tsx",
+    "src/lib/__tests__/ben-context/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w6-ben-context.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w6-ben-context.md"
+  },
+  {
+   "id": "w6-ben-ui",
+   "wave": 6,
+   "title": "Ben chat redesign: side panel/bottom sheet, contextual start screen, streaming/tool states, limits, history",
+   "ownedPaths": [
+    "src/components/ben-chat-sidebar.tsx",
+    "src/components/ben/**",
+    "src/components/ben-chat-fab.tsx",
+    "src/components/ben-intro-card.tsx",
+    "src/app/conversas-ben/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w6-ben-ui.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w6-ben-ui.md"
   }
  ],
  "deferred": [

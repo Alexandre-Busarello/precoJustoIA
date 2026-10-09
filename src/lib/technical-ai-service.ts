@@ -311,7 +311,7 @@ INSTRUÇÕES CRÍTICAS:
 3. Sua única tarefa é escrever uma análise TEXTUAL SIMPLES e DIRETA explicando:
    - Por que esses preços foram calculados
    - O que os indicadores técnicos indicam de forma simples
-   - Uma recomendação simples para o investidor de longo prazo
+   - O que essas zonas de preço significam para quem acompanha o ativo no longo prazo
 
 REGRAS PARA A ANÁLISE TEXTUAL:
 - Use linguagem SIMPLES e DIRETA, evite jargões técnicos complexos
@@ -319,14 +319,14 @@ REGRAS PARA A ANÁLISE TEXTUAL:
 - Foque no que é importante para investimento de LONGO PRAZO
 - Seja objetivo e prático
 - Mencione os principais indicadores de forma simples
-- Dê uma recomendação clara sobre quando comprar
+- Descreva as zonas de preço (abaixo, dentro e acima da faixa estimada) e as condições técnicas que mudariam esse quadro, sem dizer ao leitor para comprar, vender ou manter
 - Máximo 250 palavras
 
 FORMATO DA ANÁLISE:
 - Comece com um resumo simples (2-3 frases)
 - Explique os principais indicadores de forma simples (RSI, MACD, suporte/resistência)
 - Mencione suporte e resistência de forma clara
-- Termine com uma recomendação prática
+- Termine com um resumo das zonas de preço e dos sinais a observar, lembrando que é uma estimativa educacional e não uma indicação de investimento
 
 IMPORTANTE SOBRE OS DADOS:
 - Preço Atual: R$ ${currentPrice.toFixed(2)}

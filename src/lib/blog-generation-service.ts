@@ -459,7 +459,7 @@ A estrutura deve ser EXATAMENTE esta:
     {
       "title": "Título sugerido para o tópico (atraente)",
       "summary": "Resumo breve do fato relevante (o que aconteceu)",
-      "angle": "O ângulo da análise (ex: Oportunidade de Compra, Alerta de Risco, Renda Passiva)",
+      "angle": "O ângulo da análise (ex: Abaixo do preço justo, Alerta de Risco, Renda Passiva)",
       "target_ticker": ["TICKER1", "TICKER2"],
       "seo_keywords": ["keyword 1", "keyword 2", "long tail keyword"]
     }

@@ -96,7 +96,7 @@ Forneça uma análise detalhada e acionável em português brasileiro, incluindo
 
 1. **Resumo Executivo**: Qual estratégia é melhor financeiramente e por quê
 2. **Análise Comparativa**: Pontos fortes e fracos de cada estratégia
-3. **Recomendação Personalizada**: Qual estratégia recomendar e em que cenários
+3. **Cenários**: Em quais situações cada estratégia tende a se sair melhor
 4. **Considerações Importantes**: Fatores psicológicos, riscos, e variáveis que podem afetar os resultados
 5. **Próximos Passos**: Ações concretas que o usuário deve tomar
 

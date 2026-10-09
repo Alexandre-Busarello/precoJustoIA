@@ -12,6 +12,9 @@ export const THEME_TOGGLE_ENABLED = true
 export const THEME_STORAGE_KEY = 'theme'
 export const FORCED_LIGHT_PREFIXES = ['/admin', '/oferta']
 
+/** Cor da barra do navegador mobile (meta theme-color) em cada tema. */
+export const THEME_COLOR = { light: '#ffffff', dark: '#0e0f12' } as const
+
 /** true quando a rota deve ficar sempre no tema claro. */
 export function isForcedLightRoute(pathname: string | null | undefined): boolean {
   if (!pathname) return false

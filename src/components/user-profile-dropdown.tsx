@@ -87,7 +87,7 @@ export function UserProfileDropdown({
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel className="font-normal">
           <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
           {userEmail && <p className="truncate text-xs text-muted-foreground">{userEmail}</p>}

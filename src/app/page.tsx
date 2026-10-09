@@ -189,7 +189,7 @@ interface ProductShotProps {
   priority?: boolean
 }
 
-/** Screenshot real do produto (capturado do ambiente local, tema claro), com borda fina. */
+/** Screenshot real do produto (capturado do ambiente local, tema claro), com borda fina. No tema escuro o brilho cai um pouco para não ofuscar. */
 function ProductShot({ src, alt, width, height, priority = false }: ProductShotProps) {
   return (
     <figure className="overflow-hidden rounded-lg border border-border bg-card">
@@ -200,7 +200,7 @@ function ProductShot({ src, alt, width, height, priority = false }: ProductShotP
         height={height}
         priority={priority}
         sizes="(min-width: 1024px) 50vw, 100vw"
-        className="h-auto w-full"
+        className="h-auto w-full dark:brightness-[0.85]"
       />
     </figure>
   )

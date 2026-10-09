@@ -861,7 +861,7 @@ export default async function TickerPage({ params }: PageProps) {
                         href={companyData.website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-medium text-brand underline-offset-4 hover:underline"
+                        className="inline-flex min-h-11 items-center font-medium text-brand underline-offset-4 hover:underline md:min-h-0"
                       >
                         Site oficial
                       </a>

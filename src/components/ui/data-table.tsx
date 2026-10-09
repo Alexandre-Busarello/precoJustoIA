@@ -157,7 +157,7 @@ export function DataTable<T>({
                   aria-sort={ariaSort}
                   style={column.width !== undefined ? { width: column.width } : undefined}
                   className={cn(
-                    "h-9 px-3 align-middle text-xs font-medium whitespace-nowrap text-muted-foreground",
+                    "h-11 px-3 align-middle text-xs font-medium whitespace-nowrap text-muted-foreground md:h-9",
                     ALIGN[column.align ?? "left"],
                     isSticky(column, index) && cn(stickyCell, "bg-surface"),
                     column.headerClassName
@@ -169,7 +169,7 @@ export function DataTable<T>({
                         type="button"
                         onClick={() => toggleSort(column.key)}
                         className={cn(
-                          "inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none",
+                          "relative inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-['']",
                           column.align === "right" && "flex-row-reverse",
                           active && "text-foreground"
                         )}
@@ -263,7 +263,7 @@ export function DataTable<T>({
                             event.stopPropagation()
                             toggleExpanded(id)
                           }}
-                          className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
+                          className="relative inline-flex size-9 items-center justify-center rounded-md text-muted-foreground before:absolute before:-inset-1 before:content-[''] hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
                         >
                           <ChevronDown
                             className={cn("size-4 transition-transform", isOpen && "rotate-180")}

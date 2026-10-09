@@ -15,7 +15,7 @@ Plano de melhoria de UX/UI, mobile, correções financeiras e novas features do 
 | 0 | `w0-foundation` (design tokens, dark mode plumbing, primitivos, formatação pt-BR, header/footer/nav mobile, política de interrupções) | **Concluída** — `6ad9d41` (fundação, aprovada pelo testador no 3º ciclo) + `b5aca7c` (integração) |
 | 1 | `w1-asset-stock`, `w1-asset-indicators-ai`, `w1-asset-fii-etf-bdr`, `w1-technical-radars`, `w1-home-pricing-checkout`, `w1-dashboard-alerts`, `w1-account-ben-onboarding`, `w1-portfolio`, `w1-ranking`, `w1-backtest`, `w1-screening`, `w1-comparador`, `w1-finance-foundation` | **Concluída** (30/09) — 13 lotes aprovados pelo testador (`395302f`…`7ff4c71`) + integração `7134d14` |
 | 2 | `w2-valuation-core`, `w2-rankings-new-models`, `w2-score-compliance-fii`, `w2-returns`, `w2-dividends-agenda`, `w2-alerts`, `w2-platform-seo-pwa`, `w2-ui-market-tools`, `w2-ui-institutional-auth` | **Concluída** (05/10) — 8 lotes aprovados + `w2-rankings-new-models` como `wip` (`986090d`, bloqueante resolvido em `1e188da`); correções do coordenador `3743315`, `9680fb4`; integração `74f4774` (tsc e eslint limpos) |
-| 3 | `w3-onde-aportar` (premissa central: onde aportar, incl. modo premium "Todo o mercado") + `w3-screening-filters` + `w3-ibov-projections` (projeções do IBOV por estatística; em paralelo, arquivos disjuntos) | Pendente |
+| 3 | `w3-onde-aportar`, `w3-screening-filters`, `w3-ibov-projections` | **Concluída** (08/10) — `407e805` (Onde aportar, 2 ciclos), `1c9af1d` (screening, 1 ciclo), `61481fa` (IBOV estatístico, 1 ciclo) + integração `8a8f442` (tsc/eslint limpos, 326 testes). Tokens dos agentes: 878k + 496k + 412k + integração |
 | 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` (libera o toggle de tema) | Pendente |
 | 5 | `w5-data-consistency`, `w5-platform-fixes`, `w5-dividends-bdr-data`, `w5-mobile-ben-a11y` (pendências acumuladas das ondas 0–3; um lote por vez) | Pendente |
 | 6 | `w6-ben-context` → `w6-ben-ui` (Ben mais fácil e contextualizado com a tela; em sequência) | Pendente |
@@ -67,6 +67,19 @@ Depois da onda 2: logo em SVG (`127bb16`, fonte Ubuntu do logo original, ícones
 - Mobile: `Button size="sm"` 40 px e abas do `rentability-selector` 38 px; botão do Ben cobre a fila de abas do índice a 390 px; tabela de valuation rola 16 px a 1440 com o status "Dentro da faixa estimada".
 - Seed local: `free@local.test` tem 7 dias de trial (decisão do dono é 1 dia) — ajustar o script.
 - `scripts/local/screenshots.ts` ignora `--help` e grava em `<cwd>/shots` dentro do repo.
+
+## Pendências ao fim da onda 3 (09/10)
+
+**Decisões do dono:**
+- Sugestões automáticas de compra com o caixa da carteira ficaram mais rigorosas (podem deixar caixa parado): afrouxar critérios ou aplicar o resto no ativo mais longe do peso-alvo?
+- Agendar crons no agendador externo: `/api/cron/aporte-mensal` (e-mail "Seu aporte do mês"), `/api/cron/calculate-ibov-projections` (opcional; só comentário de IA e snapshot diário, 1×/dia após 18h30 BRT) e `/api/cron/macro-indicators` (Selic/CDI reais na página do IBOV).
+- Validar o modo "Todo o mercado" com advogado/CNPI antes de divulgar com força.
+
+**Técnicas:**
+- Onde aportar: compras pendentes do Onde aportar não entram no cálculo das sugestões automáticas (podem estourar o peso-alvo); descartar uma compra registrada deixa o "Aporte registrado" órfão; visitantes disparam o cálculo pesado do mercado inteiro (resultado mascarado); checkboxes ETF/BDR do filtro de mercado nunca retornam resultado.
+- `/api/rank-builder`: com `sortBy` (rota de preset) o usuário não Premium recebe todos os filtros — dá para contornar a restrição pela API (→ `w5-platform-fixes`).
+- Dashboard: aviso do IBOV e card do Ben empilhados; no mobile empurram o bloco "Onde aportar" para baixo da dobra (→ `w6-ben-ui`).
+- `src/components/oportunidades-dropdown.tsx` é código morto (→ `w3-cleanup-deps-ci`).
 
 ## Ajustes pedidos pelo dono depois da onda 2 (05/10, já no branch)
 

@@ -28,3 +28,6 @@ Read docs/melhorias-2026-09/backlog-rules.md first. No Prisma schema change. Tes
 - `yarn test` runs the components tests and passes.
 - /login while logged in redirects.
 - The rate limiter is active locally on /api/* (a burst returns 429 only above the limit), and crons are exempt.
+
+## Added after wave 3
+- `/api/rank-builder` screening path: a request with `sortBy` is treated as a marketing preset and a non-Premium user gets every filter, so a free user can bypass the restriction by sending `sortBy` directly. Restrict preset mode to known preset slugs (server-side lookup in src/lib/screening-presets.ts), and apply the same whitelist as tool mode otherwise.

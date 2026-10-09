@@ -41,3 +41,6 @@ Owner request (2026-10-08): the Ben UI/UX should be easier and contextualized. R
 - Free user at the limit sees the limit state.
 - Keyboard-only flow works (open, type, send, stop, close).
 - tsc, eslint and check-ui are clean.
+
+## Added after wave 3
+- /dashboard: the IBOV notice (PageNotice) and BenIntroCard stack as two notices, and on mobile they push the "Onde aportar este mês" block below the fold. Fold the Ben intro into the PageNotice slot (one notice at a time) or turn it into the panel's start screen.

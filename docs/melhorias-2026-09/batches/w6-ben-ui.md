@@ -44,3 +44,11 @@ Owner request (2026-10-08): the Ben UI/UX should be easier and contextualized. R
 
 ## Added after wave 3
 - /dashboard: the IBOV notice (PageNotice) and BenIntroCard stack as two notices, and on mobile they push the "Onde aportar este mês" block below the fold. Fold the Ben intro into the PageNotice slot (one notice at a time) or turn it into the panel's start screen.
+
+## Added after w6-ben-context (87a519a)
+- The context layer is ready: use `resolvePageContext(pathname)` / the store in src/lib/ben-context/store.ts and `contextSuggestions(...)` (src/lib/ben-context/questions.ts) for the start-screen quick actions. Today the sidebar still shows generic shortcuts (e.g. "Projeção do IBOV" on /onde-aportar).
+- Sidebar bugs to fix:
+  - the header shows "Conversa sobre petr4 · 0 mensagens" while an ask is pending, and the count stays stale after the answer;
+  - opening from the floating button reuses the last conversation even on another page (a follow-up typed on /carteira went into the PETR4 conversation). Start a new conversation when the page context differs, or ask.
+- AskBenButton limit dialog: return focus to the trigger on close.
+- Portfolio and asset page contexts are partial: portfolio lacks name/returnPct (set them in the carteira page shell); the asset page registers only {kind, ticker, assetType} for the floating Ben. Register the full asset context (price, selected model, score) from the asset page client. These two shell files are approved for this batch as MECHANICAL-ONLY context registration.

@@ -1,135 +1,73 @@
 'use server'
 
 /**
- * Server Actions para projeções IBOV
+ * Server Actions das faixas estatísticas do Ibovespa.
  */
 
-import { prisma } from '@/lib/prisma'
-import { getIbovData } from '@/lib/ben-tools'
-import { isCurrentUserPremium } from '@/lib/user-service'
+import { requireAdminUser } from '@/lib/user-service'
+import {
+  getIbovProjectionReport,
+  listProjectionSnapshots,
+  warmIbovProjections,
+  type ProjectionSnapshotRow,
+  type WarmUpResult,
+} from '@/lib/ibov-projections/service'
+import type { HorizonId } from '@/lib/ibov-projections/types'
 
-/**
- * Obtém ou cria projeção IBOV para um período (WEEKLY, MONTHLY, ANNUAL)
- */
-export async function getOrCreateIbovProjection(period: 'WEEKLY' | 'MONTHLY' | 'ANNUAL') {
+export interface IbovBannerSummary {
+  period: HorizonId
+  low: number
+  high: number
+  lastCloseDate: string
+}
+
+/** Faixa provável do mês para o aviso do dashboard. `null` se não houver cálculo válido e atual. */
+export async function getIbovBannerSummary(): Promise<IbovBannerSummary | null> {
   try {
-    const now = new Date()
-
-    // Verificar se existe projeção válida
-    const existingProjection = await prisma.ibovProjection.findFirst({
-      where: {
-        period,
-        validUntil: {
-          gt: now
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
-
-    // Buscar valor atual do IBOV para comparação (sempre buscar para mostrar valor atual)
-    let currentValue: number | null = null
-    try {
-      const ibovData = await getIbovData()
-      currentValue = ibovData.success && ibovData.data?.currentValue !== undefined 
-        ? ibovData.data.currentValue 
-        : null
-    } catch (error) {
-      console.error('Erro ao buscar valor atual do IBOV:', error)
-    }
-
-    if (existingProjection) {
-      // Verificar se usuário é premium
-      const isPremium = await isCurrentUserPremium()
-
-      // Ofuscar dados para usuários gratuitos
-      if (!isPremium) {
-        return {
-          success: true,
-          projection: {
-            period: existingProjection.period,
-            projectedValue: 0, // Ofuscado
-            confidence: 0, // Ofuscado
-            reasoning: 'Esta análise detalhada está disponível apenas para usuários Premium. Faça upgrade para desbloquear projeções completas do IBOVESPA com análises detalhadas do Ben.', // Mensagem de conversão
-            keyIndicators: null, // Ofuscado
-            validUntil: existingProjection.validUntil,
-            createdAt: existingProjection.createdAt,
-            updateTime: '08:00'
-          },
-          currentValue,
-          cached: true,
-          isPremium: false
-        }
-      }
-
-      return {
-        success: true,
-        projection: {
-          period: existingProjection.period,
-          projectedValue: Number(existingProjection.projectedValue),
-          confidence: existingProjection.confidence,
-          reasoning: existingProjection.reasoning,
-          keyIndicators: existingProjection.keyIndicators,
-          validUntil: existingProjection.validUntil,
-          createdAt: existingProjection.createdAt,
-          updateTime: '08:00'
-        },
-        currentValue,
-        cached: true,
-        isPremium: true
-      }
-    }
-
-    // Se não existe, calcular on-demand
-    return {
-      success: false,
-      needsCalculation: true,
-      currentValue // Retornar valor atual mesmo sem projeção
-    }
-  } catch (error) {
-    console.error('Erro ao buscar projeção IBOV:', error)
-    
-    // Tentar buscar valor atual mesmo em caso de erro
-    let currentValue: number | null = null
-    try {
-      const ibovData = await getIbovData()
-      currentValue = ibovData.success && ibovData.data?.currentValue !== undefined 
-        ? ibovData.data.currentValue 
-        : null
-    } catch {
-      // Ignorar erro ao buscar valor atual
-    }
-    
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro desconhecido',
-      currentValue
-    }
+    const report = await getIbovProjectionReport()
+    const monthly = report.horizons.find((h) => h.id === 'MONTHLY')
+    if (!monthly?.levels || report.stale.isStale || !report.lastCloseDate) return null
+    return { period: 'MONTHLY', low: monthly.levels.p16, high: monthly.levels.p84, lastCloseDate: report.lastCloseDate }
+  } catch {
+    return null
   }
 }
 
-/**
- * Calcula nova projeção IBOV (chama API interna)
- */
-export async function calculateIbovProjection(period: 'WEEKLY' | 'MONTHLY' | 'ANNUAL') {
-  try {
-    const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/ben/project-ibov`
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ period })
-    })
+export interface AdminIbovState {
+  lastClose: number | null
+  lastCloseDate: string | null
+  stale: boolean
+  generatedAt: string | null
+  snapshots: ProjectionSnapshotRow[]
+  error?: string
+}
 
-    const data = await response.json()
-    return data
-  } catch (error) {
-    console.error('Erro ao calcular projeção IBOV:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro desconhecido'
-    }
+async function assertAdmin() {
+  const user = await requireAdminUser()
+  if (!user?.isAdmin) throw new Error('Não autorizado')
+}
+
+/** Estado atual do cálculo e últimos registros salvos (admin). */
+export async function getAdminIbovState(): Promise<AdminIbovState> {
+  await assertAdmin()
+  const [report, snapshots] = await Promise.all([
+    getIbovProjectionReport().catch((error: unknown) => (error instanceof Error ? error : new Error('Erro desconhecido'))),
+    listProjectionSnapshots(),
+  ])
+  if (report instanceof Error) {
+    return { lastClose: null, lastCloseDate: null, stale: true, generatedAt: null, snapshots, error: report.message }
+  }
+  return {
+    lastClose: report.lastClose,
+    lastCloseDate: report.lastCloseDate,
+    stale: report.stale.isStale,
+    generatedAt: report.generatedAt,
+    snapshots,
   }
 }
 
+/** Recalcula as faixas e grava o registro do dia, sem chamar a IA (admin). */
+export async function recomputeIbovProjections(): Promise<WarmUpResult> {
+  await assertAdmin()
+  return warmIbovProjections({ withCommentary: false })
+}

@@ -4,21 +4,11 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LineChart } from 'lucide-react'
 
-import { getOrCreateIbovProjection } from '@/app/actions/ibov-projection'
-import { usePremiumStatus } from '@/hooks/use-premium-status'
-import { formatDeltaPct, formatNumber } from '@/lib/format'
+import { getIbovBannerSummary, type IbovBannerSummary } from '@/app/actions/ibov-projection'
+import { formatNumber } from '@/lib/format'
 import type { PageNoticeSource } from '@/components/page-notice'
 
-type Period = 'WEEKLY' | 'MONTHLY'
-
-interface ProjectionResult {
-  success: boolean
-  projection?: { projectedValue: number; validUntil: string | Date }
-  currentValue?: number | null
-  isPremium?: boolean
-}
-
-const DISMISS_PREFIX = 'pja-ibov-notice-dismissed:'
+const DISMISS_PREFIX = 'pja-ibov-range-dismissed:'
 
 function readDismissed(key: string): boolean {
   try {
@@ -28,49 +18,40 @@ function readDismissed(key: string): boolean {
   }
 }
 
-/** Só leitura: nunca dispara o cálculo da projeção (que usa IA); se ainda não existe, não há aviso. */
-function useProjection(period: Period, enabled: boolean) {
-  return useQuery<ProjectionResult>({
-    queryKey: ['ibov-projection', period],
-    queryFn: () => getOrCreateIbovProjection(period) as Promise<ProjectionResult>,
+/** Segunda-feira da semana do fechamento (YYYY-MM-DD): dispensar esconde o aviso até a semana seguinte. */
+function weekKey(date: string): string {
+  const d = new Date(`${date}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7))
+  return d.toISOString().slice(0, 10)
+}
+
+/** 198.420 → "198 mil". */
+function thousands(value: number): string {
+  return `${formatNumber(Math.round(value / 1000), { digits: 0 })} mil`
+}
+
+/**
+ * Faixa provável do Ibovespa para o mês (estatística histórica), como aviso inline de menor prioridade no PageNotice.
+ * O número vem do cálculo determinístico do servidor; nada aqui chama IA.
+ */
+export function useIbovProjectionNotice({ enabled }: { enabled: boolean }): PageNoticeSource {
+  const { data, isLoading } = useQuery<IbovBannerSummary | null>({
+    queryKey: ['ibov-banner-summary'],
+    queryFn: () => getIbovBannerSummary(),
     enabled,
     staleTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
-}
-
-function describe(label: string, result: ProjectionResult | undefined): string | null {
-  const projected = result?.projection?.projectedValue
-  const current = result?.currentValue
-  if (!result?.success || !projected || projected <= 0) return null
-  const delta = current && current > 0 ? projected / current - 1 : null
-  return `${label} ${formatNumber(projected, { digits: 0 })} pts${delta !== null ? ` (${formatDeltaPct(delta)})` : ''}`
-}
-
-/**
- * Estimativa semanal/mensal do Ibovespa gerada pelo Ben, como aviso inline de menor prioridade no PageNotice.
- * Só para Premium (para o plano gratuito os valores vêm ocultos do servidor).
- */
-export function useIbovProjectionNotice({ enabled }: { enabled: boolean }): PageNoticeSource {
-  const { isPremium, isLoading: premiumLoading } = usePremiumStatus()
-  const active = enabled && !premiumLoading && !!isPremium
-  const weekly = useProjection('WEEKLY', active)
-  const monthly = useProjection('MONTHLY', active)
   const [dismissedKey, setDismissedKey] = useState<string | null>(null)
-
-  const validUntil = weekly.data?.projection?.validUntil ?? monthly.data?.projection?.validUntil
-  const key = validUntil ? new Date(validUntil).toISOString().slice(0, 10) : null
+  const key = data ? weekKey(data.lastCloseDate) : null
 
   useEffect(() => {
     if (key && readDismissed(key)) setDismissedKey(key)
   }, [key])
 
-  if (!enabled || premiumLoading) return { pending: true, notice: null }
-  if (!isPremium) return { pending: false, notice: null }
-  if (weekly.isLoading || monthly.isLoading) return { pending: true, notice: null }
-
-  const parts = [describe('Semana:', weekly.data), describe('Mês:', monthly.data)].filter(Boolean)
-  if (parts.length === 0 || !key || dismissedKey === key) return { pending: false, notice: null }
+  if (!enabled) return { pending: true, notice: null }
+  if (isLoading) return { pending: true, notice: null }
+  if (!data || !key || dismissedKey === key) return { pending: false, notice: null }
 
   const dismiss = () => {
     setDismissedKey(key)
@@ -86,9 +67,13 @@ export function useIbovProjectionNotice({ enabled }: { enabled: boolean }): Page
     notice: {
       id: 'ibov-projection',
       icon: LineChart,
-      title: 'Estimativa do Ben para o Ibovespa',
-      description: <span className="tabular-nums">{parts.join(' · ')}. Estimativa gerada por IA, não é recomendação.</span>,
-      action: { label: 'Ver projeções', href: '/projecoes-ibov' },
+      title: (
+        <span className="tabular-nums">
+          Ibovespa: faixa provável para o mês entre {thousands(data.low)} e {thousands(data.high)} pts
+        </span>
+      ),
+      description: 'Estatística com base no histórico do índice, não é previsão nem recomendação.',
+      action: { label: 'Ver faixas', href: '/projecoes-ibov' },
       onDismiss: dismiss,
     },
   }

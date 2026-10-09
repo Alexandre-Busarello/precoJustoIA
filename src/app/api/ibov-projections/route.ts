@@ -1,57 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { getIbovData } from '@/lib/ben-tools'
-import { isCurrentUserPremium } from '@/lib/user-service'
+import { NextResponse } from 'next/server'
+import { getIbovProjectionReport } from '@/lib/ibov-projections/service'
+
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/ibov-projections
- * Retorna todas as projeções IBOV válidas, ofuscadas para usuários gratuitos
+ * Faixas estatísticas do Ibovespa (1 semana, 1 mês e 12 meses) calculadas a partir do último fechamento,
+ * com calibração e contexto. Cálculo determinístico, com cache por pregão; nenhuma chamada de IA aqui.
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    // Verificar se usuário é premium
-    const isPremium = await isCurrentUserPremium()
-
-    // Buscar todas as projeções válidas, ordenadas por período e data de criação
-    const projections = await prisma.ibovProjection.findMany({
-      orderBy: [
-        { period: 'asc' },
-        { createdAt: 'desc' }
-      ]
-    })
-
-    // Buscar valor atual do IBOV
-    const ibovData = await getIbovData()
-    const currentValue = ibovData.success && ibovData.data ? ibovData.data.currentValue : 0
-
-    // Ofuscar dados para usuários gratuitos
-    const processedProjections = isPremium
-      ? projections
-      : projections.map(proj => ({
-          ...proj,
-          projectedValue: 0, // Ofuscado
-          confidence: 0, // Ofuscado
-          reasoning: 'Esta análise detalhada está disponível apenas para usuários Premium. Faça upgrade para desbloquear projeções completas do IBOVESPA com análises detalhadas do Ben.',
-          keyIndicators: null // Ofuscado
-        }))
-
-    return NextResponse.json({
-      success: true,
-      projections: processedProjections,
-      currentValue,
-      isPremium
+    const report = await getIbovProjectionReport()
+    return NextResponse.json(report, {
+      headers: { 'Cache-Control': 'public, s-maxage=900, stale-while-revalidate=3600' },
     })
   } catch (error) {
-    console.error('Erro ao buscar projeções IBOV:', error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido'
-      },
-      { status: 500 }
-    )
+    console.error('Erro ao calcular faixas do Ibovespa:', error)
+    return NextResponse.json({ error: 'Não foi possível calcular as faixas do Ibovespa agora.' }, { status: 503 })
   }
 }
-
-
-

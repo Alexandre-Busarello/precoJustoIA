@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertTriangle, FilePlus2, Loader2, WalletCards } from 'lucide-react';
 import {
   XAxis,
   YAxis,
@@ -12,6 +13,7 @@ import {
   LineChart
 } from 'recharts';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Stat } from '@/components/ui/stat';
 import { SectionHeader } from '@/components/ui/section-header';
@@ -168,6 +170,16 @@ interface BacktestResultsProps {
   validation?: any;
   config?: BacktestConfig | null;
   transactions?: BacktestTransaction[];
+  /** Configuração salva: habilita "Criar carteira com estes ativos". */
+  configId?: string;
+  /** Habilita "Nova simulação" no cabeçalho. */
+  onNewSimulation?: () => void;
+  /** Faixa exibida acima dos KPIs (ex.: resumo da simulação rápida). */
+  header?: ReactNode;
+  /** Move o foco para o título do resultado ao abrir (pouso vindo de outra tela). */
+  focusHeading?: boolean;
+  /** false dentro de uma janela (Dialog): não rola a página até os resultados ao abrir. */
+  autoScroll?: boolean;
 }
 
 type AssetPerformance = BacktestResult['assetPerformance'][number];
@@ -253,17 +265,52 @@ function KpiLabel({ children }: { children: ReactNode }) {
   return <span className="whitespace-normal">{children}</span>;
 }
 
-export function BacktestResults({ result, config, transactions }: BacktestResultsProps) {
+export function BacktestResults({ result, config, transactions, configId, onNewSimulation, header, focusHeading, autoScroll = true }: BacktestResultsProps) {
+  const router = useRouter();
+  const { toast } = useToast();
   const resultsTopRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [creatingPortfolio, setCreatingPortfolio] = useState(false);
 
-  // Rola até o topo dos resultados quando um novo resultado é carregado
+  // Rola até o topo dos resultados quando um novo resultado é carregado (e leva o foco ao título no pouso)
   useEffect(() => {
-    if (resultsTopRef.current) {
-      setTimeout(() => {
-        resultsTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
+    if (!resultsTopRef.current || !autoScroll) return;
+    const timer = setTimeout(() => {
+      resultsTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (focusHeading) headingRef.current?.focus({ preventScroll: true });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [result, focusHeading, autoScroll]);
+
+  // Mesma conversão de "Criar a partir de um backtest" na lista de carteiras
+  const createPortfolio = async () => {
+    if (!configId || !config) return;
+    setCreatingPortfolio(true);
+    try {
+      const response = await fetch('/api/portfolio/from-backtest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          backtestId: configId,
+          name: /^carteira\b/i.test(config.name) ? config.name : `Carteira ${config.name}`,
+          startDate: new Date().toISOString().slice(0, 10),
+          // A rota exige um aporte mensal planejado; sem aporte na simulação, usa R$ 1.000 (editável na carteira)
+          monthlyContribution: config.monthlyContribution > 0 ? config.monthlyContribution : 1000,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.portfolioId) throw new Error(data.error || 'Não foi possível criar a carteira.');
+      toast({ title: 'Carteira criada', description: 'Os ativos e os pesos do backtest foram copiados para a nova carteira.' });
+      router.push(`/carteira/${data.portfolioId}`);
+    } catch (error) {
+      toast({
+        title: 'Não foi possível criar a carteira',
+        description: error instanceof Error ? error.message : 'Tente de novo em instantes.',
+        variant: 'destructive',
+      });
+      setCreatingPortfolio(false);
     }
-  }, [result]);
+  };
 
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
   const [loadingBenchmarks, setLoadingBenchmarks] = useState(true);
@@ -884,14 +931,48 @@ export function BacktestResults({ result, config, transactions }: BacktestResult
       )}
 
       {config && (
-        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
-          <span className="min-w-0 truncate font-medium text-foreground">{config.name}</span>
-          <span aria-hidden="true">·</span>
-          <span className="whitespace-nowrap tabular-nums">{config.assets?.length || 0} ativos</span>
-          <span aria-hidden="true">·</span>
-          <span className="whitespace-nowrap tabular-nums">{(result.monthlyReturns?.length || 0) + 1} meses</span>
-        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2
+              ref={headingRef}
+              tabIndex={-1}
+              id="backtest-results-title"
+              className="text-base font-semibold tracking-tight text-foreground outline-none [overflow-wrap:anywhere]"
+            >
+              {config.name}
+            </h2>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
+              <span className="whitespace-nowrap tabular-nums">
+                {config.assets?.length || 0} {(config.assets?.length || 0) === 1 ? 'ativo' : 'ativos'}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className="whitespace-nowrap tabular-nums">{(result.monthlyReturns?.length || 0) + 1} meses</span>
+            </p>
+          </div>
+          {(configId || onNewSimulation) && (
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {configId && (
+                <Button variant="outline" size="sm" onClick={createPortfolio} disabled={creatingPortfolio} aria-busy={creatingPortfolio || undefined} className="max-md:h-11">
+                  {creatingPortfolio ? (
+                    <Loader2 className="size-4 animate-spin text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                  ) : (
+                    <WalletCards className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                  )}
+                  Criar carteira com estes ativos
+                </Button>
+              )}
+              {onNewSimulation && (
+                <Button variant="ghost" size="sm" onClick={onNewSimulation} className="max-md:h-11">
+                  <FilePlus2 className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                  Nova simulação
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       )}
+
+      {header}
 
       {/* KPIs: uma linha de Stats neutros; cor apenas em ganho/perda */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">

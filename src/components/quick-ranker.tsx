@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { BookOpen, ChevronDown, Loader2, Lock, SlidersHorizontal } from "lucide-react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { useTracking } from "@/hooks/use-tracking"
@@ -19,7 +18,7 @@ import { askBenQuestions } from "@/lib/ben-context/questions"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
-import { BatchBacktestSelector } from "@/components/batch-backtest-selector"
+import { QuickBacktestButton } from "@/components/backtest/quick-backtest-button"
 import { EtfRanker } from "@/components/etf-ranker"
 import { RankingParamsPanel } from "@/components/ranking-wizard/ranking-params-panel"
 import { RankingResultsTable } from "@/components/ranking-wizard/ranking-results-table"
@@ -132,7 +131,6 @@ export function QuickRanker({
   onRankingGenerated,
   onSelectionChange,
 }: QuickRankerProps) {
-  const router = useRouter()
   const { trackEvent } = useTracking()
   const { trackEngagement } = useEngagementPixel()
   const { isPremium: premiumFlag, isLoading: premiumLoading } = usePremiumStatus()
@@ -149,7 +147,6 @@ export function QuickRanker({
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<SavedInfo | null>(null)
   const [paramsOpen, setParamsOpen] = useState(false)
-  const [showBatchBacktest, setShowBatchBacktest] = useState(false)
   const requestSeq = useRef(0)
   const initialRunDone = useRef(false)
 
@@ -370,14 +367,6 @@ export function QuickRanker({
         }`
       : undefined
 
-  const openBatchBacktest = () => {
-    if (!isLoggedIn) {
-      router.push("/login?callbackUrl=%2Franking")
-      return
-    }
-    setShowBatchBacktest(true)
-  }
-
   return (
     <div className="space-y-6">
       <section aria-label="Configuração do ranking" className="space-y-4">
@@ -525,9 +514,14 @@ export function QuickRanker({
                   />
                 )}
                 {canBacktest && !loading && (
-                  <Button variant="outline" size="sm" onClick={openBatchBacktest}>
-                    Backtest do ranking
-                  </Button>
+                  <QuickBacktestButton
+                    // Remonta ao trocar de resultado: o top N volta ao padrão
+                    key={rows.map((row) => row.ticker).join(",")}
+                    request={{ tickers: [], source: "ranking", sourceLabel: headerLabel }}
+                    topOf={rows.map((row) => row.ticker)}
+                    label="Backtest do ranking"
+                    customizable
+                  />
                 )}
               </div>
             ) : undefined
@@ -628,14 +622,6 @@ export function QuickRanker({
         </>
       )}
 
-      {outcome?.kind === "stocks" && (
-        <BatchBacktestSelector
-          isOpen={showBatchBacktest}
-          onClose={() => setShowBatchBacktest(false)}
-          rankingResults={outcome.response.results}
-          onConfigSelected={() => setShowBatchBacktest(false)}
-        />
-      )}
     </div>
   )
 }

@@ -16,16 +16,16 @@ import { useTracking } from '@/hooks/use-tracking';
 import { EventType } from '@/lib/tracking-types';
 import { formatDeltaPct } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { FilePlus2 } from 'lucide-react';
+import { ArrowLeft, FilePlus2, SlidersHorizontal } from 'lucide-react';
 import {
   buildExampleConfig,
   dateFromApi,
   needsValidationReview,
-  type BacktestAssetInput,
   type BacktestConfigInput,
 } from '@/app/backtest/backtest-utils';
+import { QuickRunStrip, formatQuickPeriod, localToUtcDate } from '@/components/backtest/quick-backtest-button';
+import { backLabel, isQuickSource, safeReturnPath, type QuickBacktestSource } from '@/lib/backtest/quick-backtest';
 
-type BacktestAsset = BacktestAssetInput;
 type BacktestConfig = BacktestConfigInput;
 
 interface BacktestResult {
@@ -88,6 +88,44 @@ const TABS: TabValue[] = ['configure', 'results', 'history', 'lista'];
 
 function toTab(view: string | null): TabValue {
   return TABS.includes(view as TabValue) ? (view as TabValue) : 'configure';
+}
+
+/** Origem quando não dá para voltar pelo histórico (link aberto direto). */
+const FALLBACK_BACK: Record<QuickBacktestSource, string> = {
+  asset: '/ranking',
+  ranking: '/ranking',
+  comparador: '/comparador',
+  carteira: '/carteira',
+};
+
+/** Ativo: volta para a página do próprio ticker; demais origens: a lista de origem. */
+function fallbackBack(landing: QuickLanding): string {
+  if (landing.source === 'asset' && landing.label && /^[A-Z0-9]{4,7}$/i.test(landing.label)) {
+    return `/acao/${landing.label.toLowerCase()}`;
+  }
+  return FALLBACK_BACK[landing.source];
+}
+
+interface QuickLanding {
+  configId: string;
+  source: QuickBacktestSource;
+  label?: string;
+  back?: string;
+  adjustments: string[];
+}
+
+/** Pouso de um backtest rápido: `/backtest?view=results&configId=…&from=<origem>`. */
+function quickLandingOf(params: URLSearchParams): QuickLanding | null {
+  const configId = params.get('configId');
+  const from = params.get('from');
+  if (params.get('view') !== 'results' || !configId || !isQuickSource(from)) return null;
+  return {
+    configId,
+    source: from,
+    label: params.get('label') || undefined,
+    back: safeReturnPath(params.get('back')),
+    adjustments: params.getAll('ajuste').filter(Boolean),
+  };
 }
 
 // Resultado salvo no banco → formato usado pela tela de resultados
@@ -193,7 +231,8 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
   const [dataValidation, setDataValidation] = useState<DataValidation | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingResults, setIsLoadingResults] = useState(false);
+  // Link direto para um resultado (pouso do backtest rápido): mostra o carregamento desde o primeiro render
+  const [isLoadingResults, setIsLoadingResults] = useState(() => !!urlConfigId && searchParams.get('view') === 'results');
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   // Muda a cada "Nova simulação": remonta o formulário sem erros nem textos da configuração anterior
   const [formKey, setFormKey] = useState(0);
@@ -284,45 +323,6 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
     loadConfigFromUrl(configId, shouldLoadResults);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
-
-  // Ativos enviados por outras telas ("Adicionar ao backtest") substituem a carteira de exemplo
-  useEffect(() => {
-    let stored: string | null = null;
-    try {
-      stored = localStorage.getItem('backtest-preconfigured-assets');
-    } catch {
-      return;
-    }
-    if (!stored) return;
-
-    try {
-      const assets = JSON.parse(stored) as Array<{ ticker: string; companyName?: string }>;
-      if (assets.length > 0) {
-        const processedAssets: BacktestAsset[] = assets.map(asset => ({
-          ticker: asset.ticker,
-          companyName: asset.companyName,
-          allocation: 1 / assets.length
-        }));
-        const example = makeExample();
-        setCurrentConfig({
-          ...example,
-          name: 'Carteira personalizada',
-          description: 'Carteira criada a partir de ativos selecionados',
-          assets: processedAssets,
-          monthlyContribution: 1000
-        });
-        setActiveTab('configure');
-      }
-    } catch (error) {
-      console.error('Erro ao carregar ativos pré-configurados:', error);
-    } finally {
-      try {
-        localStorage.removeItem('backtest-preconfigured-assets');
-      } catch {
-        // armazenamento indisponível: nada a limpar
-      }
-    }
-  }, [makeExample]);
 
   const handleConfigChange = useCallback((config: BacktestConfig) => {
     setCurrentConfig(prev => {
@@ -543,6 +543,48 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
   }, [currentConfig]);
 
   const savedConfigId = savedIdOf(currentConfig);
+  const searchKey = searchParams.toString();
+  const quickLanding = useMemo(() => quickLandingOf(new URLSearchParams(searchKey)), [searchKey]);
+  const showQuickStrip = !!quickLanding && quickLanding.configId === savedConfigId && !!currentConfig;
+
+  // Ajustar configuração: abre Configurar com a mesma configuração e rola até o formulário
+  const adjustConfig = () => {
+    setActiveTab('configure');
+    updateUrl('configure', savedConfigId);
+    requestAnimationFrame(() => {
+      document.getElementById('backtest-configure')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const goBack = () => {
+    if (!quickLanding) return;
+    if (window.history.length > 1) router.back();
+    else router.push(quickLanding.back ?? fallbackBack(quickLanding));
+  };
+
+  const quickStrip =
+    showQuickStrip && quickLanding && currentConfig ? (
+      <QuickRunStrip
+        sourceLabel={quickLanding.label ?? currentConfig.name}
+        period={formatQuickPeriod(localToUtcDate(currentConfig.startDate), localToUtcDate(currentConfig.endDate))}
+        initialCapital={currentConfig.initialCapital}
+        monthlyContribution={currentConfig.monthlyContribution}
+        rebalanceFrequency={currentConfig.rebalanceFrequency}
+        adjustments={quickLanding.adjustments}
+        actions={
+          <>
+            <Button size="sm" onClick={adjustConfig} className="max-md:h-11">
+              <SlidersHorizontal strokeWidth={1.75} aria-hidden="true" />
+              Ajustar configuração
+            </Button>
+            <Button variant="outline" size="sm" onClick={goBack} className="max-md:h-11">
+              <ArrowLeft className="text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              {backLabel(quickLanding.source, quickLanding.source === 'asset' ? quickLanding.label : undefined)}
+            </Button>
+          </>
+        }
+      />
+    ) : null;
 
   return (
     <>
@@ -560,14 +602,16 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
       )}
 
       <Tabs value={activeTab} onValueChange={(value) => selectTab(value as TabValue)} className="gap-6">
-        <TabsList variant="underline">
+        {/* Rótulos curtos e espaçamento menor no mobile: as 4 abas cabem a 320 px */}
+        <TabsList variant="underline" className="max-sm:gap-2">
           <TabsTrigger value="configure">Configurar</TabsTrigger>
-          <TabsTrigger value="results" disabled={!currentResult && !isLoadingResults}>
-            Resultados
+          <TabsTrigger value="results" disabled={!currentResult && !isLoadingResults && !quickLanding}>
+            <span className="sm:hidden">Resultado</span>
+            <span className="hidden sm:inline">Resultados</span>
             {currentResult && (
               <span
                 className={cn(
-                  'text-xs tabular-nums',
+                  'hidden text-xs tabular-nums sm:inline',
                   currentResult.totalReturn > 0 ? 'text-positive' : currentResult.totalReturn < 0 ? 'text-negative' : 'text-muted-foreground'
                 )}
               >
@@ -576,10 +620,13 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
             )}
           </TabsTrigger>
           <TabsTrigger value="history">Execuções</TabsTrigger>
-          <TabsTrigger value="lista">Minhas configurações</TabsTrigger>
+          <TabsTrigger value="lista" aria-label="Minhas configurações">
+            <span className="sm:hidden">Salvas</span>
+            <span className="hidden sm:inline">Minhas configurações</span>
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="configure" id="backtest-configure" className="space-y-4">
+        <TabsContent value="configure" id="backtest-configure" className="scroll-mt-24 space-y-4">
           {savedConfigId && currentConfig && (
             <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="min-w-0 text-sm text-muted-foreground">
@@ -627,7 +674,15 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
               <Skeleton className="h-80 w-full" />
             </div>
           ) : currentResult ? (
-            <BacktestResults result={currentResult} config={currentConfig} transactions={currentTransactions} />
+            <BacktestResults
+              result={currentResult}
+              config={currentConfig}
+              transactions={currentTransactions}
+              configId={savedConfigId}
+              onNewSimulation={startNewSimulation}
+              header={quickStrip}
+              focusHeading={showQuickStrip}
+            />
           ) : (
             <EmptyState
               title="Nenhuma simulação executada"

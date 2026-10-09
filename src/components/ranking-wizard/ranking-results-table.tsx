@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table'
 import { CompanyLogo } from '@/components/company-logo'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
-import { AddToBacktestButton } from '@/components/add-to-backtest-button'
+import { QuickBacktestButton } from '@/components/backtest/quick-backtest-button'
 import { formatBRL, formatNumber, formatPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { RankingModel } from '@/lib/ranking-models'
@@ -151,15 +151,9 @@ function RankingRowDetails({ row, isStock }: { row: RankingRow; isStock: boolean
             </Link>
           </Button>
           {isStock && (
-            <AddToBacktestButton
-              asset={{
-                ticker: row.ticker,
-                companyName: row.name,
-                sector: row.sector ?? undefined,
-                currentPrice: row.price ?? undefined,
-              }}
-              variant="outline"
-              size="sm"
+            <QuickBacktestButton
+              request={{ tickers: [row.ticker], source: 'ranking', sourceLabel: row.ticker }}
+              label={`Backtest de ${row.ticker}`}
             />
           )}
         </div>

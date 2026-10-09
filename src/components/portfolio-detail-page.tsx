@@ -8,6 +8,7 @@ import { PortfolioSmartInput } from '@/components/portfolio-smart-input';
 import { PortfolioMetricsCard } from '@/components/portfolio-metrics-card';
 import { PortfolioHoldingsTable } from '@/components/portfolio-holdings-table';
 import { PortfolioClosedPositionsTable } from '@/components/portfolio-closed-positions-table';
+import { PortfolioBacktestAction } from '@/components/portfolio-backtest-action';
 import {
   PortfolioNotFound,
   PortfolioPageShell,
@@ -108,6 +109,7 @@ export function PortfolioDetailPage({ portfolioId }: PortfolioDetailPageProps) {
       portfolioName={portfolio.name}
       title={portfolio.name}
       description={portfolio.description || undefined}
+      actions={<PortfolioBacktestAction portfolioId={portfolioId} portfolioName={portfolio.name} />}
     >
       <div className="space-y-4">
         <PortfolioMetricsCard

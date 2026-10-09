@@ -10,10 +10,11 @@ import {
   parseApiRateLimitMode,
 } from '../../../middleware'
 
-test('modo do rate limit: enforce por padrão, log e off pelo env', () => {
-  assert.equal(parseApiRateLimitMode(undefined), 'enforce')
-  assert.equal(parseApiRateLimitMode(''), 'enforce')
-  assert.equal(parseApiRateLimitMode('qualquer'), 'enforce')
+test('modo do rate limit: log por padrão, enforce e off pelo env', () => {
+  assert.equal(parseApiRateLimitMode(undefined), 'log')
+  assert.equal(parseApiRateLimitMode(''), 'log')
+  assert.equal(parseApiRateLimitMode('qualquer'), 'log')
+  assert.equal(parseApiRateLimitMode('enforce'), 'enforce')
   assert.equal(parseApiRateLimitMode('log'), 'log')
   assert.equal(parseApiRateLimitMode('off'), 'off')
 })

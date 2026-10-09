@@ -24,7 +24,8 @@ function isAllowedQueryParam(key: string) {
 
 // ─── Rate limit de /api/* ─────────────────────────────────────────────────────
 // Limite generoso por IP em janela fixa de 1 minuto. As rotas sensíveis (registro, login, calculadoras) mantêm os
-// limites próprios. `API_RATE_LIMIT_MODE`: `enforce` (padrão) responde 429 acima do limite; `log` só registra;
+// limites próprios. `API_RATE_LIMIT_MODE`: `log` (padrão, só registra até validar com tráfego real); `enforce`
+// responde 429 acima do limite;
 // `off` desliga. No dev server o loopback fica de fora (as ferramentas locais dividem o mesmo IP).
 
 export type ApiRateLimitMode = 'enforce' | 'log' | 'off'
@@ -35,7 +36,7 @@ export const API_RATE_LIMIT = { limit: 300, windowSeconds: 60 } as const
 const API_RATE_LIMIT_EXEMPT_PREFIXES = ['/api/auth/', '/api/webhooks/', '/api/health']
 
 export function parseApiRateLimitMode(value: string | undefined): ApiRateLimitMode {
-  return value === 'log' || value === 'off' ? value : 'enforce'
+  return value === 'enforce' || value === 'off' ? value : 'log'
 }
 
 /** Rotas isentas e chamadas autenticadas com `Authorization: Bearer <CRON_SECRET>` (crons da Vercel e jobs). */

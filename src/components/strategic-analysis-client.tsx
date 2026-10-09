@@ -23,6 +23,8 @@ import {
   type StrategyResult,
 } from '@/components/asset/valuation-models';
 import { BacktestConfigSelector } from '@/components/backtest-config-selector';
+import { BenPageContextRegistrar } from '@/components/ben/page-context-registrar';
+import { buildAssetContext } from '@/lib/ben-context/builders';
 
 interface StatementsAnalysis {
   score: number;
@@ -280,6 +282,18 @@ export function StockSummaryHeader({
 
   return (
     <>
+      {/* Contexto do Ben: só o que o usuário vê (preço justo e score bloqueados ficam de fora) */}
+      <BenPageContextRegistrar
+        context={buildAssetContext({
+          companyName: name,
+          price,
+          valuations:
+            !fairLocked && activeModel
+              ? [{ model: activeModel.shortLabel, fairValue, margin: headerMargin, score: activeStrategy?.score }]
+              : [],
+          ...(scoreLocked ? {} : { score: overallScore?.score ?? null }),
+        })}
+      />
       <AssetHeader
         ticker={ticker}
         name={name}

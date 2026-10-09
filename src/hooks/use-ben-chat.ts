@@ -1,26 +1,21 @@
 /**
- * Hook para gerenciar chat do Ben
+ * Hooks do chat do Ben: conversas, mensagens, limite do plano e envio com streaming.
+ *
+ * O envio guarda o andamento de cada resposta ("run") num estado de módulo, por conversa: pergunta, trecho
+ * recebido, fase (consultando dados, escrevendo, salvando, interrompida, erro) e as ferramentas em execução.
+ * Assim a resposta continua visível se o painel fechar e abrir de novo, e o botão "Perguntar ao Ben" e o painel
+ * usam o mesmo caminho.
  */
 
 'use client'
 
-import { useCallback, useMemo, useSyncExternalStore } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useSyncExternalStore } from 'react'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
-import { usePathname } from 'next/navigation'
-import type { ChunkMetadata } from '@/lib/ben-service'
 import type { BenPageContext } from '@/lib/ben-context/types'
-import {
-  appendPendingAnswer,
-  finishPendingAsk,
-  getPendingAsk,
-  resolvePageContext,
-  startPendingAsk,
-  subscribePendingAsks,
-  type PendingAsk,
-} from '@/lib/ben-context/store'
+import { conversationTitleFrom } from '@/components/ben/ben-chat-utils'
 
-interface BenConversation {
+export interface BenConversation {
   id: string
   title: string
   contextUrl: string | null
@@ -32,37 +27,15 @@ interface BenConversation {
   messageCount: number
 }
 
-interface BenMessage {
+export interface BenMessage {
   id: string
   role: 'USER' | 'ASSISTANT'
   content: string
   createdAt: Date
-  toolCalls?: any
+  toolCalls?: unknown
 }
 
-/** Contexto antigo do chat (`pageType` lido do pathname); o novo é `BenPageContext` (campo `kind`). */
-interface LegacyPageContext {
-  pageType: string
-  ticker?: string
-}
-
-interface SendMessageParams {
-  conversationId: string
-  message: string
-  /** Contexto da tela. Sem ele (ou no formato antigo), vale o da rota completado pelo registrado pela página. */
-  pageContext?: Partial<BenPageContext> | LegacyPageContext
-}
-
-/** Contexto enviado ao servidor: rota + o registrado pela página + o informado na chamada. */
-function requestContext(pathname: string, pageContext: SendMessageParams['pageContext']): BenPageContext {
-  const provided = pageContext && 'kind' in pageContext ? pageContext : null
-  return resolvePageContext(pathname, provided)
-}
-
-interface TextChunkData {
-  text: string
-  metadata: ChunkMetadata
-}
+const messagesKey = (conversationId: string | null) => ['ben-messages', conversationId] as const
 
 /**
  * Hook para listar conversas do Ben
@@ -85,29 +58,21 @@ export function useBenConversations() {
 }
 
 /**
- * Hook para criar nova conversa
+ * Cria uma conversa. `contextUrl` é a tela em que ela começou (o histórico mostra o contexto a partir dela).
  */
 export function useCreateBenConversation() {
   const queryClient = useQueryClient()
-  const pathname = usePathname()
 
   return useMutation({
-    mutationFn: async (title?: string) => {
+    mutationFn: async ({ title, contextUrl }: { title?: string; contextUrl: string }) => {
       const response = await fetch('/api/ben/conversations', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          title,
-          contextUrl: pathname
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, contextUrl })
       })
-
       if (!response.ok) {
         throw new Error('Erro ao criar conversa')
       }
-
       const data = await response.json()
       return data.conversation as BenConversation
     },
@@ -118,240 +83,27 @@ export function useCreateBenConversation() {
 }
 
 /**
- * Hook para enviar mensagem ao Ben
- */
-export function useSendBenMessage() {
-  const queryClient = useQueryClient()
-  const pathname = usePathname()
-
-  return useMutation({
-    mutationFn: async ({ conversationId, message, pageContext }: SendMessageParams) => {
-      const response = await fetch('/api/ben/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          conversationId,
-          message,
-          contextUrl: pathname,
-          pageContext: requestContext(pathname, pageContext)
-        })
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Erro ao enviar mensagem')
-      }
-
-      const data = await response.json()
-      return data
-    },
-    onSuccess: (_, variables) => {
-      // Invalidar queries relacionadas
-      queryClient.invalidateQueries({ queryKey: ['ben-conversations'] })
-      queryClient.invalidateQueries({ queryKey: ['ben-messages', variables.conversationId] })
-    }
-  })
-}
-
-/**
- * Hook para enviar mensagem ao Ben com streaming SSE
- */
-export function useSendBenMessageStream() {
-  const queryClient = useQueryClient()
-  const pathname = usePathname()
-
-  return useMutation({
-    mutationFn: async ({ 
-      conversationId, 
-      message,
-      pageContext,
-      onChunk 
-    }: SendMessageParams & { 
-      onChunk?: (chunk: { type: string; data: any | TextChunkData }) => void
-    }) => {
-      const response = await fetch('/api/ben/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          conversationId,
-          message,
-          contextUrl: pathname,
-          pageContext: requestContext(pathname, pageContext)
-        })
-      })
-
-      if (!response.ok) {
-        // Tentar ler erro como JSON primeiro
-        try {
-          const errorData = await response.json()
-          // Criar erro customizado com dados completos para tratamento no componente
-          const error = new Error(errorData.error || 'Erro ao enviar mensagem') as any
-          error.response = { status: response.status, data: errorData }
-          error.data = errorData
-          throw error
-        } catch (err) {
-          // Se não conseguir parsear JSON, lançar erro genérico
-          if (err instanceof Error && 'response' in err) {
-            throw err
-          }
-          throw new Error(`Erro HTTP ${response.status}`)
-        }
-      }
-
-      // Verificar se é streaming response
-      const contentType = response.headers.get('content-type')
-      if (contentType?.includes('text/event-stream')) {
-        // Processar SSE incrementalmente
-        const reader = response.body?.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        let finalResult: any = null
-
-        if (!reader) {
-          throw new Error('Stream não disponível')
-        }
-
-        while (true) {
-          const { done, value } = await reader.read()
-          
-          if (done) {
-            break
-          }
-
-          buffer += decoder.decode(value, { stream: true })
-          
-          // Processar eventos SSE completos (terminados com \n\n)
-          let eventEndIndex = buffer.indexOf('\n\n')
-          
-          while (eventEndIndex !== -1) {
-            const eventText = buffer.substring(0, eventEndIndex)
-            buffer = buffer.substring(eventEndIndex + 2)
-            
-            // Parsear evento SSE
-            const lines = eventText.split('\n')
-            let eventType = ''
-            let eventData = ''
-            
-            for (const line of lines) {
-              if (line.startsWith('event: ')) {
-                eventType = line.substring(7).trim()
-              } else if (line.startsWith('data: ')) {
-                // Pode haver múltiplas linhas de data, concatenar todas
-                const dataLine = line.substring(6).trim()
-                if (eventData) {
-                  eventData += '\n' + dataLine
-                } else {
-                  eventData = dataLine
-                }
-              }
-            }
-            
-            if (eventData) {
-              try {
-                // O eventData contém apenas o valor JSON do campo 'data' do SSE
-                const dataValue = JSON.parse(eventData)
-                // Criar objeto no formato esperado pelo onChunk
-                const parsed = {
-                  type: eventType || 'text',
-                  data: dataValue
-                }
-                
-                // Chamar onChunk imediatamente para cada chunk recebido
-                if (onChunk) {
-                  onChunk(parsed)
-                }
-
-                if (parsed.type === 'done') {
-                  finalResult = parsed.data
-                } else if (parsed.type === 'error') {
-                  throw new Error(parsed.data.error || 'Erro no stream')
-                }
-              } catch (parseError) {
-                console.warn('Erro ao parsear evento SSE:', parseError, 'Data:', eventData.substring(0, 100))
-              }
-            }
-            
-            // Procurar próximo evento
-            eventEndIndex = buffer.indexOf('\n\n')
-          }
-        }
-
-        return finalResult || { success: true, message: '', toolCalls: null }
-      } else {
-        // Fallback para resposta JSON normal
-        const data = await response.json()
-        
-        // Se limite foi atingido, refetch mensagens para mostrar a mensagem do Ben
-        if (data.limitReached) {
-          queryClient.invalidateQueries({ queryKey: ['ben-messages', conversationId] })
-        }
-        
-        return data
-      }
-    },
-    onSuccess: (result, variables) => {
-      // Invalidar queries relacionadas
-      queryClient.invalidateQueries({ queryKey: ['ben-conversations'] })
-      
-      // Se limite foi atingido, refetch mensagens para mostrar a mensagem do Ben
-      if (result?.limitReached) {
-        queryClient.invalidateQueries({ queryKey: ['ben-messages', variables.conversationId] })
-      }
-      // Não invalidar mensagens aqui normalmente - já recebemos tudo via streaming
-    }
-  })
-}
-
-/**
- * Hook para carregar mensagens de uma conversa
+ * Mensagens salvas de uma conversa.
  */
 export function useBenMessages(conversationId: string | null) {
-  const query = useQuery({
-    queryKey: ['ben-messages', conversationId],
+  return useQuery({
+    queryKey: messagesKey(conversationId),
     queryFn: async () => {
       if (!conversationId) return []
-
       const response = await fetch(`/api/ben/conversations/${conversationId}/messages`)
       if (!response.ok) {
         throw new Error('Erro ao buscar mensagens')
       }
-
       const data = await response.json()
       return data.messages as BenMessage[]
     },
-    enabled: !!conversationId,
-    refetchInterval: 5000 // Refetch a cada 5 segundos quando conversa está aberta
+    enabled: !!conversationId
   })
-
-  // Pergunta de um "Perguntar ao Ben" ainda em andamento: aparece na conversa até a versão salva chegar
-  const pending = useSyncExternalStore(
-    subscribePendingAsks,
-    () => getPendingAsk(conversationId),
-    () => null
-  )
-  const data = useMemo(() => withPendingAsk(query.data, pending), [query.data, pending])
-
-  return { ...query, data }
 }
 
-/** Texto da resposta enquanto o Ben consulta os dados (antes do primeiro trecho). */
-export const BEN_PENDING_ANSWER = 'Consultando os dados da plataforma…'
-
-function withPendingAsk(messages: BenMessage[] | undefined, pending: PendingAsk | null): BenMessage[] | undefined {
-  if (!pending) return messages
-  const saved = messages ?? []
-  if (saved.length > pending.baseCount) return messages
-  const createdAt = new Date(pending.startedAt)
-  return [
-    ...saved,
-    { id: `pending-question-${pending.startedAt}`, role: 'USER', content: pending.question, createdAt },
-    { id: `pending-answer-${pending.startedAt}`, role: 'ASSISTANT', content: pending.answer || BEN_PENDING_ANSWER, createdAt },
-  ]
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Limite do plano
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface BenLimitState {
   allowed: boolean
@@ -378,68 +130,256 @@ export function useBenLimit({ enabled = true }: { enabled?: boolean } = {}) {
   })
 }
 
-export type AskBenOutcome =
+// ─────────────────────────────────────────────────────────────────────────────
+// Andamento das respostas (por conversa)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * - `consulting`: o Ben consulta os dados (ferramentas) antes do primeiro trecho;
+ * - `writing`: a resposta chega em trechos;
+ * - `saving`: a resposta terminou e a versão salva está a caminho;
+ * - `stopped`: o usuário parou a resposta;
+ * - `error`: a resposta não veio (mensagem em `error`).
+ */
+export type BenRunPhase = 'consulting' | 'writing' | 'saving' | 'stopped' | 'error'
+
+export interface BenToolCall {
+  name: string
+  args?: unknown
+}
+
+export interface BenRun {
+  question: string
+  answer: string
+  phase: BenRunPhase
+  tools: BenToolCall[]
+  error: string | null
+  /** Mensagens salvas quando a pergunta saiu; acima disso, a versão salva já chegou. */
+  baseCount: number
+  startedAt: number
+  /** O que foi enviado, para "Tentar de novo". */
+  request: BenSendRequest
+}
+
+const runs = new Map<string, BenRun>()
+const controllers = new Map<string, AbortController>()
+const runListeners = new Set<() => void>()
+
+function emitRuns() {
+  for (const listener of runListeners) listener()
+}
+
+function subscribeRuns(listener: () => void) {
+  runListeners.add(listener)
+  return () => {
+    runListeners.delete(listener)
+  }
+}
+
+function updateRun(conversationId: string, patch: Partial<BenRun>) {
+  const run = runs.get(conversationId)
+  if (!run) return
+  runs.set(conversationId, { ...run, ...patch })
+  emitRuns()
+}
+
+/** Andamento da resposta em curso (ou a última interrompida / com erro) desta conversa. */
+export function useBenRun(conversationId: string | null): BenRun | null {
+  return useSyncExternalStore(
+    subscribeRuns,
+    () => (conversationId ? runs.get(conversationId) ?? null : null),
+    () => null
+  )
+}
+
+export function isBenRunActive(run: BenRun | null | undefined): boolean {
+  return run?.phase === 'consulting' || run?.phase === 'writing'
+}
+
+/** Para a resposta em curso. O servidor não grava a pergunta nem a resposta interrompidas. */
+export function stopBenRun(conversationId: string): void {
+  controllers.get(conversationId)?.abort()
+}
+
+/** Remove a resposta interrompida ou com erro da tela. */
+export function dismissBenRun(conversationId: string): void {
+  if (runs.delete(conversationId)) emitRuns()
+}
+
+/** Mensagem de erro para gente, sem o texto técnico do servidor. */
+function humanError(status: number | null): string {
+  if (status === null) return 'Sem conexão com o servidor. Verifique a internet e tente de novo.'
+  if (status === 401) return 'Sua sessão expirou. Entre de novo para continuar a conversa.'
+  if (status === 429) return 'Muitas mensagens em pouco tempo. Espere um pouco e tente de novo.'
+  return 'O Ben não conseguiu responder agora. Tente de novo em instantes.'
+}
+
+/** Lê o SSE do chat (`event: <tipo>\ndata: <json>\n\n`) e repassa cada evento. */
+async function readBenStream(
+  response: Response,
+  onEvent: (type: string, data: unknown) => void,
+): Promise<void> {
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('Stream não disponível')
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  const flush = (eventText: string) => {
+    let type = 'text'
+    const dataLines: string[] = []
+    for (const line of eventText.split('\n')) {
+      if (line.startsWith('event: ')) type = line.slice(7).trim()
+      else if (line.startsWith('data: ')) dataLines.push(line.slice(6))
+    }
+    if (dataLines.length === 0) return
+    let data: unknown
+    try {
+      data = JSON.parse(dataLines.join('\n'))
+    } catch {
+      return
+    }
+    onEvent(type, data)
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let end = buffer.indexOf('\n\n')
+    while (end !== -1) {
+      flush(buffer.slice(0, end))
+      buffer = buffer.slice(end + 2)
+      end = buffer.indexOf('\n\n')
+    }
+  }
+  if (buffer.trim()) flush(buffer)
+}
+
+export interface BenSendRequest {
+  question: string
+  /** Contexto da tela já resolvido (`resolvePageContext`); sem a tela, o genérico. */
+  context: BenPageContext
+  /** Rota da tela (memória e título da conversa no servidor). */
+  contextUrl: string
+}
+
+async function streamRun(queryClient: QueryClient, conversationId: string, request: BenSendRequest): Promise<void> {
+  const controller = new AbortController()
+  controllers.set(conversationId, controller)
+  let failed = false
+
+  try {
+    const response = await fetch('/api/ben/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        conversationId,
+        message: request.question,
+        contextUrl: request.contextUrl,
+        pageContext: request.context
+      })
+    })
+    if (!response.ok) {
+      failed = true
+      updateRun(conversationId, { phase: 'error', error: humanError(response.status) })
+      return
+    }
+
+    if (response.headers.get('content-type')?.includes('text/event-stream')) {
+      await readBenStream(response, (type, data) => {
+        const run = runs.get(conversationId)
+        if (!run || failed) return
+        if (type === 'tool_call' && data && typeof data === 'object' && 'name' in data) {
+          const call = data as { name: unknown; args?: unknown }
+          if (typeof call.name === 'string') updateRun(conversationId, { tools: [...run.tools, { name: call.name, args: call.args }] })
+        } else if (type === 'text' && typeof data === 'string' && data) {
+          updateRun(conversationId, { phase: 'writing', answer: run.answer + data })
+        } else if (type === 'error') {
+          failed = true
+          updateRun(conversationId, { phase: 'error', error: humanError(500) })
+        }
+      })
+    } else {
+      // Resposta JSON: o limite foi atingido entre a conferência e o envio (o servidor grava o aviso na conversa).
+      await response.json().catch(() => null)
+    }
+
+    if (failed) return
+    updateRun(conversationId, { phase: 'saving' })
+    await queryClient.refetchQueries({ queryKey: messagesKey(conversationId) })
+    const saved = queryClient.getQueryData<BenMessage[]>(messagesKey(conversationId)) ?? []
+    const run = runs.get(conversationId)
+    if (run && saved.length > run.baseCount) dismissBenRun(conversationId)
+  } catch (error) {
+    if (controller.signal.aborted) {
+      updateRun(conversationId, { phase: 'stopped' })
+    } else {
+      updateRun(conversationId, { phase: 'error', error: humanError(error instanceof TypeError ? null : 500) })
+    }
+  } finally {
+    if (controllers.get(conversationId) === controller) controllers.delete(conversationId)
+    queryClient.invalidateQueries({ queryKey: ['ben-limit'] })
+    queryClient.invalidateQueries({ queryKey: ['ben-conversations'] })
+  }
+}
+
+export type BenSendOutcome =
   | { status: 'sent'; conversationId: string }
   | { status: 'limit'; limit: BenLimitState }
+  | { status: 'busy' }
 
-export interface AskBenCallbacks {
-  /** A conversa foi criada e a pergunta saiu: hora de abrir o chat nela. */
-  onStarted?: (conversationId: string) => void
-  /** A resposta não veio (erro do servidor ou da rede). */
-  onFailed?: (message: string) => void
+export interface BenSendParams extends BenSendRequest {
+  /** Conversa em que a pergunta entra; sem ela, cria uma nova (título = a pergunta). */
+  conversationId?: string | null
+  /** A conversa nova foi criada: hora de mostrá-la. */
+  onConversation?: (conversationId: string) => void
 }
 
 /**
- * "Perguntar ao Ben": confere o limite do plano, cria uma conversa nova e envia a pergunta com o contexto da tela.
- * Com o limite atingido, não cria conversa nem envia nada (o chamador mostra o estado de limite).
+ * Envia uma pergunta ao Ben: confere o limite do plano, cria a conversa se preciso e acompanha a resposta.
+ * Com o limite atingido, não cria conversa nem envia nada (quem chama mostra o estado de limite).
+ * Os erros de rede e do servidor ficam na resposta (`useBenRun`), com "Tentar de novo".
  */
-export function useAskBen() {
+export function useBenSend() {
   const queryClient = useQueryClient()
   const createConversation = useCreateBenConversation()
-  const sendMessage = useSendBenMessageStream()
+  const { mutateAsync: create } = createConversation
 
-  const ask = useCallback(
-    async (question: string, context: Partial<BenPageContext> | null, callbacks: AskBenCallbacks = {}): Promise<AskBenOutcome> => {
+  const send = useCallback(
+    async ({ conversationId, onConversation, ...request }: BenSendParams): Promise<BenSendOutcome> => {
+      if (conversationId && isBenRunActive(runs.get(conversationId))) return { status: 'busy' }
+
       const limit = await queryClient.fetchQuery({ queryKey: ['ben-limit'], queryFn: fetchBenLimit, staleTime: 0 })
       if (!limit.allowed) return { status: 'limit', limit }
 
-      const conversation = await createConversation.mutateAsync(undefined)
-      const conversationId = conversation.id
-      startPendingAsk(conversationId, question, 0)
-      callbacks.onStarted?.(conversationId)
-
-      let streamError: string | null = null
-      const settle = async () => {
-        await queryClient.refetchQueries({ queryKey: ['ben-messages', conversationId] })
-        finishPendingAsk(conversationId)
-        queryClient.invalidateQueries({ queryKey: ['ben-limit'] })
-        if (streamError) callbacks.onFailed?.(streamError)
+      let id = conversationId ?? null
+      if (!id) {
+        const conversation = await create({ title: conversationTitleFrom(request.question), contextUrl: request.contextUrl })
+        id = conversation.id
+        queryClient.setQueryData(messagesKey(id), [])
+        onConversation?.(id)
       }
 
-      sendMessage.mutate(
-        {
-          conversationId,
-          message: question,
-          pageContext: context ?? undefined,
-          onChunk: (chunk) => {
-            if (chunk.type === 'text' && chunk.data) appendPendingAnswer(conversationId, String(chunk.data))
-            else if (chunk.type === 'error') streamError = chunk.data?.error || 'Erro ao gerar a resposta'
-          }
-        },
-        {
-          onSettled: () => void settle(),
-          onError: (error) => {
-            streamError = error instanceof Error && error.message ? error.message : 'Erro ao enviar a pergunta'
-          }
-        }
-      )
-
-      return { status: 'sent', conversationId }
+      const saved = queryClient.getQueryData<BenMessage[]>(messagesKey(id)) ?? []
+      runs.set(id, {
+        question: request.question,
+        answer: '',
+        phase: 'consulting',
+        tools: [],
+        error: null,
+        baseCount: saved.length,
+        startedAt: Date.now(),
+        request
+      })
+      emitRuns()
+      void streamRun(queryClient, id, request)
+      return { status: 'sent', conversationId: id }
     },
-    [queryClient, createConversation, sendMessage]
+    [queryClient, create]
   )
 
-  return { ask, isAsking: createConversation.isPending }
+  return { send, isCreating: createConversation.isPending }
 }
 
 /**
@@ -490,30 +430,6 @@ export function useUnshareBenConversation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ben-conversations'] })
     }
-  })
-}
-
-/**
- * Hook para carregar memória geral do usuário
- */
-export function useBenMemory(contextUrl?: string) {
-  const { data: session } = useSession()
-
-  return useQuery({
-    queryKey: ['ben-memory', contextUrl],
-    queryFn: async () => {
-      const url = contextUrl 
-        ? `/api/ben/memory?contextUrl=${encodeURIComponent(contextUrl)}`
-        : '/api/ben/memory'
-      
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error('Erro ao buscar memória')
-      }
-      const data = await response.json()
-      return data
-    },
-    enabled: !!session
   })
 }
 
@@ -599,4 +515,3 @@ export function useDeleteBenConversation() {
     }
   })
 }
-

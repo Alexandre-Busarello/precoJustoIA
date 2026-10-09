@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * "Perguntar ao Ben": abre o chat numa conversa nova com a pergunta já enviada e o contexto da tela.
+ * "Perguntar ao Ben": abre o painel do Ben numa conversa nova com a pergunta já enviada e o contexto da tela.
  * - Só aparece com sessão (o Ben exige login).
  * - Confere o limite do plano antes (grátis: 2 mensagens por dia); no limite, mostra o aviso em vez de abrir o chat.
  * - Registra o contexto da tela (sem o item clicado) para o chat do botão flutuante também usá-lo nesta rota.
@@ -24,11 +24,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { BenChatSidebar } from '@/components/ben-chat-sidebar'
-import { useAskBen, type BenLimitState } from '@/hooks/use-ben-chat'
+import { useBenSend, type BenLimitState } from '@/hooks/use-ben-chat'
 import { registerPageContext, resolvePageContext } from '@/lib/ben-context/store'
 import type { BenPageContext } from '@/lib/ben-context/types'
 import { cn } from '@/lib/utils'
+import { contextKey as benContextKey } from './ben-chat-utils'
+import { openBenPanel } from './panel-store'
 
 export interface AskBenButtonProps {
   /** Pergunta enviada ao Ben, já com os números da tela ("Por que o preço justo pelo FCD é R$ 45,10?"). */
@@ -54,10 +55,8 @@ export function AskBenButton({
 }: AskBenButtonProps) {
   const { data: session } = useSession()
   const pathname = usePathname() ?? '/'
-  const { ask, isAsking } = useAskBen()
+  const { send, isCreating } = useBenSend()
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const [conversationId, setConversationId] = useState<string | null>(null)
-  const [chatOpen, setChatOpen] = useState(false)
   const [limit, setLimit] = useState<BenLimitState | null>(null)
   const [checking, setChecking] = useState(false)
 
@@ -76,20 +75,19 @@ export function AskBenButton({
 
   if (!session) return null
 
-  const busy = checking || isAsking
+  const busy = checking || isCreating
 
   const handleClick = async () => {
     if (busy) return
     setChecking(true)
     try {
-      const outcome = await ask(question, resolvedContext, {
-        onStarted: (id) => {
-          setConversationId(id)
-          setChatOpen(true)
-        },
-        onFailed: () => {
-          toast.error('O Ben não conseguiu responder agora', { description: 'Tente de novo em instantes.' })
-        },
+      // Erros da resposta aparecem no próprio painel, com "Tentar de novo"
+      const outcome = await send({
+        question,
+        context: resolvedContext,
+        contextUrl: pathname,
+        onConversation: (id) =>
+          openBenPanel({ conversationId: id, conversationKey: benContextKey(resolvedContext), returnFocus: buttonRef.current }),
       })
       if (outcome.status === 'limit') setLimit(outcome.limit)
     } catch {
@@ -137,17 +135,15 @@ export function AskBenButton({
         </Button>
       )}
 
-      {conversationId && (
-        <BenChatSidebar
-          open={chatOpen}
-          onOpenChange={setChatOpen}
-          initialConversationId={conversationId}
-          returnFocusRef={buttonRef}
-        />
-      )}
-
       <Dialog open={limit !== null} onOpenChange={(open) => !open && setLimit(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          // Aberto sem gatilho do Radix: o foco volta ao botão ao fechar
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            buttonRef.current?.focus()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Você já usou as mensagens de hoje</DialogTitle>
             <DialogDescription>

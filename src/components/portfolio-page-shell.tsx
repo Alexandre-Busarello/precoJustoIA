@@ -2,11 +2,12 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, type BreadcrumbItem } from '@/components/page-header';
 import { PortfolioTabs } from '@/components/portfolio-tabs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { BenPageContextRegistrar } from '@/components/ben/page-context-registrar';
 import { cn } from '@/lib/utils';
 
 /** Carteira como a API `/api/portfolio/[id]` devolve (campos usados pelas páginas). */
@@ -91,8 +92,24 @@ export function PortfolioPageShell({
     breadcrumb.push({ label: portfolioName || 'Carteira' });
   }
 
+  // Retorno da carteira para o Ben: lido do cache da visão geral, sem buscar de novo
+  const queryClient = useQueryClient();
+  const metrics = React.useSyncExternalStore(
+    (onChange) => queryClient.getQueryCache().subscribe(onChange),
+    () => queryClient.getQueryData<{ totalReturn?: number | null }>(['portfolio-metrics', portfolioId]),
+    () => undefined
+  );
+
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-8">
+      <BenPageContextRegistrar
+        context={{
+          kind: 'portfolio',
+          id: portfolioId,
+          ...(portfolioName ? { name: portfolioName } : {}),
+          ...(typeof metrics?.totalReturn === 'number' ? { returnPct: metrics.totalReturn } : {}),
+        }}
+      />
       <div className="space-y-4">
         <PageHeader
           breadcrumb={breadcrumb}

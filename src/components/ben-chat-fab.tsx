@@ -8,16 +8,22 @@
  * quando uma linha de abas (`role="tablist"`), a navegação de seções do ativo ou um elemento com
  * `data-ben-fab-avoid` passa por baixo dele.
  * Também some com o chat aberto; enquanto o chat está aberto, a rolagem e as mudanças no DOM não são observadas.
- * O contexto da página (ticker etc.) é lido do pathname pelo próprio chat.
+ * Monta o painel único do Ben (`BenPanel`, carregado na primeira abertura), que qualquer ponto da app abre
+ * com `openBenPanel`. Pelo botão, o painel continua a conversa atual só se ela for desta tela.
  */
 
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { BenChatSidebar } from './ben-chat-sidebar'
+import { contextKey } from './ben/ben-chat-utils'
+import { openBenPanel, useBenPanel } from './ben/panel-store'
+import { useBenPageContext } from './ben/use-ben-page-context'
 import { isAppChromeHidden } from '@/lib/navigation'
 import { cn } from '@/lib/utils'
+
+const BenPanel = dynamic(() => import('./ben/ben-panel').then((m) => m.BenPanel), { ssr: false })
 
 /** Deslocamento mínimo (px) para considerar mudança de direção da rolagem. */
 const SCROLL_DELTA = 8
@@ -114,9 +120,16 @@ function useFabVisibility(
 export function BenChatFAB() {
   const { data: session } = useSession()
   const pathname = usePathname()
-  const [isOpen, setIsOpen] = useState(false)
+  const { open: isOpen } = useBenPanel()
+  const { context } = useBenPageContext()
+  // O painel (e o markdown do chat) só carrega quando alguém abre o Ben
+  const [panelLoaded, setPanelLoaded] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const { scrolledAway, blocked, reveal } = useFabVisibility(buttonRef, pathname, isOpen)
+
+  useEffect(() => {
+    if (isOpen) setPanelLoaded(true)
+  }, [isOpen])
 
   if (!session || isAppChromeHidden(pathname)) {
     return null
@@ -127,7 +140,7 @@ export function BenChatFAB() {
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(true)}
+        onClick={() => openBenPanel({ pageKey: contextKey(context), returnFocus: buttonRef.current })}
         onFocus={reveal}
         aria-label="Abrir chat do Ben"
         className={cn(
@@ -141,7 +154,7 @@ export function BenChatFAB() {
         <Image src="/ben.png" alt="" width={48} height={48} className="size-full object-cover" />
       </button>
 
-      <BenChatSidebar open={isOpen} onOpenChange={setIsOpen} returnFocusRef={buttonRef} />
+      {panelLoaded && <BenPanel />}
     </>
   )
 }

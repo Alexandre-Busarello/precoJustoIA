@@ -11,6 +11,7 @@ import {
   buildScreeningContext,
   contextFromPath,
   mergeWithRoute,
+  normalizeTicker,
   summarizeFilters,
   withoutFocus,
 } from '../../ben-context/builders'
@@ -249,4 +250,10 @@ test('store: contexto registrado vale só na mesma rota; pergunta pendente acumu
   assert.equal(getPendingAsk('c1')?.answer, 'Olá, mundo')
   finishPendingAsk('c1')
   assert.equal(getPendingAsk('c1'), null)
+})
+
+test('normalizeTicker: % solto não lança erro', () => {
+  assert.equal(normalizeTicker('%'), null)
+  assert.equal(normalizeTicker('%E0'), null)
+  assert.equal(normalizeTicker('petr4'), 'PETR4')
 })

@@ -33,7 +33,13 @@ const TICKER_RE = /^[A-Z0-9]{3,8}$/
 
 export function normalizeTicker(value: string | null | undefined): string | null {
   if (!value) return null
-  const ticker = decodeURIComponent(value).trim().toUpperCase()
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(value)
+  } catch {
+    return null // "%" solto na URL ou no corpo: sem ticker, em vez de erro 500
+  }
+  const ticker = decoded.trim().toUpperCase()
   return TICKER_RE.test(ticker) ? ticker : null
 }
 

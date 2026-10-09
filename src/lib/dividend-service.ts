@@ -671,26 +671,12 @@ export class DividendService {
       );
     }
 
-    // Limpeza: linhas sem tipo nem pagamento (Yahoo) que repetem, na mesma janela, um provento mais completo.
-    const afterSave = [
-      ...rows.map((row) => ({ ...row, ...updates.get(row.id) })),
-      ...toCreate.map((d) => ({ ...d, id: null as number | null })),
-    ];
-    const kept = new Set(dedupeDividends(afterSave));
-    const redundantIds = afterSave
-      .filter((row) => !kept.has(row) && row.id !== null && row.source === "yahoo" && isBareDividend(row))
-      .map((row) => row.id as number);
-    if (redundantIds.length > 0) {
-      await safeWrite(
-        "delete-dividend_history-duplicates",
-        () => prisma.dividendHistory.deleteMany({ where: { id: { in: redundantIds }, companyId } }),
-        ["dividend_history"]
-      );
-    }
+    // Sem limpeza destrutiva: duplicatas entre fontes ficam no banco e são escondidas na leitura (dedupeDividends).
+    // Apagar linhas do Yahoo por heurística poderia remover um provento extraordinário legítimo.
 
     console.log(
       `✅ [DB] ${company.ticker}: ${toCreate.length} novos, ${updates.size} completados, ` +
-        `${skipped} já existentes, ${redundantIds.length} duplicatas removidas`
+        `${skipped} já existentes`
     );
   }
 

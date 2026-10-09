@@ -45,6 +45,98 @@ export function toDividendEvents(rows: readonly DividendHistoryRow[]): DividendE
   return events
 }
 
+// ─── Duplicatas entre fontes ────────────────────────────────────────────────
+
+/** Distância máxima (dias) entre datas-com de duas linhas que descrevem o mesmo provento em fontes diferentes. */
+export const DUPLICATE_WINDOW_DAYS = 5
+/** Diferença relativa máxima entre os valores de duas linhas do mesmo provento (2%). */
+export const DUPLICATE_AMOUNT_TOLERANCE = 0.02
+
+export interface DedupeDividendOptions {
+  /** Padrão: `DUPLICATE_WINDOW_DAYS` (5). */
+  windowDays?: number
+  /** Padrão: `DUPLICATE_AMOUNT_TOLERANCE` (0,02). */
+  amountTolerance?: number
+}
+
+const DAY_IN_MS = 86_400_000
+
+/** Linha sem tipo e sem data de pagamento (o Yahoo só informa data-com e valor). */
+function isBareRow(row: DividendHistoryRow): boolean {
+  return !normalizeText(row.type) && !isValidDate(row.paymentDate)
+}
+
+/** Linhas com tipo e data de pagamento (B3/brapi) valem mais que as que só trazem data-com e valor. */
+function rowRichness(row: DividendHistoryRow): number {
+  return (normalizeText(row.type) ? 2 : 0) + (isValidDate(row.paymentDate) ? 1 : 0)
+}
+
+function isRendimento(type: string | null | undefined): boolean {
+  return normalizeText(type).includes('rendimento')
+}
+
+function amountsClose(a: number, b: number, tolerance: number): boolean {
+  return Math.abs(a - b) <= tolerance * Math.max(a, b) + 1e-9
+}
+
+/**
+ * Duas linhas descrevem o mesmo provento vindo de fontes diferentes: datas-com a até 5 dias uma da outra e
+ * - valores a até 2% um do outro, sem tipos conflitantes (JCP e dividendo na mesma data são eventos distintos); ou
+ * - uma das linhas é um rendimento de FII e a outra não tem tipo nem data de pagamento. FII distribui um rendimento por
+ *   mês, então a linha "crua" a poucos dias do rendimento é o mesmo evento informado por outra fonte, mesmo com valor
+ *   diferente.
+ */
+export function isNearDuplicateDividend(
+  a: DividendHistoryRow,
+  b: DividendHistoryRow,
+  options: DedupeDividendOptions = {},
+): boolean {
+  const { windowDays = DUPLICATE_WINDOW_DAYS, amountTolerance = DUPLICATE_AMOUNT_TOLERANCE } = options
+  const amountA = toFiniteNumber(a.amount)
+  const amountB = toFiniteNumber(b.amount)
+  if (amountA === null || amountB === null || amountA <= 0 || amountB <= 0) return false
+  if (!isValidDate(a.exDate) || !isValidDate(b.exDate)) return false
+  if (Math.abs(a.exDate.getTime() - b.exDate.getTime()) > windowDays * DAY_IN_MS) return false
+
+  const typeA = normalizeText(a.type)
+  const typeB = normalizeText(b.type)
+  if (typeA && typeB && typeA !== typeB) return false
+  if (amountsClose(amountA, amountB, amountTolerance)) return true
+  return (isBareRow(a) && isRendimento(b.type)) || (isBareRow(b) && isRendimento(a.type))
+}
+
+/**
+ * Remove as linhas repetidas entre fontes (ver `isNearDuplicateDividend`), preservando a ordem original. Fica a linha
+ * mais completa (com tipo e data de pagamento). Uma linha sem tipo nem pagamento cujo valor bate com a soma das linhas
+ * tipadas da mesma janela (dividendo + JCP somados por outra fonte) também sai. Linhas com valor ou data inválidos
+ * passam como estão (`toDividendEvents` já as descarta).
+ */
+export function dedupeDividends<T extends DividendHistoryRow>(rows: readonly T[], options: DedupeDividendOptions = {}): T[] {
+  const { windowDays = DUPLICATE_WINDOW_DAYS, amountTolerance = DUPLICATE_AMOUNT_TOLERANCE } = options
+  const order = rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => rowRichness(b.row) - rowRichness(a.row) || a.index - b.index)
+
+  const kept: { row: T; index: number }[] = []
+  for (const entry of order) {
+    const { row } = entry
+    if (kept.some((other) => isNearDuplicateDividend(other.row, row, options))) continue
+    const amount = toFiniteNumber(row.amount)
+    if (isBareRow(row) && amount !== null && amount > 0 && isValidDate(row.exDate)) {
+      const typedInWindow = kept.filter(
+        (other) =>
+          !isBareRow(other.row) &&
+          isValidDate(other.row.exDate) &&
+          Math.abs(other.row.exDate.getTime() - row.exDate.getTime()) <= windowDays * DAY_IN_MS,
+      )
+      const typedSum = sum(typedInWindow.map((other) => toFiniteNumber(other.row.amount) ?? 0))
+      if (typedInWindow.length > 1 && amountsClose(amount, typedSum, amountTolerance)) continue
+    }
+    kept.push(entry)
+  }
+  return kept.sort((a, b) => a.index - b.index).map((entry) => entry.row)
+}
+
 function validEvents(events: readonly DividendEvent[]): DividendEvent[] {
   return events.filter((e) => isValidDate(e.exDate) && Number.isFinite(e.amount) && e.amount > 0)
 }

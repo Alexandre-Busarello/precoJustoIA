@@ -7,7 +7,7 @@ import {
   TechnicalAnalysisData,
   CompanyFinancialData
 } from './types';
-import { formatPct } from '../format';
+import { formatNumber, formatPct } from '../format';
 import { MIN_DISCOUNT_GROWTH_SPREAD } from '../finance/valuation';
 import { sectorClass, type SectorClass } from '../finance/sector-classification';
 import { getMacroAssumptionsSync, keFromMacro, type MacroAssumptions } from '../finance/macro';
@@ -355,6 +355,240 @@ export function bdrConversion(financials: CompanyFinancialData): BdrConversion |
 export const BDR_NOT_APPLICABLE_REASON =
   'Modelo não aplicável a BDR: o preço é em reais por recibo e os fundamentos vêm em dólar por ação da empresa no exterior. Sem paridade e câmbio na base de dados, o preço justo não seria comparável.';
 
+/** Início do motivo de não aplicação a BDRs; o complemento diz o que faltou (paridade, câmbio ou dados coerentes). */
+export const BDR_NOT_APPLICABLE_PREFIX = 'Modelo não aplicável a BDR:';
+
+/**
+ * Paridade (recibos na B3 por ação no exterior) dos BDRs mais negociados com demonstrativos em dólar.
+ * Fonte: Yahoo Finance em 09/10/2026. A razão entre `sharesOutstanding` do BDR (`XXXX34.SA`, contado em recibos) e o da
+ * ação no exterior deu um número inteiro, e o preço da ação × câmbio ÷ paridade bateu com o preço do recibo (±2%).
+ * Desdobramentos e grupamentos mudam a paridade: revise a lista quando a B3 anunciar um evento desses para o BDR.
+ */
+export const BDR_PARITY: Readonly<Record<string, { underlying: string; parity: number }>> = {
+  AAPL34: { underlying: 'AAPL', parity: 20 },
+  ABBV34: { underlying: 'ABBV', parity: 16 },
+  ADBE34: { underlying: 'ADBE', parity: 50 },
+  AMZO34: { underlying: 'AMZN', parity: 20 },
+  AVGO34: { underlying: 'AVGO', parity: 70 },
+  BERK34: { underlying: 'BRK-B', parity: 20 },
+  BOAC34: { underlying: 'BAC', parity: 4 },
+  CHVX34: { underlying: 'CVX', parity: 10 },
+  COCA34: { underlying: 'KO', parity: 6 },
+  COWC34: { underlying: 'COST', parity: 40 },
+  CSCO34: { underlying: 'CSCO', parity: 5 },
+  DISB34: { underlying: 'DIS', parity: 15 },
+  EXXO34: { underlying: 'XOM', parity: 8 },
+  GOGL34: { underlying: 'GOOGL', parity: 12 },
+  GSGI34: { underlying: 'GS', parity: 30 },
+  HOME34: { underlying: 'HD', parity: 28 },
+  JNJB34: { underlying: 'JNJ', parity: 15 },
+  JPMC34: { underlying: 'JPM', parity: 10 },
+  LILY34: { underlying: 'LLY', parity: 30 },
+  M1TA34: { underlying: 'META', parity: 28 },
+  MCDC34: { underlying: 'MCD', parity: 20 },
+  MELI34: { underlying: 'MELI', parity: 120 },
+  MSCD34: { underlying: 'MA', parity: 31 },
+  MSFT34: { underlying: 'MSFT', parity: 24 },
+  NFLX34: { underlying: 'NFLX', parity: 50 },
+  NIKE34: { underlying: 'NKE', parity: 10 },
+  NVDC34: { underlying: 'NVDA', parity: 48 },
+  ORCL34: { underlying: 'ORCL', parity: 6 },
+  PEPB34: { underlying: 'PEP', parity: 15 },
+  PFIZ34: { underlying: 'PFE', parity: 4 },
+  PGCO34: { underlying: 'PG', parity: 14 },
+  PYPL34: { underlying: 'PYPL', parity: 20 },
+  ROXO34: { underlying: 'NU', parity: 6 },
+  SSFO34: { underlying: 'CRM', parity: 22 },
+  TSLA34: { underlying: 'TSLA', parity: 32 },
+  UNHH34: { underlying: 'UNH', parity: 70 },
+  VISA34: { underlying: 'V', parity: 20 },
+  WALM34: { underlying: 'WMT', parity: 16 },
+};
+
+/** Paridade conhecida do BDR (`BDR_PARITY`), ou `null`. */
+export function bdrParity(ticker: string | null | undefined): number | null {
+  if (!ticker) return null;
+  return BDR_PARITY[ticker.trim().toUpperCase()]?.parity ?? null;
+}
+
+/** Câmbio USD/BRL vale por até 4 dias (cobre fim de semana e feriado sem cotação nova). */
+const USD_BRL_MAX_AGE_MS = 4 * 86_400_000;
+let usdBrlSnapshot: { rate: number; at: number } | null = null;
+
+/**
+ * Registra o câmbio USD/BRL do dia (o `BDRDataService.getUsdBrlRate` chama ao buscar `BRL=X`), para os modelos, que são
+ * síncronos, converterem BDRs sem consultar a rede.
+ */
+export function setUsdBrlSnapshot(rate: number | null, asOf: Date = new Date()): void {
+  usdBrlSnapshot = rate !== null && Number.isFinite(rate) && rate > 0 ? { rate, at: asOf.getTime() } : null;
+}
+
+/** Câmbio USD/BRL registrado por `setUsdBrlSnapshot`, ou `null` se ausente ou com mais de 4 dias. */
+export function getUsdBrlSnapshot(asOf: Date = new Date()): number | null {
+  if (!usdBrlSnapshot) return null;
+  const age = asOf.getTime() - usdBrlSnapshot.at;
+  return age >= 0 && age <= USD_BRL_MAX_AGE_MS ? usdBrlSnapshot.rate : null;
+}
+
+/**
+ * Que entrada cada modelo usa num BDR:
+ * - `perShare`: LPA e VPA (Graham);
+ * - `totals`: fluxos e dívida totais da empresa no exterior ÷ ações (FCD);
+ * - `dividends`: proventos do histórico da B3, já em reais por recibo (Gordon, Bazin);
+ * - `unsupported`: modelos sem conversão para BDR (Lynch, Barsi e os demais), que seguem não aplicáveis.
+ */
+export type BdrModelBasis = 'perShare' | 'totals' | 'dividends' | 'unsupported';
+
+const BDR_MODEL_BASIS: Readonly<Record<string, BdrModelBasis>> = {
+  graham: 'perShare',
+  fcd: 'totals',
+  gordon: 'dividends',
+  bazin: 'dividends',
+};
+
+/** Base de entrada do modelo `strategyName` num BDR (padrão `unsupported`). */
+export function bdrModelBasis(strategyName: string): BdrModelBasis {
+  return BDR_MODEL_BASIS[strategyName] ?? 'unsupported';
+}
+
+export type BdrResolution =
+  | {
+      ok: true;
+      parity: number;
+      usdBrl: number;
+      /** Multiplica o valor calculado pelo modelo para chegar a reais por recibo. */
+      factor: number;
+      /** "Convertido por paridade 20 e câmbio 5,02." */
+      note: string;
+    }
+  | { ok: false; reason: string };
+
+/** Dois valores a até `tolerance` (fração) um do outro. */
+function near(a: number, b: number, tolerance: number): boolean {
+  return Math.abs(a - b) <= tolerance * Math.max(Math.abs(a), Math.abs(b));
+}
+
+const UNIT_TOLERANCE = 0.15;
+/** Lucro do ano (demonstrativo) e LPA dos últimos 12 meses (cotação) diferem com o tempo: tolerância maior. */
+const TOTALS_TOLERANCE = 0.3;
+
+/**
+ * Fator que leva o LPA/VPA guardado a reais por recibo. A cotação do BDR no Yahoo já traz LPA e VPA em reais por
+ * recibo; o demonstrativo da empresa no exterior traz em dólar por ação. Decide pela coerência com o preço do recibo:
+ * preço ÷ (LPA × fator) precisa bater com o P/L (ou preço ÷ (VPA × fator) com o P/VP). Sem P/L e P/VP, assume dólar por
+ * ação. `null` quando nenhuma das duas leituras é coerente.
+ */
+function perShareFactor(price: number, financials: CompanyFinancialData, underlyingFactor: number): number | null {
+  const candidates = [1, underlyingFactor];
+  const checks: [number | null, number | null][] = [
+    [toNumber(financials.lpa), toNumber(financials.pl)],
+    [toNumber(financials.vpa), toNumber(financials.pvp)],
+  ];
+  for (const [perShare, multiple] of checks) {
+    if (!perShare || perShare <= 0 || !multiple || multiple <= 0) continue;
+    const matches = candidates.filter((factor) => near(price / (perShare * factor), multiple, UNIT_TOLERANCE));
+    return matches.length > 0 ? matches[0] : null;
+  }
+  return underlyingFactor;
+}
+
+/** LPA do histórico na mesma base do atual: quando a outra leitura explica melhor a diferença, a média misturaria moedas. */
+function historyMatchesBasis(companyData: CompanyData, factor: number, underlyingFactor: number): boolean {
+  const current = toNumber(companyData.financials.lpa);
+  const history = (companyData.historicalFinancials ?? [])
+    .map((row) => toNumber(row.lpa))
+    .filter((value): value is number => value !== null && Number.isFinite(value) && value > 0);
+  if (!current || current <= 0 || history.length === 0) return true;
+  // Paridade e câmbio próximos (fator perto de 1) não deixam distinguir as bases: aceita o histórico.
+  if (underlyingFactor > 0.6 && underlyingFactor < 1.7) return true;
+  const sorted = [...history].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const sameBasisGap = Math.abs(Math.log(median / current));
+  const otherFactor = factor === 1 ? underlyingFactor : 1 / underlyingFactor;
+  const otherBasisGap = Math.abs(Math.log((median * otherFactor) / current));
+  return sameBasisGap <= otherBasisGap;
+}
+
+/**
+ * Fator que leva valor total ÷ `sharesOutstanding` a reais por recibo. Os totais vêm em dólar; as ações podem estar
+ * contadas em recibos (cotação do BDR: ações × preço do recibo ≈ valor de mercado em reais) ou em ações da empresa no
+ * exterior. Confere com o LPA em reais por recibo: lucro ÷ ações × fator precisa bater com ele. `null` se incoerente.
+ */
+function totalsFactor(price: number, financials: CompanyFinancialData, parity: number, usdBrl: number, receiptEps: number | null): number | null {
+  const shares = toNumber(financials.sharesOutstanding);
+  if (!shares || shares <= 0) return null;
+  const marketCap = toNumber(financials.marketCap);
+  let factor = usdBrl / parity;
+  if (marketCap && marketCap > 0) {
+    if (near(shares * price, marketCap, UNIT_TOLERANCE)) factor = usdBrl;
+    else if (!near(shares * parity * price, marketCap, UNIT_TOLERANCE)) return null;
+  }
+  const netIncome = toNumber(financials.lucroLiquido);
+  if (receiptEps && receiptEps > 0 && netIncome && netIncome > 0 && !near((netIncome / shares) * factor, receiptEps, TOTALS_TOLERANCE)) {
+    return null;
+  }
+  return factor;
+}
+
+/**
+ * Decide se um modelo de preço justo pode rodar num BDR e com que fator converter o resultado para reais por recibo.
+ * Exige as três peças: paridade (`bdrRatio` informado ou `BDR_PARITY`), câmbio USD/BRL (`usdBrl`/`fxRate` informado ou
+ * `setUsdBrlSnapshot`) e fundamentos coerentes com o preço do recibo. O FCD exige moeda, paridade e câmbio nos próprios
+ * dados (`bdrConversion`), porque a moeda define a taxa de desconto. Sem alguma delas, devolve o motivo da não aplicação.
+ */
+export function resolveBdrConversion(
+  companyData: CompanyData,
+  basis: BdrModelBasis,
+  { asOf = new Date() }: { asOf?: Date } = {}
+): BdrResolution {
+  const { financials, currentPrice, ticker } = companyData;
+  const fail = (detail: string): BdrResolution => ({ ok: false, reason: `${BDR_NOT_APPLICABLE_PREFIX} ${detail}` });
+  if (basis === 'unsupported') {
+    return fail('o modelo não tem conversão por paridade e câmbio, e o preço do recibo em reais não é comparável aos fundamentos em dólar da empresa no exterior.');
+  }
+  const explicitCurrency = typeof financials.financialCurrency === 'string' ? financials.financialCurrency.toUpperCase() : null;
+  if (explicitCurrency && explicitCurrency !== 'USD') {
+    return fail(`a conversão de demonstrativos em ${explicitCurrency} para reais por recibo não está disponível.`);
+  }
+  // O FCD escolhe a taxa de desconto (em dólar ou em reais) por `bdrConversion(financials)`: moeda, paridade e câmbio
+  // precisam vir nos dados do BDR, não só da tabela de paridades e do câmbio registrado.
+  if (basis === 'totals' && bdrConversion(financials)?.currency !== 'USD') {
+    return fail('a moeda dos demonstrativos, a paridade e o câmbio não vieram com os dados do BDR, e eles definem a taxa de desconto do fluxo de caixa.');
+  }
+  const explicitRatio = toNumber(financials.bdrRatio);
+  const parity = explicitRatio && explicitRatio > 0 ? explicitRatio : bdrParity(ticker);
+  if (!parity) return fail('a paridade do BDR (recibos por ação no exterior) não está disponível, então o preço justo não seria comparável ao preço do recibo.');
+  const explicitFx = toNumber(financials.usdBrl ?? financials.fxRate);
+  const usdBrl = explicitFx && explicitFx > 0 ? explicitFx : getUsdBrlSnapshot(asOf);
+  if (!usdBrl) return fail('o câmbio USD/BRL do dia não está disponível, então o preço justo não seria comparável ao preço do recibo.');
+  if (!currentPrice || currentPrice <= 0) return fail('sem preço do recibo para conferir a conversão.');
+
+  const underlyingFactor = usdBrl / parity;
+  const inconsistent = fail('os fundamentos não batem com o preço do recibo depois da conversão por paridade e câmbio (provável mistura de moedas na base).');
+  let factor = 1;
+  if (basis !== 'dividends') {
+    const shareFactor = perShareFactor(currentPrice, financials, underlyingFactor);
+    if (shareFactor === null) return inconsistent;
+    if (basis === 'perShare') {
+      if (!historyMatchesBasis(companyData, shareFactor, underlyingFactor)) return inconsistent;
+      factor = shareFactor;
+    } else {
+      const lpa = toNumber(financials.lpa);
+      const receiptEps = lpa !== null && lpa > 0 ? lpa * shareFactor : null;
+      const fromTotals = totalsFactor(currentPrice, financials, parity, usdBrl, receiptEps);
+      if (fromTotals === null) return inconsistent;
+      factor = fromTotals;
+    }
+  }
+  return {
+    ok: true,
+    parity,
+    usdBrl,
+    factor,
+    note: `Convertido por paridade ${formatNumber(parity, { digits: 0 })} e câmbio ${formatNumber(usdBrl, { digits: 2 })}.`,
+  };
+}
+
 /** Resultado padrão de um modelo que não se aplica à empresa (sem preço justo e sem critérios). */
 export function notApplicableAnalysis(reasoning: string): StrategyAnalysis {
   return {
@@ -458,17 +692,30 @@ export abstract class AbstractStrategy<T extends StrategyParams> implements Base
   }
   
   /**
-   * Motivo de não aplicação para BDRs sem paridade/câmbio (ver `bdrConversion`), ou `null` quando o modelo pode rodar.
+   * Motivo de não aplicação a BDRs (sem paridade, câmbio ou fundamentos coerentes; ver `resolveBdrConversion`), ou
+   * `null` quando o modelo pode rodar.
    */
   protected bdrNotApplicableReason(companyData: CompanyData): string | null {
     if (!this.isBDRTicker(companyData.ticker)) return null;
-    return bdrConversion(companyData.financials) ? null : BDR_NOT_APPLICABLE_REASON;
+    const resolution = resolveBdrConversion(companyData, bdrModelBasis(this.name));
+    return resolution.ok ? null : resolution.reason;
   }
 
-  /** Fator para levar um valor por ação subjacente ao valor por recibo em BRL (1 para ações da B3). */
+  /**
+   * Fator para levar o valor calculado pelo modelo a reais por recibo (1 para ações da B3 e para modelos de proventos,
+   * cujo histórico da B3 já está em reais por recibo).
+   */
   protected perReceiptFactor(companyData: CompanyData): number {
     if (!this.isBDRTicker(companyData.ticker)) return 1;
-    return bdrConversion(companyData.financials)?.perReceiptFactor ?? 1;
+    const resolution = resolveBdrConversion(companyData, bdrModelBasis(this.name));
+    return resolution.ok ? resolution.factor : 1;
+  }
+
+  /** Nota da conversão do BDR ("Convertido por paridade 20 e câmbio 5,02."), ou `null` quando não houve conversão. */
+  protected bdrConversionNote(companyData: CompanyData): string | null {
+    if (!this.isBDRTicker(companyData.ticker)) return null;
+    const resolution = resolveBdrConversion(companyData, bdrModelBasis(this.name));
+    return resolution.ok ? resolution.note : null;
   }
 
   // Filtrar empresas por tamanho (Market Cap)

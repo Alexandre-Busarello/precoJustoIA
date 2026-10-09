@@ -566,7 +566,7 @@ ${fundamentalChangeSection}
 **Passo 4: Síntese e Conclusão para o Investidor**
 4.1. **Tese de Investimento:** Crie um resumo objetivo (2-3 parágrafos) que consolide os pontos mais importantes da análise. Responda: por que um investidor consideraria (ou não) investir na **${name}**?
 4.2. **Identificação de Riscos e Oportunidades:** Liste, em formato de bullet points, os principais riscos e as principais oportunidades para a empresa.
-4.3. **Conclusão Educativa:** Finalize com uma recomendação clara, mas sempre enquadrada como educacional e não como uma consultoria financeira.
+4.3. **Conclusão Educativa:** Finalize com uma conclusão objetiva que pese pontos fortes e riscos, sem dizer o que o investidor deve fazer com o ativo; deixe claro que é conteúdo educacional e não consultoria financeira.
 
 ### **5. DIRETRIZES E REGRAS DE OURO**
 * **IDIOMA OBRIGATÓRIO:** Toda a análise deve ser escrita em português brasileiro. NUNCA use inglês ou outros idiomas.

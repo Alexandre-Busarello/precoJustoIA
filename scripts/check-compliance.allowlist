@@ -1,0 +1,7 @@
+# Exceções revisadas manualmente (caminho :: trecho da linha).
+# Aviso legal: a frase nega recomendações de compra ou venda.
+src/app/termos-de-uso/page.tsx :: recomendações de compra ou venda nem garantias
+# Livro de transações da carteira: "Compra" é o nome do lançamento.
+src/lib/ben-tools.ts :: acompanhamento de transações (Compra, Venda, Dividendos
+# Descrição da ferramenta: orienta o modelo a usar a análise técnica quando o usuário pede "sinais de compra/venda".
+src/lib/ben-tools.ts :: "sinais de compra/venda" ou qualquer termo relacionado a análise técnica

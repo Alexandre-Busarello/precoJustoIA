@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import { Suspense } from "react"
 import { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
@@ -11,6 +12,7 @@ import { CTASection } from "@/components/landing/cta-section"
 import { FAQSection } from "@/components/landing/faq-section"
 import { FloatingCTA } from "@/components/landing/floating-cta"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
+import { BacktestShowcaseStrip } from "@/components/backtest-showcase/showcase-section"
 import {
   COVERED_ASSETS_LABEL,
   DATA_SOURCES_LABEL,
@@ -99,12 +101,13 @@ const PRODUCT_BLOCKS = [
     description:
       "Monte uma carteira, defina aportes e rebalanceamento e compare o resultado com o Ibovespa e o CDI. Rentabilidade passada não garante resultados futuros.",
     link: { href: "/backtest", label: "Criar um backtest" },
-    image: { src: "/images/product/backtest.webp", width: 1280, height: 800, alt: "Resultado de backtest de carteira comparado ao CDI e ao Ibovespa" },
+    // Sem captura estática de resultado: a vitrine mostra backtests reais, datados e com custos
+    image: null,
   },
 ]
 
 const MODELS = [
-  { name: "Fórmula de Graham", measures: "Valor justo pelo lucro e pelo patrimônio por ação", plan: "Grátis" },
+  { name: "Fórmula de Graham", measures: "Preço justo pelo lucro e pelo patrimônio por ação", plan: "Grátis" },
   { name: "Fluxo de caixa descontado", measures: "Valor presente do caixa que a empresa deve gerar", plan: "Premium" },
   { name: "Gordon", measures: "Valor pelos dividendos esperados e seu crescimento", plan: "Premium" },
   { name: "Preço-teto (Bazin)", measures: "Preço máximo para receber 6% ao ano em proventos", plan: "Premium" },
@@ -275,7 +278,13 @@ export default async function Home() {
                   {block.link.label}
                 </Link>
               </div>
-              <ProductShot {...block.image} />
+              {block.image ? (
+                <ProductShot {...block.image} />
+              ) : (
+                <Suspense fallback={null}>
+                  <BacktestShowcaseStrip />
+                </Suspense>
+              )}
             </div>
           ))}
         </div>

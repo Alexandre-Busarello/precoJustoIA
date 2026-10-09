@@ -1,8 +1,9 @@
 import { LandingHero } from '@/components/landing/landing-hero'
 import { FAQSection } from '@/components/landing/faq-section'
 import { CTASection } from '@/components/landing/cta-section'
+import { Suspense } from 'react'
 import { SectionHeader } from '@/components/ui/section-header'
-import { ExamplePortfolioCard } from './example-portfolio-card'
+import { BacktestShowcaseSection } from '@/components/backtest-showcase/showcase-section'
 
 const REGISTER_HREF = '/register?returnUrl=/backtest'
 
@@ -116,8 +117,12 @@ export function BacktestLanding() {
         primaryCTA={{ text: 'Criar conta grátis', href: REGISTER_HREF }}
         secondaryCTA={{ text: 'Ver planos', href: '/planos' }}
         showQuickAccess={false}
-        media={<ExamplePortfolioCard />}
       />
+
+      {/* Vitrine: três backtests reais e datados (some inteira se qualquer um não puder ser calculado) */}
+      <Suspense fallback={null}>
+        <BacktestShowcaseSection viewer="anon" />
+      </Suspense>
 
       <section aria-labelledby="backtest-results-title" className="border-b border-border py-12 sm:py-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">

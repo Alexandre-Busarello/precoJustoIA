@@ -16,6 +16,14 @@ import {
 } from "@/lib/metodologia-content"
 import { formatLiquidityLimit } from "@/lib/ranking-methodology"
 import { ALLOCATION_PRESETS, DEFAULT_ALLOCATION_OPTIONS, DEFAULT_MARKET_OPTIONS, FREE_MAX_TICKERS } from "@/lib/allocation/constants"
+import { BACKTEST_TRADING_COST_RATE } from "@/lib/adaptive-backtest-service"
+import {
+  SHOWCASE_DEFINITIONS,
+  SHOWCASE_DEFINITIONS_SINCE,
+  SHOWCASE_MIN_MONTHS,
+  SHOWCASE_YEARS,
+} from "@/lib/backtest-showcase/definitions"
+import { showcaseCompositionLabel, showcaseMoneyLabel } from "@/components/backtest-showcase/labels"
 
 // As premissas vêm do banco (BCB SGS) com cache de 1 hora; a página acompanha esse ritmo.
 export const revalidate = 3600
@@ -70,7 +78,12 @@ const TOC: TocEntry[] = [
     label: group.tocLabel,
     children: group.docs.map((doc) => ({ id: doc.id, label: doc.name })),
   })),
-  ...METODOLOGIA_OUTRO_SECTIONS.map((section) => ({ id: section.id, label: section.label })),
+  // "Backtest" fica entre "Onde aportar" e "Limitações gerais"
+  ...METODOLOGIA_OUTRO_SECTIONS.flatMap((section) =>
+    section.id === "limitacoes"
+      ? [{ id: "backtest", label: "Backtest" }, { id: section.id, label: section.label }]
+      : [{ id: section.id, label: section.label }]
+  ),
 ]
 
 const tocLinkClass =
@@ -439,6 +452,72 @@ margem de segurança = 1 − preço ÷ preço justo`}</Formula>
               <p className="text-base text-foreground">
                 Sem assinatura, a simulação aceita até {FREE_MAX_TICKERS} ativos e usa o modelo de Graham. O Premium libera todos os
                 modelos, a carteira, o radar e o modo “Todo o mercado”.
+              </p>
+            </Section>
+
+            <Section id="backtest" title="Backtest">
+              <p className="text-base text-foreground">
+                O backtest simula, mês a mês, como uma carteira teria se comportado com cotações e proventos reais. É um estudo
+                do passado com as regras abaixo, não uma previsão.
+              </p>
+              <SubHeading>Como a simulação funciona</SubHeading>
+              <List
+                items={[
+                  "A simulação é mensal: aportes e rebalanceamentos acontecem uma vez por mês, com as operações pelo preço de fechamento do mês.",
+                  "Os preços são ajustados só por eventos de capital (desdobramentos e grupamentos), para os proventos não entrarem duas vezes.",
+                  "Os proventos vêm do histórico real de cada ativo: são creditados na data-com e reinvestidos no mês seguinte, junto do aporte.",
+                  `JCP entra líquido de IRRF (${formatPct(JCP_IRRF_RATE_UNTIL_2025, { digits: 0 })} até 2025 e ${formatPct(JCP_IRRF_RATE_FROM_2026)} a partir de 2026).`,
+                  `Cada operação paga ${formatPct(BACKTEST_TRADING_COST_RATE, { digits: 2 })} do valor negociado (corretagem e emolumentos).`,
+                  "Só ações inteiras: o valor que não completa uma ação fica em caixa para o mês seguinte.",
+                ]}
+              />
+              <SubHeading>O que não entra</SubHeading>
+              <List
+                items={[
+                  "Imposto de renda sobre ganho de capital.",
+                  "Spread: a diferença entre as melhores ofertas do livro de ofertas.",
+                  "Slippage: a diferença entre o preço de fechamento e o preço que uma ordem real conseguiria.",
+                  "Empresas que saíram da bolsa: a simulação só usa ativos com cotação, o que tende a melhorar o resultado (viés de sobrevivência).",
+                ]}
+              />
+              <SubHeading>Benchmarks</SubHeading>
+              <List
+                items={[
+                  "CDI: série 12 do SGS do Banco Central, com os mesmos aportes nas mesmas datas da carteira.",
+                  "Ibovespa: índice ^BVSP, que é um índice de preço, sem dividendos. Por isso a comparação favorece carteiras que pagam proventos.",
+                ]}
+              />
+              <SubHeading>Vitrine de backtests</SubHeading>
+              <p className="text-base text-foreground">
+                A página do backtest e a página inicial mostram estas carteiras, calculadas com o mesmo motor da ferramenta:
+              </p>
+              <List
+                items={SHOWCASE_DEFINITIONS.map(
+                  (definition) =>
+                    `${definition.title}: ${showcaseCompositionLabel({
+                      tickers: definition.tickers,
+                      allocations: definition.tickers.map(() => 1 / definition.tickers.length),
+                    })}; ${showcaseMoneyLabel(definition)}. ${definition.why}`
+                )}
+              />
+              <List
+                items={[
+                  "As definições foram fixadas por regra antes de olhar qualquer resultado. As carteiras aparecem sempre juntas e na mesma ordem, inclusive quando rendem menos que o CDI. Se uma não puder ser calculada, nenhuma aparece.",
+                  `Período: os últimos ${SHOWCASE_YEARS} anos completos até o 1º dia do mês corrente, recalculados uma vez por mês e revistos ao menos uma vez por semana. Se algum ativo tiver histórico menor, todas usam o período comum, desde que tenha pelo menos ${SHOWCASE_MIN_MONTHS / 12} anos.`,
+                  "Cada card mostra o período, os valores, o custo total, a queda máxima, os dois benchmarks e a data do cálculo. No Premium, “Abrir no backtest” roda a mesma carteira na ferramenta com os mesmos parâmetros.",
+                  "Nenhuma vitrine sai do ranking de hoje: sem os fundamentos de cada época, escolher ações pelo ranking atual e simular o passado seria olhar para trás.",
+                ]}
+              />
+              <p className="text-base text-foreground">
+                O histórico das estratégias está nos{" "}
+                <Link href="/indices" className="text-brand underline-offset-4 hover:underline">
+                  índices Preço Justo (IPJ)
+                </Link>
+                , acompanhados a partir da data de criação de cada um, informada na página do índice.
+              </p>
+              <p className="rounded-lg border border-border bg-surface p-4 text-sm text-muted-foreground">
+                Definições em vigor desde <span className="tabular-nums">{formatDate(SHOWCASE_DEFINITIONS_SINCE)}</span>. Qualquer mudança
+                será registrada aqui, com data. Rentabilidade passada não garante resultados futuros. Simulação, não é recomendação.
               </p>
             </Section>
 

@@ -7,6 +7,7 @@ import {
   RankBuilderResult,
   dividendHistoryStart,
   toDividendHistory,
+  type HistoricalFinancialData,
 } from '@/lib/strategies';
 import { TechnicalIndicators, type PriceData } from '@/lib/technical-indicators';
 import { getAverageDailyTradedValue } from '@/lib/finance/liquidity';
@@ -14,35 +15,43 @@ import { LIQUIDITY_DEFAULTS, isIlliquid, toLiquidityAssetType } from '@/lib/fina
 import { applyLiquidityRules } from '@/lib/ranking-models';
 import { formatBRLCompact } from '@/lib/format';
 
-/** Campos de cada ano de `FinancialData` levados para `historicalFinancials` (inclui o lucro, usado em "lucros consistentes"). */
-export function toHistoricalFinancial(data: Record<string, unknown> & { year: number }) {
-  return {
-    year: data.year,
-    roe: data.roe,
-    roic: data.roic,
-    pl: data.pl,
-    pvp: data.pvp,
-    dy: data.dy,
-    payout: data.payout,
-    margemLiquida: data.margemLiquida,
-    margemEbitda: data.margemEbitda,
-    margemBruta: data.margemBruta,
-    liquidezCorrente: data.liquidezCorrente,
-    liquidezRapida: data.liquidezRapida,
-    dividaLiquidaPl: data.dividaLiquidaPl,
-    dividaLiquidaEbitda: data.dividaLiquidaEbitda,
-    lpa: data.lpa,
-    vpa: data.vpa,
-    marketCap: data.marketCap,
-    earningsYield: data.earningsYield,
-    evEbitda: data.evEbitda,
-    roa: data.roa,
-    passivoAtivos: data.passivoAtivos,
-    lucroLiquido: data.lucroLiquido,
-    receitaTotal: data.receitaTotal,
-    ebitda: data.ebitda,
-    fluxoCaixaOperacional: data.fluxoCaixaOperacional,
-  };
+/** Campos de cada ano de `FinancialData` levados para `historicalFinancials` (inclui o payout e o lucro, usados nas médias e em "lucros consistentes"). */
+const HISTORICAL_FINANCIAL_FIELDS = [
+  'roe',
+  'roic',
+  'pl',
+  'pvp',
+  'dy',
+  'payout',
+  'margemLiquida',
+  'margemEbitda',
+  'margemBruta',
+  'liquidezCorrente',
+  'liquidezRapida',
+  'dividaLiquidaPl',
+  'dividaLiquidaEbitda',
+  'lpa',
+  'vpa',
+  'marketCap',
+  'earningsYield',
+  'evEbitda',
+  'roa',
+  'passivoAtivos',
+  'lucroLiquido',
+  'receitaTotal',
+  'ebitda',
+  'fluxoCaixaOperacional',
+] as const;
+
+/**
+ * Um ano de `FinancialData` no formato de `historicalFinancials`, com valores numéricos. É o único mapeamento usado
+ * pelo ranking (`getCompaniesData`) e pela página do ativo (`executeCompanyAnalysis`), para as médias de 7 anos
+ * serem as mesmas nos dois lugares.
+ */
+export function toHistoricalFinancial(data: Record<string, unknown> & { year: number }): HistoricalFinancialData {
+  const row: HistoricalFinancialData = { year: data.year };
+  for (const field of HISTORICAL_FINANCIAL_FIELDS) row[field] = toNumber(data[field]);
+  return row;
 }
 
 interface MonthlyPrice {
@@ -229,6 +238,8 @@ export async function getCompaniesDataFii(): Promise<CompanyData[]> {
         aluguelM2: fd.aluguelM2,
         patrimonioLiquido: fd.patrimonioLiquido,
         ...(lastDivFromFii !== null && lastDivFromFii > 0 ? { fiiLastDividendValue: fd.lastDividendValue } : {}),
+        // Data da última atualização dos dados do FII: o pilar "Segmento e resiliência" usa, como na página do FII.
+        fiiLastFetchedAt: fd.lastFetchedAt,
       },
     };
   });

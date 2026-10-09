@@ -25,9 +25,20 @@ import {
 } from "@/lib/strategies";
 import { STRATEGY_CONFIG } from "@/lib/strategies/strategy-config";
 import { getCompaniesData, getCompaniesDataFii } from "@/lib/rank-builder-service";
-import { applyLiquidityRules, getRankingModel, isRankingUniverse } from "@/lib/ranking-models";
+import {
+  FAIR_VALUE_MODEL_KEYS,
+  applyLiquidityRules,
+  changedRankingParams,
+  fairValueModelParams,
+  getRankingModel,
+  isRankingUniverse,
+  universeForAssetType,
+  type FairValueModelKey,
+  type RankingParamField,
+  type RankingUniverse,
+} from "@/lib/ranking-models";
 import { warmMacroAssumptions } from "@/lib/finance/macro";
-import { formatBRLCompact } from "@/lib/format";
+import { formatBRLCompact, formatMultiple, formatNumber, formatPct } from "@/lib/format";
 import { cache } from "@/lib/cache-service";
 import {
   PREMIUM_SCREENING_METRICS,
@@ -110,22 +121,63 @@ interface RankBuilderRequest {
   preview?: boolean;
 }
 
-/** `minLiquidity` válido: número finito ≥ 0, `null` (incluir ilíquidos) ou `undefined` (limite padrão). */
 /**
- * Completa parâmetros ausentes (`undefined`) dos modelos de ações com os padrões do registro, como o painel faz.
- * Ex.: dividendYield sem `minYield` usava `undefined` e não retornava nada. `null` explícito é preservado.
+ * Completa parâmetros ausentes (`undefined`) dos modelos de ações e de FIIs com os padrões do registro, como o painel
+ * faz. Ex.: dividendYield sem `minYield` usava `undefined` e não retornava nada; fiiDividendYield sem `maxPvp` caía em
+ * 1,3 em vez de 1,1. `null` explícito é preservado.
  * Screening fica de fora: seus filtros são opcionais por definição e o plano gratuito já recebe params restritos.
  */
 function withRegistryDefaults(model: string, params: ModelParams): ModelParams {
   const registryModel = getRankingModel(model);
-  if (!registryModel || registryModel.assetType !== "stock" || model === "screening") return params;
+  if (!registryModel || model === "screening") return params;
+  if (registryModel.assetType !== "stock" && registryModel.assetType !== "fii") return params;
   const raw = (params as { assetTypeFilter?: unknown }).assetTypeFilter;
-  const universe = isRankingUniverse(raw) ? raw : "b3";
+  const universe = registryModel.assetType === "fii" ? "fii" : isRankingUniverse(raw) ? raw : "b3";
   const filled: Record<string, unknown> = { ...(params as Record<string, unknown>) };
   for (const [key, value] of Object.entries(registryModel.defaults(universe))) {
     if (filled[key] === undefined) filled[key] = value;
   }
   return filled as ModelParams;
+}
+
+/** Valor de um parâmetro do painel no formato da UI (frações como percentual). */
+function formatParamValue(field: RankingParamField, value: unknown): string {
+  if (field.kind === "switch") return value ? "ligado" : "desligado";
+  if (field.kind === "select") return field.options.find((option) => option.value === value)?.label ?? String(value);
+  const n = typeof value === "number" ? value : Number(value);
+  if (field.unit === "pct") return formatPct(n);
+  if (field.unit === "multiple") return formatMultiple(n);
+  if (field.unit === "brl") return formatBRLCompact(n);
+  return formatNumber(n);
+}
+
+/**
+ * Nota da linha quando os parâmetros do ranking diferem dos padrões do modelo no universo do ativo: a página do ativo
+ * usa os padrões, então o preço justo pode ser diferente. `null` quando são os padrões.
+ */
+function rankingParamsNote(model: string, assetType: string | null | undefined, params: ModelParams): string | null {
+  if (!isFairValueModel(model)) return null;
+  const registryModel = getRankingModel(model);
+  if (!registryModel) return null;
+  const assetUniverse = universeForAssetType(assetType);
+  const changed = changedRankingParams(registryModel, assetUniverse, params as Record<string, unknown>);
+  if (changed.length === 0) return null;
+  // Ranking misto (B3 + BDRs) com os padrões do próprio ranking: ninguém mexeu nos parâmetros, só o universo difere.
+  const raw = (params as { assetTypeFilter?: unknown }).assetTypeFilter;
+  const requestUniverse: RankingUniverse = isRankingUniverse(raw) ? raw : "b3";
+  if (
+    requestUniverse !== assetUniverse &&
+    assetUniverse === "bdr" &&
+    changedRankingParams(registryModel, requestUniverse, params as Record<string, unknown>).length === 0
+  ) {
+    return "Ranking calculado com os padrões do modelo para ações da B3. A página deste BDR usa os padrões de BDR, então o preço justo pode ser diferente.";
+  }
+  const list = changed.map(({ field, value }) => `${field.label} ${formatParamValue(field, value)}`).join("; ");
+  return `Parâmetros do ranking: ${list}. A página do ativo usa os padrões do modelo, então o preço justo pode ser diferente.`;
+}
+
+function isFairValueModel(model: string): model is FairValueModelKey {
+  return (FAIR_VALUE_MODEL_KEYS as readonly string[]).includes(model);
 }
 
 /** Dia corrente em São Paulo (YYYY-MM-DD): o cache dos sinais de preço vira junto com o pregão. */
@@ -238,21 +290,35 @@ interface ModelValuation {
 }
 
 /**
- * Preços justos de Graham (todos) e de FCD e Gordon (Premium) para a empresa. Grava o upside de cada um em
- * `keyMetrics` (grahamUpside, fcdUpside, gordonUpside) e devolve os que têm preço justo.
+ * Preços justos de Graham (todos) e de FCD e Gordon (Premium) para a empresa, com os mesmos parâmetros da página do
+ * ativo (padrões do registro no universo do ativo). Grava o upside de cada um em `keyMetrics` (grahamUpside,
+ * fcdUpside, gordonUpside) e devolve os que têm preço justo.
  */
 function modelValuations(
   company: CompanyData,
   userIsPremium: boolean,
   keyMetrics: Record<string, number | null>
 ): ModelValuation[] {
+  const universe = universeForAssetType(company.assetType);
   const runs: Array<{ model: string; key: string; run: () => { upside: number | null; fairValue: number | null } }> = [
-    { model: "Graham", key: "grahamUpside", run: () => StrategyFactory.runGrahamAnalysis(company, STRATEGY_CONFIG.graham) },
+    {
+      model: "Graham",
+      key: "grahamUpside",
+      run: () => StrategyFactory.runGrahamAnalysis(company, fairValueModelParams("graham", universe, STRATEGY_CONFIG.graham)),
+    },
   ];
   if (userIsPremium) {
     runs.push(
-      { model: "FCD", key: "fcdUpside", run: () => StrategyFactory.runFCDAnalysis(company, STRATEGY_CONFIG.fcd) },
-      { model: "Gordon", key: "gordonUpside", run: () => StrategyFactory.runGordonAnalysis(company, STRATEGY_CONFIG.gordon) }
+      {
+        model: "FCD",
+        key: "fcdUpside",
+        run: () => StrategyFactory.runFCDAnalysis(company, fairValueModelParams("fcd", universe, STRATEGY_CONFIG.fcd)),
+      },
+      {
+        model: "Gordon",
+        key: "gordonUpside",
+        run: () => StrategyFactory.runGordonAnalysis(company, fairValueModelParams("gordon", universe, STRATEGY_CONFIG.gordon)),
+      }
     );
   }
 
@@ -622,6 +688,12 @@ export async function POST(request: NextRequest) {
         console.warn("Erro ao enriquecer resultados com múltiplos upsides:", error);
       }
     }
+
+    // Parâmetros diferentes dos padrões do modelo: a linha explica por que o preço justo difere da página do ativo.
+    results = results.map((result) => {
+      const note = rankingParamsNote(model, companiesByTicker.get(result.ticker)?.assetType, executionParams);
+      return note ? { ...result, rational: `${result.rational}\n\n${note}` } : result;
+    });
 
     // Liquidez em cada linha: volume médio diário (R$/dia) e aviso para ativos abaixo do limite mantidos no ranking.
     results = results.map((result) => {

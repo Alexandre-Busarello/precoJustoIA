@@ -828,6 +828,22 @@
    ],
    "tasks": "See docs/melhorias-2026-09/batches/w7-mobile-polish.md",
    "testPlan": "See docs/melhorias-2026-09/batches/w7-mobile-polish.md"
+  },
+  {
+   "id": "w8-point-in-time-fundamentals",
+   "wave": 8,
+   "title": "Point-in-time fundamentals history (reconstructed + live snapshots), survivorship, groundwork for strategy backtests — additive schema change, owner approval",
+   "ownedPaths": [
+    "prisma/schema.prisma",
+    "src/lib/point-in-time/**",
+    "src/lib/__tests__/point-in-time/**",
+    "src/app/api/cron/fundamentals-snapshot/**",
+    "src/app/api/admin/fundamentals-backfill/**",
+    "docs/vault/Arquitetura/Histórico de fundamentos.md",
+    "docs/vault/Features/Backtest de estratégia (design).md"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w8-point-in-time-fundamentals.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w8-point-in-time-fundamentals.md"
   }
  ],
  "deferred": [

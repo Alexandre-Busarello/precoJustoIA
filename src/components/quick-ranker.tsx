@@ -13,6 +13,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { InfoHint } from "@/components/ui/info-hint"
 import { Label } from "@/components/ui/label"
 import { SectionHeader } from "@/components/ui/section-header"
+import { AskBenButton } from "@/components/ben/ask-ben-button"
+import { buildRankingContext } from "@/lib/ben-context/builders"
+import { askBenQuestions } from "@/lib/ben-context/questions"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
@@ -507,10 +510,26 @@ export function QuickRanker({
           title={headerLabel}
           description={countLabel}
           actions={
-            canBacktest && !loading ? (
-              <Button variant="outline" size="sm" onClick={openBatchBacktest}>
-                Backtest do ranking
-              </Button>
+            (showingOutcome && shownCount > 0) || (canBacktest && !loading) ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {showingOutcome && outcome && shownCount > 0 && (
+                  <AskBenButton
+                    question={askBenQuestions.results()}
+                    context={buildRankingContext({
+                      model: headerLabel,
+                      universe: RANKING_UNIVERSES.find((option) => option.value === outcomeUniverse)?.label,
+                      params: outcome.kind === "stocks" && resultModel ? summarizeParams(resultModel, outcome.response.params ?? {}) : undefined,
+                      tickers: outcome.kind === "etf" ? outcome.rows.map((row) => row.ticker) : rows.map((row) => row.ticker),
+                      resultCount: totalCount,
+                    })}
+                  />
+                )}
+                {canBacktest && !loading && (
+                  <Button variant="outline" size="sm" onClick={openBatchBacktest}>
+                    Backtest do ranking
+                  </Button>
+                )}
+              </div>
             ) : undefined
           }
         />

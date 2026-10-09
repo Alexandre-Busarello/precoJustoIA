@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils";
 import { RecoveryCalculatorSheet } from "@/components/recovery-calculator-sheet";
 import { AssetCell, assetHref } from "@/components/asset/asset-cell";
 import { moneyToneClass, returnToneClass } from "@/components/portfolio-page-shell";
+import { AskBenButton } from "@/components/ben/ask-ben-button";
+import { buildPortfolioContext } from "@/lib/ben-context/builders";
+import { askBenQuestions } from "@/lib/ben-context/questions";
+import type { BenPortfolioContext } from "@/lib/ben-context/types";
 
 interface Holding {
   ticker: string;
@@ -99,7 +103,15 @@ function DetailItem({ label, children, className }: { label: string; children: R
 }
 
 /** Card de uma posição (mobile): o essencial visível, o restante num expansível. */
-function HoldingCard({ holding, onRecovery }: { holding: Holding; onRecovery: (h: Holding) => void }) {
+function HoldingCard({
+  holding,
+  onRecovery,
+  benContext,
+}: {
+  holding: Holding;
+  onRecovery: (h: Holding) => void;
+  benContext: BenPortfolioContext;
+}) {
   const [open, setOpen] = useState(false);
   const detailsId = `holding-details-${holding.ticker}`;
 
@@ -178,6 +190,11 @@ function HoldingCard({ holding, onRecovery }: { holding: Holding; onRecovery: (h
               Simular aporte
             </Button>
           )}
+          <AskBenButton
+            question={askBenQuestions.holding(holding.ticker)}
+            context={{ ...benContext, focus: holding.ticker }}
+            className="mt-3 w-full"
+          />
         </div>
       )}
     </li>
@@ -285,6 +302,11 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
     return byStatus !== 0 ? byStatus : b.currentValue - a.currentValue;
   });
 
+  const benContext = buildPortfolioContext({
+    id: portfolioId,
+    holdings: holdings.map((h) => ({ ticker: h.ticker, weight: h.actualAllocation, value: h.currentValue })),
+  });
+
   const columns: DataTableColumn<Holding>[] = [
     {
       key: "ticker",
@@ -347,15 +369,23 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
     },
     {
       key: "recovery",
-      header: <span className="sr-only">Simulação</span>,
+      header: <span className="sr-only">Atalhos</span>,
       align: "right",
-      cell: (h) =>
-        h.returnPercentage < 0 ? (
-          <Button variant="ghost" size="sm" onClick={() => setRecoverySheetHolding(h)}>
-            <Calculator strokeWidth={1.75} aria-hidden="true" />
-            Simular aporte
-          </Button>
-        ) : null,
+      cell: (h) => (
+        <div className="flex items-center justify-end gap-1">
+          {h.returnPercentage < 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setRecoverySheetHolding(h)}>
+              <Calculator strokeWidth={1.75} aria-hidden="true" />
+              Simular aporte
+            </Button>
+          )}
+          <AskBenButton
+            variant="icon"
+            question={askBenQuestions.holding(h.ticker)}
+            context={{ ...benContext, focus: h.ticker }}
+          />
+        </div>
+      ),
     },
   ];
 
@@ -390,7 +420,12 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
         <>
           <ul className="space-y-3 sm:hidden" data-testid="holdings-cards">
             {sortedHoldings.map((holding) => (
-              <HoldingCard key={holding.ticker} holding={holding} onRecovery={setRecoverySheetHolding} />
+              <HoldingCard
+                key={holding.ticker}
+                holding={holding}
+                onRecovery={setRecoverySheetHolding}
+                benContext={benContext}
+              />
             ))}
           </ul>
           <DataTable

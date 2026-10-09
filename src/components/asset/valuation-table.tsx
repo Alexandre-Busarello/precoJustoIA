@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/button'
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table'
 import { Stat } from '@/components/ui/stat'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
+import { AskBenButton } from '@/components/ben/ask-ben-button'
+import { buildAssetContext } from '@/lib/ben-context/builders'
+import { askBenQuestions } from '@/lib/ben-context/questions'
 import {
   adjustedScore,
   criteriaCount,
@@ -202,9 +205,11 @@ function ModelDetails({ row }: { row: ValuationRow }) {
 function ExpandedRow({
   row,
   reinvestment,
+  price,
 }: {
   row: ValuationRow
   reinvestment: ValuationTableProps['reinvestment']
+  price: number | null
 }) {
   const { model, strategy, locked, notApplicable } = row
   const subtitle = MODEL_SUBTITLE[model.key]
@@ -249,6 +254,18 @@ function ExpandedRow({
             />
             <Stat size="sm" label="Score do modelo" value={`${Math.round(strategy.score)}/100`} />
           </div>
+
+          {row.fairValue !== null && (
+            <AskBenButton
+              question={askBenQuestions.valuation(model, row.fairValue)}
+              context={buildAssetContext({
+                price,
+                valuations: [{ model: model.shortLabel, fairValue: row.fairValue, margin: row.margin, score: strategy.score }],
+                focus: `Modelo ${model.label}`,
+              })}
+              registerContext={false}
+            />
+          )}
 
           <ModelDetails row={row} />
 
@@ -401,7 +418,7 @@ export function ValuationTable({ price, strategies, access, isFinancial = false,
         loading={loading}
         loadingRows={8}
         getRowId={(row) => row.model.key}
-        renderExpanded={(row) => <ExpandedRow row={row} reinvestment={reinvestment} />}
+        renderExpanded={(row) => <ExpandedRow row={row} reinvestment={reinvestment} price={price} />}
         caption="Preço justo, margem de segurança e critérios por modelo de valuation"
         empty={{
           title: 'Sem estimativas para esta empresa',

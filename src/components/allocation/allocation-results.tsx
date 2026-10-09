@@ -10,6 +10,9 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { formatBRL, formatDate, formatNumber, formatPct } from '@/lib/format'
 import { ALLOCATION_DISCLAIMER, ALLOCATION_MODEL_LABEL, MARKET_DISCLAIMER } from '@/lib/allocation/constants'
 import type { AllocationResult, AllocationRow, ExcludedRow } from '@/lib/allocation/types'
+import { AskBenButton } from '@/components/ben/ask-ben-button'
+import { buildAllocationContext } from '@/lib/ben-context/builders'
+import { askBenQuestions } from '@/lib/ben-context/questions'
 
 const TYPE_LABEL: Record<AllocationRow['assetType'], string> = { stock: 'Ação', fii: 'FII', etf: 'ETF', bdr: 'BDR' }
 
@@ -166,6 +169,19 @@ export function AllocationResults({ result, mode, universeLabel, actions, extra 
           <span className="tabular-nums">
             {allocationSummary(result)} · {universeLabel}
           </span>
+        }
+        actions={
+          result.allocations.length > 0 ? (
+            <AskBenButton
+              question={askBenQuestions.allocation()}
+              context={buildAllocationContext({
+                amount: result.amount,
+                universe: universeLabel,
+                allocations: result.allocations,
+                leftover: result.leftover,
+              })}
+            />
+          ) : undefined
         }
       />
       <p className="rounded-md border border-border bg-surface px-3 py-2 text-xs leading-5 text-muted-foreground">{disclaimer}</p>

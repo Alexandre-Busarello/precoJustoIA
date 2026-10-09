@@ -23,6 +23,9 @@ import {
 import { CompanyLogo } from '@/components/company-logo';
 import { describeTriggerConfig } from '@/components/custom-monitor-form';
 import type { TriggerConfig } from '@/lib/custom-trigger-service';
+import { AskBenButton } from '@/components/ben/ask-ben-button';
+import { buildAlertContext } from '@/lib/ben-context/builders';
+import { askBenQuestions } from '@/lib/ben-context/questions';
 
 interface Monitor {
   id: string;
@@ -201,6 +204,20 @@ export default function CustomMonitorsList({ monitors }: CustomMonitorsListProps
                   />
                   <span className="sm:sr-only">{monitor.isActive ? 'Ativo' : 'Pausado'}</span>
                 </label>
+                {(monitor.lastTriggeredAt || monitor.isAlertActive) && (
+                  <AskBenButton
+                    variant="icon"
+                    question={askBenQuestions.alert()}
+                    context={buildAlertContext({
+                      ticker: monitor.ticker,
+                      conditions,
+                      lastTriggeredAt: monitor.lastTriggeredAt,
+                      active: monitor.isActive,
+                    })}
+                    registerContext={false}
+                    className="size-11 sm:size-9"
+                  />
+                )}
                 <Button variant="ghost" size="icon" asChild className="size-11 sm:size-9">
                   <Link href={`/dashboard/monitoramentos-customizados/editar/${monitor.id}`} aria-label={`Editar monitoramento de ${monitor.ticker}`}>
                     <Pencil className="size-4" strokeWidth={1.75} aria-hidden="true" />

@@ -27,6 +27,9 @@ import { ScreeningConfigurator } from "@/components/screening-configurator"
 import { FiiScreeningConfigurator } from "@/components/fii-screening-configurator"
 import { ScreeningAIAssistant } from "@/components/screening-ai-assistant"
 import { SCREENING_PRESETS, getAllPresetSlugs } from "@/lib/screening-presets"
+import { AskBenButton } from "@/components/ben/ask-ben-button"
+import { buildScreeningContext, summarizeFilters } from "@/lib/ben-context/builders"
+import { askBenQuestions } from "@/lib/ben-context/questions"
 import { ScreeningResults } from "./screening-results"
 import { ScreeningSeoContent } from "./screening-seo-content"
 import {
@@ -469,6 +472,18 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
                     <Loader2 className="size-3.5 animate-spin" strokeWidth={1.75} aria-hidden="true" />
                     Atualizando
                   </span>
+                )}
+                {response && results.length > 0 && (
+                  <AskBenButton
+                    className="ml-auto"
+                    question={askBenQuestions.results()}
+                    context={buildScreeningContext({
+                      assetClass: isFiisHub ? "fiis" : "acoes",
+                      filters: summarizeFilters(isFiisHub ? fiiParams : params),
+                      resultCount: countKnown ? total : null,
+                      tickers: results.map((result) => result.ticker),
+                    })}
+                  />
                 )}
               </div>
               {droppedPremiumFilters && (

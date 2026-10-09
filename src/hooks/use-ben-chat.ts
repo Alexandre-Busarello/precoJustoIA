@@ -4,10 +4,21 @@
 
 'use client'
 
+import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
 import type { ChunkMetadata } from '@/lib/ben-service'
+import type { BenPageContext } from '@/lib/ben-context/types'
+import {
+  appendPendingAnswer,
+  finishPendingAsk,
+  getPendingAsk,
+  resolvePageContext,
+  startPendingAsk,
+  subscribePendingAsks,
+  type PendingAsk,
+} from '@/lib/ben-context/store'
 
 interface BenConversation {
   id: string
@@ -29,13 +40,23 @@ interface BenMessage {
   toolCalls?: any
 }
 
+/** Contexto antigo do chat (`pageType` lido do pathname); o novo é `BenPageContext` (campo `kind`). */
+interface LegacyPageContext {
+  pageType: string
+  ticker?: string
+}
+
 interface SendMessageParams {
   conversationId: string
   message: string
-  pageContext?: {
-    pageType: string
-    ticker?: string
-  }
+  /** Contexto da tela. Sem ele (ou no formato antigo), vale o da rota completado pelo registrado pela página. */
+  pageContext?: Partial<BenPageContext> | LegacyPageContext
+}
+
+/** Contexto enviado ao servidor: rota + o registrado pela página + o informado na chamada. */
+function requestContext(pathname: string, pageContext: SendMessageParams['pageContext']): BenPageContext {
+  const provided = pageContext && 'kind' in pageContext ? pageContext : null
+  return resolvePageContext(pathname, provided)
 }
 
 interface TextChunkData {
@@ -104,7 +125,7 @@ export function useSendBenMessage() {
   const pathname = usePathname()
 
   return useMutation({
-    mutationFn: async ({ conversationId, message }: SendMessageParams) => {
+    mutationFn: async ({ conversationId, message, pageContext }: SendMessageParams) => {
       const response = await fetch('/api/ben/chat', {
         method: 'POST',
         headers: {
@@ -113,7 +134,8 @@ export function useSendBenMessage() {
         body: JSON.stringify({
           conversationId,
           message,
-          contextUrl: pathname
+          contextUrl: pathname,
+          pageContext: requestContext(pathname, pageContext)
         })
       })
 
@@ -158,7 +180,7 @@ export function useSendBenMessageStream() {
           conversationId,
           message,
           contextUrl: pathname,
-          pageContext
+          pageContext: requestContext(pathname, pageContext)
         })
       })
 
@@ -288,7 +310,7 @@ export function useSendBenMessageStream() {
  * Hook para carregar mensagens de uma conversa
  */
 export function useBenMessages(conversationId: string | null) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ['ben-messages', conversationId],
     queryFn: async () => {
       if (!conversationId) return []
@@ -304,6 +326,120 @@ export function useBenMessages(conversationId: string | null) {
     enabled: !!conversationId,
     refetchInterval: 5000 // Refetch a cada 5 segundos quando conversa está aberta
   })
+
+  // Pergunta de um "Perguntar ao Ben" ainda em andamento: aparece na conversa até a versão salva chegar
+  const pending = useSyncExternalStore(
+    subscribePendingAsks,
+    () => getPendingAsk(conversationId),
+    () => null
+  )
+  const data = useMemo(() => withPendingAsk(query.data, pending), [query.data, pending])
+
+  return { ...query, data }
+}
+
+/** Texto da resposta enquanto o Ben consulta os dados (antes do primeiro trecho). */
+export const BEN_PENDING_ANSWER = 'Consultando os dados da plataforma…'
+
+function withPendingAsk(messages: BenMessage[] | undefined, pending: PendingAsk | null): BenMessage[] | undefined {
+  if (!pending) return messages
+  const saved = messages ?? []
+  if (saved.length > pending.baseCount) return messages
+  const createdAt = new Date(pending.startedAt)
+  return [
+    ...saved,
+    { id: `pending-question-${pending.startedAt}`, role: 'USER', content: pending.question, createdAt },
+    { id: `pending-answer-${pending.startedAt}`, role: 'ASSISTANT', content: pending.answer || BEN_PENDING_ANSWER, createdAt },
+  ]
+}
+
+export interface BenLimitState {
+  allowed: boolean
+  /** Mensagens restantes hoje; -1 = sem limite (Premium). */
+  remaining: number
+  /** Limite diário; -1 = sem limite. */
+  limit: number
+}
+
+async function fetchBenLimit(): Promise<BenLimitState> {
+  const response = await fetch('/api/ben/chat')
+  if (!response.ok) throw new Error('Erro ao verificar o limite de mensagens')
+  return response.json()
+}
+
+/** Limite diário de mensagens do Ben (grátis: 2 por dia). */
+export function useBenLimit({ enabled = true }: { enabled?: boolean } = {}) {
+  const { data: session } = useSession()
+  return useQuery({
+    queryKey: ['ben-limit'],
+    queryFn: fetchBenLimit,
+    enabled: !!session && enabled,
+    staleTime: 30 * 1000
+  })
+}
+
+export type AskBenOutcome =
+  | { status: 'sent'; conversationId: string }
+  | { status: 'limit'; limit: BenLimitState }
+
+export interface AskBenCallbacks {
+  /** A conversa foi criada e a pergunta saiu: hora de abrir o chat nela. */
+  onStarted?: (conversationId: string) => void
+  /** A resposta não veio (erro do servidor ou da rede). */
+  onFailed?: (message: string) => void
+}
+
+/**
+ * "Perguntar ao Ben": confere o limite do plano, cria uma conversa nova e envia a pergunta com o contexto da tela.
+ * Com o limite atingido, não cria conversa nem envia nada (o chamador mostra o estado de limite).
+ */
+export function useAskBen() {
+  const queryClient = useQueryClient()
+  const createConversation = useCreateBenConversation()
+  const sendMessage = useSendBenMessageStream()
+
+  const ask = useCallback(
+    async (question: string, context: Partial<BenPageContext> | null, callbacks: AskBenCallbacks = {}): Promise<AskBenOutcome> => {
+      const limit = await queryClient.fetchQuery({ queryKey: ['ben-limit'], queryFn: fetchBenLimit, staleTime: 0 })
+      if (!limit.allowed) return { status: 'limit', limit }
+
+      const conversation = await createConversation.mutateAsync(undefined)
+      const conversationId = conversation.id
+      startPendingAsk(conversationId, question, 0)
+      callbacks.onStarted?.(conversationId)
+
+      let streamError: string | null = null
+      const settle = async () => {
+        await queryClient.refetchQueries({ queryKey: ['ben-messages', conversationId] })
+        finishPendingAsk(conversationId)
+        queryClient.invalidateQueries({ queryKey: ['ben-limit'] })
+        if (streamError) callbacks.onFailed?.(streamError)
+      }
+
+      sendMessage.mutate(
+        {
+          conversationId,
+          message: question,
+          pageContext: context ?? undefined,
+          onChunk: (chunk) => {
+            if (chunk.type === 'text' && chunk.data) appendPendingAnswer(conversationId, String(chunk.data))
+            else if (chunk.type === 'error') streamError = chunk.data?.error || 'Erro ao gerar a resposta'
+          }
+        },
+        {
+          onSettled: () => void settle(),
+          onError: (error) => {
+            streamError = error instanceof Error && error.message ? error.message : 'Erro ao enviar a pergunta'
+          }
+        }
+      )
+
+      return { status: 'sent', conversationId }
+    },
+    [queryClient, createConversation, sendMessage]
+  )
+
+  return { ask, isAsking: createConversation.isPending }
 }
 
 /**

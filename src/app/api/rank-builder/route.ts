@@ -28,6 +28,14 @@ import { getCompaniesData, getCompaniesDataFii } from "@/lib/rank-builder-servic
 import { applyLiquidityRules, getRankingModel, isRankingUniverse } from "@/lib/ranking-models";
 import { warmMacroAssumptions } from "@/lib/finance/macro";
 import { formatBRLCompact } from "@/lib/format";
+import { cache } from "@/lib/cache-service";
+import {
+  PREMIUM_SCREENING_METRICS,
+  ScreeningStrategy,
+  type ExtendedScreeningParams,
+  type ScreeningCompanyData,
+  type ScreeningPriceSignals,
+} from "@/lib/strategies/screening-strategy";
 
 const FII_RANK_BUILDER_MODELS = new Set([
   "fiiScreening",
@@ -118,6 +126,66 @@ function withRegistryDefaults(model: string, params: ModelParams): ModelParams {
     if (filled[key] === undefined) filled[key] = value;
   }
   return filled as ModelParams;
+}
+
+/** Dia corrente em São Paulo (YYYY-MM-DD): o cache dos sinais de preço vira junto com o pregão. */
+function tradingDayKey(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+}
+
+const PRICE_SIGNALS_TTL_SECONDS = 6 * 60 * 60;
+
+interface PriceSignalRow {
+  ticker: string;
+  sma_days: number;
+  sma200: number | null;
+  last_close: number | null;
+  high52w: number | null;
+}
+
+/**
+ * Sinais de preço de todas as ações e BDRs (MM200 e queda desde a máxima de 52 semanas), numa única consulta agregada
+ * sobre os preços diários, com cache por pregão. Mesmas definições de `priceVsSma` e `drawdownFrom52wHigh`
+ * (src/lib/finance/signals.ts): MM200 exige 200 fechamentos; a máxima considera os 364 dias até o último fechamento.
+ */
+async function loadPriceSignals(): Promise<Record<string, ScreeningPriceSignals>> {
+  return cache.wrap(
+    `screening:price-signals:v1:${tradingDayKey()}`,
+    async () => {
+      // ~14 meses corridos cobrem 200 pregões e as 52 semanas com folga para feriados.
+      const since = new Date(Date.now() - 430 * 86_400_000);
+      const rows = await prisma.$queryRaw<PriceSignalRow[]>`
+        SELECT ticker,
+               COUNT(*) FILTER (WHERE rn <= 200)::int AS sma_days,
+               (AVG(close) FILTER (WHERE rn <= 200))::float8 AS sma200,
+               (MAX(close) FILTER (WHERE rn = 1))::float8 AS last_close,
+               (MAX(close) FILTER (WHERE date >= last_date - 364))::float8 AS high52w
+        FROM (
+          SELECT c.ticker, hp.date, hp.close,
+                 ROW_NUMBER() OVER (PARTITION BY hp.company_id ORDER BY hp.date DESC) AS rn,
+                 MAX(hp.date) OVER (PARTITION BY hp.company_id) AS last_date
+          FROM historical_prices hp
+          JOIN companies c ON c.id = hp.company_id
+          WHERE hp.interval = '1d'
+            AND hp.date >= ${since}
+            AND hp.close > 0
+            AND c.asset_type IN ('STOCK', 'BDR')
+        ) recent
+        GROUP BY ticker
+      `;
+      const signals: Record<string, ScreeningPriceSignals> = {};
+      for (const row of rows) {
+        const last = row.last_close;
+        const hasSma = row.sma_days >= 200 && row.sma200 !== null && row.sma200 > 0;
+        signals[row.ticker] = {
+          pctAboveSma200: hasSma && last !== null ? last / (row.sma200 as number) - 1 : null,
+          drawdown52w: last !== null && row.high52w !== null && row.high52w > 0 ? last / row.high52w - 1 : null,
+        };
+      }
+      return signals;
+    },
+    { ttl: PRICE_SIGNALS_TTL_SECONDS }
+  );
 }
 
 function parseMinLiquidity(value: unknown): number | null | undefined {
@@ -374,6 +442,8 @@ export async function POST(request: NextRequest) {
     );
 
     let results: RankBuilderResult[] = [];
+    /** Screening com o filtro de queda: empresas que ficaram de fora só por falta de dados. */
+    let screeningInsufficientData: number | null = null;
 
     // Usar body.params se foi modificado (para screening não-Premium), senão usar params original
     const executionParams = withRegistryDefaults(model, (body.params || params) as ModelParams);
@@ -441,26 +511,34 @@ export async function POST(request: NextRequest) {
         );
         break;
       case "screening": {
-        const screeningParams = executionParams as ScreeningParams;
+        const screeningParams = executionParams as ExtendedScreeningParams;
 
         // Verificar status Premium do usuário (pode ser null se deslogado)
         const screeningUser = session?.user?.id ? await getCurrentUser() : null;
         const screeningIsPremium = screeningUser?.isPremium || false;
 
-        // Calcular total ANTES de aplicar limite (para mostrar blur nas rotas de marketing)
-        const totalCount = StrategyFactory.runScreeningRanking(companies, {
-          ...screeningParams,
-          limit: undefined,
-        }).length;
+        // "Queda com fundamentos intactos" precisa dos sinais de preço diários (consulta em lote, cache por pregão).
+        let screeningCompanies: ScreeningCompanyData[] = companies;
+        if (screeningParams.dipWithIntactFundamentals) {
+          const priceSignals = await loadPriceSignals();
+          screeningCompanies = companies.map((company) => ({ ...company, priceSignals: priceSignals[company.ticker] ?? null }));
+        }
+
+        // Uma passada só: o total real (antes do limite) e as empresas sem dados para o filtro de queda.
+        const screened = new ScreeningStrategy().screen(screeningCompanies, screeningParams);
+        screeningInsufficientData = screeningParams.dipWithIntactFundamentals ? screened.insufficientData : null;
 
         // Backend SEMPRE aplica o limite correto baseado no status Premium (não confiar no frontend):
-        // Premium sem limite (usa o padrão da estratégia); não-Premium (incluindo deslogados) sempre 3.
-        results = StrategyFactory.runScreeningRanking(companies, {
-          ...screeningParams,
-          limit: screeningIsPremium ? undefined : 3,
-        });
+        // Premium sem limite; não-Premium (incluindo deslogados) sempre 3, sem as métricas dos modelos Premium.
+        results = screeningIsPremium
+          ? screened.results
+          : screened.results.slice(0, 3).map((result) => {
+              const keyMetrics = { ...(result.key_metrics || {}) };
+              for (const key of PREMIUM_SCREENING_METRICS) delete keyMetrics[key];
+              return { ...result, key_metrics: keyMetrics };
+            });
 
-        (results as any).__screeningTotalCount = totalCount;
+        (results as any).__screeningTotalCount = screened.results.length;
         break;
       }
       case "barsi":
@@ -605,6 +683,7 @@ export async function POST(request: NextRequest) {
       rational,
       results,
       count: totalCount, // Total real de empresas encontradas (antes do limite)
+      ...(screeningInsufficientData !== null && { insufficientData: screeningInsufficientData }),
     });
   } catch (error) {
     console.error("Erro na API rank-builder:", error);

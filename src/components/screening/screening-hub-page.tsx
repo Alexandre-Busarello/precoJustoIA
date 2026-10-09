@@ -6,11 +6,13 @@ import { useSearchParams } from "next/navigation"
 import { signIn, useSession } from "next-auth/react"
 import { Loader2, SlidersHorizontal } from "lucide-react"
 import type { ScreeningParams } from "@/lib/strategies/types"
+import type { ExtendedScreeningParams } from "@/lib/strategies/screening-strategy"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { useEngagementPixel } from "@/hooks/use-engagement-pixel"
 import { useIsMobile } from "@/hooks/use-is-mobile"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
+import { InfoHint } from "@/components/ui/info-hint"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -32,7 +34,11 @@ import {
   countActiveStockFilters,
   DEFAULT_FII_PARAMS,
   defaultStockParams,
+  fiiParamsFromQuery,
+  fiiParamsToQuery,
   sortResults,
+  stockParamsFromQuery,
+  stockParamsToQuery,
   type FiiScreeningFormParams,
   type MobileSortKey,
   type ScreeningResponse,
@@ -90,7 +96,7 @@ function toStockAssetType(value: string | null): StockAssetType {
 }
 
 /** Corpo enviado a /api/rank-builder (mesma API de antes; o backend aplica os limites do plano). */
-function buildRequestBody(isFii: boolean, params: ScreeningParams, fiiParams: FiiScreeningFormParams) {
+function buildRequestBody(isFii: boolean, params: ExtendedScreeningParams, fiiParams: FiiScreeningFormParams) {
   if (isFii) {
     return {
       model: "fiiScreening",
@@ -107,7 +113,7 @@ function buildRequestBody(isFii: boolean, params: ScreeningParams, fiiParams: Fi
       },
     }
   }
-  const rest: ScreeningParams = { ...params }
+  const rest: ExtendedScreeningParams = { ...params }
   delete rest.limit
   const assetTypeFilter = rest.assetTypeFilter && rest.assetTypeFilter !== "fii" ? rest.assetTypeFilter : "both"
   return {
@@ -124,14 +130,15 @@ const STOCK_SORT_OPTIONS: { value: MobileSortKey; label: string }[] = [
   { value: "relevance", label: "Relevância" },
   { value: "upside", label: "Maior upside" },
   { value: "pl", label: "Menor P/L" },
-  { value: "dy", label: "Maior dividend yield" },
+  { value: "peg", label: "Menor PEG" },
+  { value: "dy", label: "Maior DY 12m" },
   { value: "marketCap", label: "Maior valor de mercado" },
 ]
 
 const FII_SORT_OPTIONS: { value: MobileSortKey; label: string }[] = [
   { value: "relevance", label: "Relevância" },
   { value: "pjFiiScore", label: "Maior score PJ-FII" },
-  { value: "dy", label: "Maior dividend yield" },
+  { value: "dy", label: "Maior DY 12m" },
   { value: "pvp", label: "Menor P/VP" },
   { value: "upside", label: "Maior upside" },
 ]
@@ -151,13 +158,25 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
   const isMobile = useIsMobile()
   const isDesktop = useIsDesktop()
 
-  const [params, setParams] = useState<ScreeningParams>(() => defaultStockParams(urlAssetType))
-  const [fiiParams, setFiiParams] = useState<FiiScreeningFormParams>(DEFAULT_FII_PARAMS)
+  // Filtros iniciais vindos da URL (links compartilháveis); os nomes antigos, como `dy`, continuam valendo.
+  const [params, setParams] = useState<ExtendedScreeningParams>(() =>
+    isFiisHub ? defaultStockParams(urlAssetType) : stockParamsFromQuery(new URLSearchParams(searchParams.toString()), urlAssetType)
+  )
+  const [fiiParams, setFiiParams] = useState<FiiScreeningFormParams>(() =>
+    isFiisHub ? fiiParamsFromQuery(new URLSearchParams(searchParams.toString())) : DEFAULT_FII_PARAMS
+  )
   const [prevUrlAssetType, setPrevUrlAssetType] = useState(urlAssetType)
   if (urlAssetType !== prevUrlAssetType) {
     setPrevUrlAssetType(urlAssetType)
-    setParams((current) => ({ ...current, assetTypeFilter: urlAssetType }))
+    if (params.assetTypeFilter !== urlAssetType) setParams((current) => ({ ...current, assetTypeFilter: urlAssetType }))
   }
+
+  // Mantém a URL igual aos filtros, sem nova navegação: o link copiado reabre a mesma busca.
+  useEffect(() => {
+    const search = (isFiisHub ? fiiParamsToQuery(fiiParams) : stockParamsToQuery(params)).toString()
+    const next = `${window.location.pathname}${search ? `?${search}` : ""}`
+    if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(null, "", next)
+  }, [isFiisHub, params, fiiParams])
 
   const [response, setResponse] = useState<ScreeningResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -217,7 +236,7 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
   useEffect(() => {
     paramsRef.current = { params, fiiParams }
   }, [params, fiiParams])
-  const appliedRef = useRef<{ key: string; params: ScreeningParams; fiiParams: FiiScreeningFormParams } | null>(null)
+  const appliedRef = useRef<{ key: string; params: ExtendedScreeningParams; fiiParams: FiiScreeningFormParams } | null>(null)
   useEffect(() => {
     if (status === "loading") return
     const isInitial = completedSearchesRef.current === 0
@@ -283,13 +302,14 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
   }
 
   const handleAIParametersGenerated = (generated: ScreeningParams) => {
-    setParams({ ...defaultStockParams(currentAssetType), ...generated })
+    setParams({ ...defaultStockParams(currentAssetType), minLiquidity: params.minLiquidity, ...generated })
     setFiltersOpen(false)
   }
 
   const results = useMemo(() => response?.results ?? [], [response])
   const cardResults = useMemo(() => sortResults(results, mobileSort), [results, mobileSort])
   const total = response?.count ?? 0
+  const insufficientData = !isFiisHub && params.dipWithIntactFundamentals ? response?.insufficientData ?? 0 : 0
   const noun = isFiisHub ? (total === 1 ? "FII" : "FIIs") : total === 1 ? "ação" : "ações"
   // Fora do Premium o backend corta em 3 antes de contar: só mostramos o total quando ele é conhecido.
   const countKnown = hasFullAccess || total > results.length || results.length < FREE_RESULT_LIMIT
@@ -436,6 +456,12 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
                   </span>
                 )}
               </div>
+              {insufficientData > 0 && (
+                <p className="flex w-full items-center gap-1 text-xs tabular-nums text-muted-foreground">
+                  {insufficientData.toLocaleString("pt-BR")} sem dados suficientes
+                  <InfoHint content="Ações que atendem aos demais filtros, mas não têm 200 pregões de preço ou dois períodos de 12 meses de demonstrações para avaliar a queda com fundamentos intactos." />
+                </p>
+              )}
             </div>
 
             {error ? (
@@ -496,7 +522,8 @@ export function ScreeningHubPage({ variant }: { variant: ScreeningHubVariant }) 
             )}
 
             <p className="text-xs text-muted-foreground">
-              Preço justo e upside são estimativas baseadas em modelos e dados públicos. Não é recomendação de investimento.
+              Filtros quantitativos sobre dados públicos. Não é recomendação de investimento. Preço justo, preço-teto e
+              upside são estimativas baseadas em modelos.
             </p>
           </section>
         </div>
@@ -566,9 +593,9 @@ function getEmptySuggestions({
   setFiiParams,
 }: {
   isFiisHub: boolean
-  params: ScreeningParams
+  params: ExtendedScreeningParams
   fiiParams: FiiScreeningFormParams
-  setParams: (params: ScreeningParams) => void
+  setParams: (params: ExtendedScreeningParams) => void
   setFiiParams: (params: FiiScreeningFormParams) => void
 }): Suggestion[] {
   const suggestions: Suggestion[] = []
@@ -587,10 +614,27 @@ function getEmptySuggestions({
     if (segmento) {
       suggestions.push({ label: "Todos os segmentos", apply: () => setFiiParams({ ...fiiParams, segmento: undefined }) })
     }
+    if (fiiParams.minLiquidity !== null) {
+      suggestions.push({ label: "Incluir baixa liquidez", apply: () => setFiiParams({ ...fiiParams, minLiquidity: null }) })
+    }
     return suggestions.slice(0, 2)
   }
 
-  const { plFilter, roeFilter, dyFilter, companySize, selectedSectors } = params
+  const { plFilter, roeFilter, dyFilter, companySize, selectedSectors, bazinDiscountFilter, pegFilter } = params
+  if (params.dipWithIntactFundamentals) {
+    suggestions.push({ label: "Remover filtro de queda", apply: () => setParams({ ...params, dipWithIntactFundamentals: undefined }) })
+  }
+  if (bazinDiscountFilter?.enabled && bazinDiscountFilter.min !== undefined && bazinDiscountFilter.min > 0) {
+    const min = bazinDiscountFilter.min
+    suggestions.push({
+      label: "Reduzir desconto Bazin",
+      apply: () => setParams({ ...params, bazinDiscountFilter: { ...bazinDiscountFilter, min: Number((min / 2).toFixed(4)) } }),
+    })
+  }
+  if (pegFilter?.enabled && pegFilter.max !== undefined) {
+    const max = pegFilter.max
+    suggestions.push({ label: "Aumentar PEG máximo", apply: () => setParams({ ...params, pegFilter: { ...pegFilter, max: Number((max * 1.5).toFixed(2)) } }) })
+  }
   if (plFilter?.enabled && plFilter.max !== undefined) {
     const max = plFilter.max
     suggestions.push({ label: "Aumentar P/L máximo", apply: () => setParams({ ...params, plFilter: { ...plFilter, max: Number((max * 1.5).toFixed(1)) } }) })
@@ -608,6 +652,9 @@ function getEmptySuggestions({
   }
   if (selectedSectors && selectedSectors.length > 0) {
     suggestions.push({ label: "Todos os setores", apply: () => setParams({ ...params, selectedSectors: [], selectedIndustries: [] }) })
+  }
+  if (params.minLiquidity !== null) {
+    suggestions.push({ label: "Incluir baixa liquidez", apply: () => setParams({ ...params, minLiquidity: null }) })
   }
   return suggestions.slice(0, 2)
 }

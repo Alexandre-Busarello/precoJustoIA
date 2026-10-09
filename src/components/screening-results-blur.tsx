@@ -24,6 +24,8 @@ interface ScreeningResultsBlurProps {
   isPremium: boolean
   /** Métrica em destaque em cada linha (padrão: a primeira disponível de HIGHLIGHT_KEYS). */
   highlightMetric?: string
+  /** Linha de detalhe abaixo do nome (ex.: o motivo de entrar em "Queda com fundamentos intactos"). */
+  renderDetail?: (result: ScreeningResult) => string | null
 }
 
 const FREE_VISIBLE = 3
@@ -38,7 +40,17 @@ function highlightKey(results: ScreeningResult[]): string | null {
   return HIGHLIGHT_KEYS.find((key) => typeof first[key] === "number") ?? null
 }
 
-function ResultRow({ result, rank, metricKey }: { result: ScreeningResult; rank: number; metricKey: string | null }) {
+function ResultRow({
+  result,
+  rank,
+  metricKey,
+  detail,
+}: {
+  result: ScreeningResult
+  rank: number
+  metricKey: string | null
+  detail: string | null
+}) {
   const value = resultUpside(result)
   const tone = value === null || value === 0 ? "text-foreground" : value > 0 ? "text-positive" : "text-negative"
   return (
@@ -56,6 +68,7 @@ function ResultRow({ result, rank, metricKey }: { result: ScreeningResult; rank:
               {result.sector && <Badge variant="neutral">{result.sector}</Badge>}
             </div>
             <p className="truncate text-sm text-muted-foreground">{result.name}</p>
+            {detail && <p className="mt-1 text-xs tabular-nums text-muted-foreground">{detail}</p>}
           </div>
         </div>
         <dl className="grid grid-cols-3 gap-3 text-left sm:flex sm:shrink-0 sm:gap-6 sm:text-right">
@@ -102,7 +115,7 @@ function PlaceholderRow({ rank }: { rank: number }) {
  * Lista de resultados das páginas de estratégia. Para quem não é Premium mostra os 3 primeiros
  * e, se houver mais empresas, uma prévia bloqueada com um único CTA.
  */
-export function ScreeningResultsBlur({ results, totalCount, isPremium, highlightMetric }: ScreeningResultsBlurProps) {
+export function ScreeningResultsBlur({ results, totalCount, isPremium, highlightMetric, renderDetail }: ScreeningResultsBlurProps) {
   const { data: session, status } = useSession()
   const { trackEngagement } = useEngagementPixel()
   const { data: emailVerifiedData, isLoading: isLoadingEmail } = useEmailVerified()
@@ -154,7 +167,7 @@ export function ScreeningResultsBlur({ results, totalCount, isPremium, highlight
       <ol className="space-y-3">
         {visible.map((result, index) => (
           <li key={result.ticker}>
-            <ResultRow result={result} rank={index + 1} metricKey={metricKey} />
+            <ResultRow result={result} rank={index + 1} metricKey={metricKey} detail={renderDetail?.(result) ?? null} />
           </li>
         ))}
       </ol>

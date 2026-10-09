@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { NumberField } from "@/components/screening/number-field"
+import { LiquidityFilter } from "@/components/screening/liquidity-filter"
 import type { FiiScreeningFormParams } from "@/components/screening/screening-metrics"
 
 export type { FiiScreeningFormParams } from "@/components/screening/screening-metrics"
@@ -76,12 +77,21 @@ export function FiiScreeningConfigurator({ params, onChange, segments, segmentsL
         )}
       </div>
 
-      <FiiField label="Dividend yield mínimo (a.a.)">
+      <div className="border-y border-border py-3">
+        <LiquidityFilter
+          idPrefix="fii"
+          kind="fii"
+          value={params.minLiquidity}
+          onChange={(minLiquidity) => set({ minLiquidity })}
+        />
+      </div>
+
+      <FiiField label="DY 12m mínimo (proventos reais, bruto)">
         <NumberField
           value={pctToDisplay(params.minDY)}
           onChange={(value) => set({ minDY: pctToStored(value) })}
           placeholder="Ex.: 8"
-          ariaLabel="Dividend yield mínimo"
+          ariaLabel="DY 12m mínimo"
           suffix="%"
         />
       </FiiField>
@@ -91,14 +101,6 @@ export function FiiScreeningConfigurator({ params, onChange, segments, segmentsL
           onChange={(value) => set({ maxPVP: value })}
           placeholder="Ex.: 1,1"
           ariaLabel="P/VP máximo"
-        />
-      </FiiField>
-      <FiiField label="Liquidez diária mínima (R$)">
-        <NumberField
-          value={params.minLiquidity}
-          onChange={(value) => set({ minLiquidity: value })}
-          placeholder="Ex.: 1.000.000"
-          ariaLabel="Liquidez diária mínima em reais"
         />
       </FiiField>
       <FiiField label="Quantidade mínima de imóveis">

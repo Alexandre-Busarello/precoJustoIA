@@ -1,26 +1,33 @@
-import { ScreeningParams } from './strategies/types';
+import type { ExtendedScreeningParams } from './strategies/screening-strategy';
 
-export type ScreeningPresetSlug = 
+/** Presets de filtros fundamentalistas, exibidos pela página de estratégia padrão (`ScreeningConversionPage`). */
+export type FilterPresetSlug =
   | 'as-acoes-mais-baratas-segundo-graham'
   | 'top-vacas-leiteiras-dividendos'
   | 'small-caps-crescimento-explosivo'
   | 'oportunidades-desconto-excessivo'
   | 'ranking-formula-magica-b3';
 
-export interface ScreeningPreset {
-  slug: ScreeningPresetSlug;
+/** Presets com sinais de preço: página própria, que mostra o motivo de cada ativo e quantos ficaram sem dados. */
+export type SignalPresetSlug = 'queda-com-fundamentos-intactos';
+
+export type ScreeningPresetSlug = FilterPresetSlug | SignalPresetSlug;
+
+/** Sem argumento de tipo, cobre os presets de filtros (os que a página de estratégia padrão sabe exibir). */
+export interface ScreeningPreset<S extends ScreeningPresetSlug = FilterPresetSlug> {
+  slug: S;
   /** Nome descritivo (H1 e título da página SEO). */
   title: string;
   /** Nome curto para chips e listas. */
   shortTitle: string;
   /** Resumo neutro dos critérios, exibido abaixo do título. */
   hook: string;
-  params: ScreeningParams & { sortBy?: string };
+  params: ExtendedScreeningParams & { sortBy?: string };
   description: string;
   keywords: string[];
 }
 
-export const SCREENING_PRESETS: Record<ScreeningPresetSlug, ScreeningPreset> = {
+export const SCREENING_PRESETS: { [S in ScreeningPresetSlug]: ScreeningPreset<S> } = {
   'as-acoes-mais-baratas-segundo-graham': {
     slug: 'as-acoes-mais-baratas-segundo-graham',
     title: 'Ações com P/L e P/VP baixos pelos critérios de Graham',
@@ -41,7 +48,7 @@ export const SCREENING_PRESETS: Record<ScreeningPresetSlug, ScreeningPreset> = {
     slug: 'top-vacas-leiteiras-dividendos',
     title: 'Ações com dividend yield acima de 8% a.a.',
     shortTitle: 'DY acima de 8%',
-    hook: 'Empresas da B3 com dividend yield de pelo menos 8%, payout entre 25% e 90% (distribuição compatível com o lucro) e score geral mínimo de 60.',
+    hook: 'Empresas da B3 com dividend yield de pelo menos 8% nos últimos 12 meses (proventos reais, brutos), payout entre 25% e 90% (distribuição compatível com o lucro) e score geral mínimo de 60.',
     description: 'Ações da B3 com dividend yield de pelo menos 8%, payout entre 25% e 90% e score geral mínimo de 60. Filtro para quem busca renda com dividendos.',
     keywords: ['dividendos', 'dividend yield', 'renda passiva', 'vacas leiteiras', 'barsi', 'dividendos altos'],
     params: {
@@ -98,10 +105,28 @@ export const SCREENING_PRESETS: Record<ScreeningPresetSlug, ScreeningPreset> = {
       // Nota: Esta estratégia usa o modelo magicFormula, não screening
     },
   },
+  'queda-com-fundamentos-intactos': {
+    slug: 'queda-com-fundamentos-intactos',
+    title: 'Queda com fundamentos intactos',
+    shortTitle: 'Queda com fundamentos intactos',
+    hook: 'Ações da B3 com preço abaixo da média móvel de 200 pregões ou pelo menos 20% abaixo da máxima de 52 semanas, cujo lucro, ROE, margem e endividamento não pioraram no último período de 12 meses.',
+    description: 'Ações da B3 em queda de preço (abaixo da média de 200 pregões ou 20% abaixo da máxima de 52 semanas) com lucro, ROE, margem e endividamento preservados nos últimos 12 meses. Filtro quantitativo, não é recomendação.',
+    keywords: ['ações em queda', 'média móvel 200', 'máxima de 52 semanas', 'fundamentos', 'correção de preço', 'screening de ações'],
+    params: {
+      dipWithIntactFundamentals: true,
+      assetTypeFilter: 'b3',
+      sortBy: 'drawdown_asc', // Maior queda desde a máxima de 52 semanas primeiro
+    },
+  },
 };
 
-export function getPresetBySlug(slug: string): ScreeningPreset | null {
+export function getPresetBySlug(slug: string): ScreeningPreset<ScreeningPresetSlug> | null {
   return SCREENING_PRESETS[slug as ScreeningPresetSlug] || null;
+}
+
+/** Preset de filtros fundamentalistas (página de estratégia padrão), e não de sinais de preço. */
+export function isFilterPreset(preset: ScreeningPreset<ScreeningPresetSlug>): preset is ScreeningPreset<FilterPresetSlug> {
+  return preset.slug !== 'queda-com-fundamentos-intactos';
 }
 
 export function getAllPresetSlugs(): ScreeningPresetSlug[] {

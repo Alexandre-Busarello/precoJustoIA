@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { ChevronDown, X } from "lucide-react"
 import type { ScreeningFilter, ScreeningParams } from "@/lib/strategies/types"
+import type { ExtendedScreeningParams } from "@/lib/strategies/screening-strategy"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { InfoHint } from "@/components/ui/info-hint"
@@ -11,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { NumberField } from "@/components/screening/number-field"
+import { LiquidityFilter, SwitchRow } from "@/components/screening/liquidity-filter"
 import {
   isFilterActive,
   type StockAssetType,
@@ -90,7 +92,14 @@ const FILTER_GROUPS: FilterGroupDefinition[] = [
     id: "dividendos",
     title: "Dividendos",
     filters: [
-      { key: "dyFilter", label: "Dividend yield", factor: PCT, suffix: "%", premium: true },
+      {
+        key: "dyFilter",
+        label: "DY 12m (proventos reais, bruto)",
+        factor: PCT,
+        suffix: "%",
+        premium: true,
+        hint: "Soma dos dividendos e JCP brutos com data-com nos últimos 12 meses, dividida pelo preço atual.",
+      },
       { key: "payoutFilter", label: "Payout", factor: PCT, suffix: "%", premium: true },
     ],
   },
@@ -127,9 +136,32 @@ function toDisplay(stored: number | undefined, factor: number): number | undefin
   return stored === undefined ? undefined : Number((stored / factor).toPrecision(12))
 }
 
+const BAZIN_DISCOUNT_FILTER: RangeFilterDefinition = {
+  key: "bazinDiscountFilter",
+  label: "Desconto vs. preço-teto Bazin",
+  factor: PCT,
+  suffix: "%",
+  premium: true,
+  hint: "1 − preço ÷ preço-teto. Preço-teto = média dos proventos dos últimos anos completos ÷ DY alvo. Proventos extraordinários ficam fora da média. É uma estimativa.",
+}
+
+const PEG_FILTER: RangeFilterDefinition = {
+  key: "pegFilter",
+  label: "PEG (Peter Lynch)",
+  factor: 1,
+  premium: true,
+  hint: "P/L ÷ crescimento anual do lucro por ação em % (CAGR de 5 anos, até 25%). Bancos, seguradoras, commodities cíclicas, empresas com prejuízo ou sem crescimento ficam de fora quando o filtro está ativo.",
+}
+
+/** DY alvo padrão do preço-teto Bazin (o mesmo de `BAZIN_DEFAULTS`, sem levar a estratégia para o bundle do cliente). */
+const DEFAULT_BAZIN_TARGET_YIELD = 0.06
+
+const DIP_HINT =
+  "Preço abaixo da média móvel de 200 pregões ou pelo menos 20% abaixo da máxima de 52 semanas, com lucro, ROE, margem e endividamento preservados no último período de 12 meses. Ações sem histórico suficiente ficam de fora."
+
 interface ScreeningConfiguratorProps {
-  params: ScreeningParams
-  onParamsChange: (params: ScreeningParams) => void
+  params: ExtendedScreeningParams
+  onParamsChange: (params: ExtendedScreeningParams) => void
   /** Premium logado: libera filtros além de valuation (o backend aplica a mesma regra). */
   canUsePremiumFilters: boolean
   isLoggedIn: boolean
@@ -223,7 +255,22 @@ export function ScreeningConfigurator({
         )}
       </div>
 
+      <div className="border-t border-border pt-3">
+        <LiquidityFilter
+          idPrefix="screening"
+          kind="stock"
+          value={params.minLiquidity}
+          onChange={(minLiquidity) => onParamsChange({ ...params, minLiquidity })}
+        />
+      </div>
+
       <div className="border-t border-border">
+        <ModelSignalsGroup
+          params={params}
+          onParamsChange={onParamsChange}
+          locked={!canUsePremiumFilters}
+          lockedNote={lockedNote}
+        />
         {FILTER_GROUPS.map((group) => {
           const locked = !canUsePremiumFilters && group.filters.every((f) => f.premium)
           const activeCount = group.filters.filter((f) => isFilterActive(params[f.key])).length
@@ -361,6 +408,75 @@ function RangeFilterRow({
   )
 }
 
+/** Bazin, Peter Lynch e "Queda com fundamentos intactos": os mesmos critérios do "Onde aportar". */
+function ModelSignalsGroup({
+  params,
+  onParamsChange,
+  locked,
+  lockedNote,
+}: {
+  params: ExtendedScreeningParams
+  onParamsChange: (params: ExtendedScreeningParams) => void
+  locked: boolean
+  lockedNote: React.ReactNode
+}) {
+  const activeCount =
+    (isFilterActive(params.bazinDiscountFilter) ? 1 : 0) +
+    (isFilterActive(params.pegFilter) ? 1 : 0) +
+    (params.dipWithIntactFundamentals ? 1 : 0)
+  const targetYield = params.bazinTargetYield ?? DEFAULT_BAZIN_TARGET_YIELD
+
+  return (
+    <FilterGroup title="Modelos e sinais" activeCount={activeCount} locked={locked} defaultOpen={activeCount > 0}>
+      {locked && lockedNote}
+      <RangeFilterRow
+        definition={BAZIN_DISCOUNT_FILTER}
+        filter={params.bazinDiscountFilter}
+        onChange={(filter) => onParamsChange({ ...params, bazinDiscountFilter: filter })}
+        locked={locked}
+        showPremiumBadge={false}
+      />
+      <div className="space-y-1.5">
+        <div className="flex min-h-5 items-center gap-1 text-sm text-foreground">
+          <span className={locked ? "text-muted-foreground" : undefined}>DY alvo do preço-teto</span>
+          <InfoHint content="Dividend yield mínimo que o preço-teto Bazin garante sobre a média de proventos. Padrão: 6% ao ano." />
+        </div>
+        <NumberField
+          value={Number((targetYield * 100).toPrecision(12))}
+          onChange={(value) =>
+            onParamsChange({
+              ...params,
+              bazinTargetYield:
+                value === undefined || value <= 0 || value > 100 || value / 100 === DEFAULT_BAZIN_TARGET_YIELD
+                  ? undefined
+                  : value / 100,
+            })
+          }
+          placeholder="6"
+          ariaLabel="DY alvo do preço-teto Bazin"
+          suffix="%"
+          disabled={locked}
+        />
+      </div>
+      <RangeFilterRow
+        definition={PEG_FILTER}
+        filter={params.pegFilter}
+        onChange={(filter) => onParamsChange({ ...params, pegFilter: filter })}
+        locked={locked}
+        showPremiumBadge={false}
+      />
+      <SwitchRow
+        id="screening-dip"
+        label="Queda com fundamentos intactos"
+        hint={DIP_HINT}
+        checked={!!params.dipWithIntactFundamentals}
+        onCheckedChange={(checked) => onParamsChange({ ...params, dipWithIntactFundamentals: checked || undefined })}
+        disabled={locked}
+      />
+    </FilterGroup>
+  )
+}
+
 function SectorFilterGroup({
   params,
   onParamsChange,
@@ -370,8 +486,8 @@ function SectorFilterGroup({
   industriesBySector,
   loading,
 }: {
-  params: ScreeningParams
-  onParamsChange: (params: ScreeningParams) => void
+  params: ExtendedScreeningParams
+  onParamsChange: (params: ExtendedScreeningParams) => void
   locked: boolean
   lockedNote: React.ReactNode
   sectors: string[]

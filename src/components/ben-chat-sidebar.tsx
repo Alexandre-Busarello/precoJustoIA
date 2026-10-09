@@ -5,7 +5,7 @@
  * Mensagens do usuário em balão neutro; respostas do Ben sem balão, em markdown.
  */
 
-import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { useState, useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -57,6 +57,8 @@ interface BenChatSidebarProps {
   onOpenChange: (open: boolean) => void
   initialConversationId?: string
   forceNewConversation?: boolean // Flag para forçar criação de nova conversa
+  /** Elemento que recebe o foco ao fechar (o chat é controlado, sem gatilho do Radix). */
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 const ANALISE_FLASH_TEMPLATE = `Faça uma análise rápida de [TICKER] em formato de lista curta, só com os dados:
@@ -266,7 +268,13 @@ function buildShareUrl(shareToken: string) {
   return `${window.location.origin}/share/ben/${shareToken}`
 }
 
-export function BenChatSidebar({ open, onOpenChange, initialConversationId, forceNewConversation = false }: BenChatSidebarProps) {
+export function BenChatSidebar({
+  open,
+  onOpenChange,
+  initialConversationId,
+  forceNewConversation = false,
+  returnFocusRef,
+}: BenChatSidebarProps) {
   const pathname = usePathname()
   const queryClient = useQueryClient()
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(initialConversationId || null)
@@ -624,6 +632,11 @@ export function BenChatSidebar({ open, onOpenChange, initialConversationId, forc
         side="right"
         showCloseButton={false}
         className="w-full gap-0 p-0 sm:max-w-md"
+        onCloseAutoFocus={(event) => {
+          if (!returnFocusRef?.current) return
+          event.preventDefault()
+          returnFocusRef.current.focus()
+        }}
         // Com o painel do link aberto, o Esc fecha só o painel (e não o chat inteiro)
         onEscapeKeyDown={(event) => {
           if (!shareOpen) return

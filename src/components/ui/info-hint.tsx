@@ -19,7 +19,9 @@ export interface InfoHintProps {
 
 /**
  * Ajuda contextual que funciona com toque e mouse (Popover, não tooltip de hover).
- * Ícone de 16 px com área de toque de 44 × 44 px, sem deslocar o layout.
+ * Ícone de 16 px com área de toque de 44 × 44 px, sem deslocar o layout:
+ * com mouse, um pseudo-elemento estende a área; em telas de toque, o próprio botão tem 44 px
+ * e a margem negativa mantém o espaço ocupado em 20 px.
  */
 export function InfoHint({
   content,
@@ -36,7 +38,7 @@ export function InfoHint({
           type="button"
           aria-label={label}
           className={cn(
-            "relative inline-flex size-5 shrink-0 items-center justify-center rounded-full align-middle text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none before:absolute before:-inset-3 before:content-['']",
+            "relative inline-flex size-5 shrink-0 items-center justify-center rounded-full align-middle text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none before:absolute before:-inset-3 before:content-[''] pointer-coarse:-m-3 pointer-coarse:size-11 pointer-coarse:before:content-none",
             className
           )}
         >

@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils"
  * Botão base.
  * - Variantes: `default` (marca), `secondary` (neutro preenchido), `outline`, `ghost`, `destructive`, `link`.
  * - Tamanhos com alvo de toque de 44 px no mobile e compactos a partir de `md`.
- *   `icon-sm` usa um pseudo-elemento para estender a área clicável até 44 px.
+ *   `sm` e `icon-sm` crescem até 44 px em telas de toque (`pointer-coarse`), em qualquer largura;
+ *   com mouse, `icon-sm` usa um pseudo-elemento para estender a área clicável.
  * - Um botão primário (`default`) por região visível; sem gradiente via `className`.
  */
 const buttonVariants = cva(
@@ -25,10 +26,10 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-11 px-4 has-[>svg]:px-3 md:h-9",
-        sm: "h-10 gap-1.5 px-3 has-[>svg]:px-2.5 md:h-8",
+        sm: "h-10 gap-1.5 px-3 has-[>svg]:px-2.5 md:h-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11",
         lg: "h-12 px-6 has-[>svg]:px-4 md:h-10",
         icon: "size-11 md:size-9",
-        "icon-sm": "size-9 before:absolute before:-inset-1 before:content-[''] md:size-8 md:before:-inset-1.5",
+        "icon-sm": "size-9 before:absolute before:-inset-1 before:content-[''] md:size-8 md:before:-inset-1.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11",
       },
     },
     defaultVariants: {

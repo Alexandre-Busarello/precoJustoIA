@@ -169,7 +169,7 @@ export function DataTable<T>({
                         type="button"
                         onClick={() => toggleSort(column.key)}
                         className={cn(
-                          "relative inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-['']",
+                          "relative inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-[''] pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:before:content-none",
                           column.align === "right" && "flex-row-reverse",
                           active && "text-foreground"
                         )}
@@ -263,7 +263,7 @@ export function DataTable<T>({
                             event.stopPropagation()
                             toggleExpanded(id)
                           }}
-                          className="relative inline-flex size-9 items-center justify-center rounded-md text-muted-foreground before:absolute before:-inset-1 before:content-[''] hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
+                          className="relative inline-flex size-9 items-center justify-center rounded-md text-muted-foreground before:absolute before:-inset-1 before:content-[''] pointer-coarse:size-11 pointer-coarse:before:content-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none"
                         >
                           <ChevronDown
                             className={cn("size-4 transition-transform", isOpen && "rotate-180")}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { MessageCircle, X } from 'lucide-react'
 
@@ -29,6 +29,7 @@ export function BenIntroCard({ className }: { className?: string }) {
   // null = ainda não lido do localStorage (evita piscar o card para quem já dispensou)
   const [dismissed, setDismissed] = useState<boolean | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
+  const openButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     setDismissed(readDismissed())
@@ -61,7 +62,7 @@ export function BenIntroCard({ className }: { className?: string }) {
                 O assistente de IA explica indicadores, compara empresas e resume relatórios.
               </p>
             </div>
-            <Button variant="outline" size="sm" className="w-fit shrink-0" onClick={() => setChatOpen(true)}>
+            <Button ref={openButtonRef} variant="outline" size="sm" className="w-fit shrink-0" onClick={() => setChatOpen(true)}>
               Abrir conversa
             </Button>
           </div>
@@ -75,7 +76,7 @@ export function BenIntroCard({ className }: { className?: string }) {
           </button>
         </section>
       )}
-      {chatOpen && <BenChatSidebar open={chatOpen} onOpenChange={setChatOpen} />}
+      {chatOpen && <BenChatSidebar open={chatOpen} onOpenChange={setChatOpen} returnFocusRef={openButtonRef} />}
     </>
   )
 }

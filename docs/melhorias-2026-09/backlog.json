@@ -638,6 +638,67 @@
    ],
    "tasks": "See docs/melhorias-2026-09/batches/w3-ibov-projections.md",
    "testPlan": "See docs/melhorias-2026-09/batches/w3-ibov-projections.md"
+  },
+  {
+   "id": "w5-data-consistency",
+   "wave": 5,
+   "title": "Same numbers for the same ticker on asset page and ranking; FII/ETF defaults and scoring fixes",
+   "ownedPaths": [
+    "src/lib/rank-builder-service.ts",
+    "src/lib/company-analysis-service.ts",
+    "src/lib/strategies/fii-ranking-strategy.ts",
+    "src/lib/strategies/fii-overall-score.ts",
+    "src/lib/strategies/strategy-factory.ts",
+    "src/lib/__tests__/consistency/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w5-data-consistency.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w5-data-consistency.md"
+  },
+  {
+   "id": "w5-platform-fixes",
+   "wave": 5,
+   "title": "Backtest example duplicates, date-only formatting, API rate limit, sector-analysis gating, login redirect, 404 robots, test glob",
+   "ownedPaths": [
+    "src/app/api/backtest/config/route.ts",
+    "src/lib/format.ts",
+    "src/middleware.ts",
+    "src/lib/rate-limit-cache-service.ts",
+    "src/app/api/sector-analysis/route.ts",
+    "src/app/login/page.tsx",
+    "package.json",
+    "src/lib/__tests__/platform/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w5-platform-fixes.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w5-platform-fixes.md"
+  },
+  {
+   "id": "w5-dividends-bdr-data",
+   "wave": 5,
+   "title": "FII dividend dedupe across sources; BDR fair values via parity and FX without schema change",
+   "ownedPaths": [
+    "src/lib/dividend-service.ts",
+    "src/lib/finance/dividends.ts",
+    "src/lib/bdr-data-service.ts",
+    "src/lib/__tests__/data-quality/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w5-dividends-bdr-data.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w5-dividends-bdr-data.md"
+  },
+  {
+   "id": "w5-mobile-ben-a11y",
+   "wave": 5,
+   "title": "Ben floating button on mobile, touch targets >= 44px, quiz slider name",
+   "ownedPaths": [
+    "src/components/ben-chat-fab.tsx",
+    "src/components/ben-chat-sidebar.tsx",
+    "src/components/ben-intro-card.tsx",
+    "src/components/ui/button.tsx",
+    "src/components/ui/info-hint.tsx",
+    "src/components/ui/data-table.tsx",
+    "src/components/rentability-selector.tsx"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w5-mobile-ben-a11y.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w5-mobile-ben-a11y.md"
   }
  ],
  "deferred": [

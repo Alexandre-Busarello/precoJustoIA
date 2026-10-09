@@ -17,6 +17,7 @@ Plano de melhoria de UX/UI, mobile, correções financeiras e novas features do 
 | 2 | `w2-valuation-core`, `w2-rankings-new-models`, `w2-score-compliance-fii`, `w2-returns`, `w2-dividends-agenda`, `w2-alerts`, `w2-platform-seo-pwa`, `w2-ui-market-tools`, `w2-ui-institutional-auth` | **Concluída** (05/10) — 8 lotes aprovados + `w2-rankings-new-models` como `wip` (`986090d`, bloqueante resolvido em `1e188da`); correções do coordenador `3743315`, `9680fb4`; integração `74f4774` (tsc e eslint limpos) |
 | 3 | `w3-onde-aportar` (premissa central: onde aportar, incl. modo premium "Todo o mercado") + `w3-screening-filters` + `w3-ibov-projections` (projeções do IBOV por estatística; em paralelo, arquivos disjuntos) | Pendente |
 | 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` (libera o toggle de tema) | Pendente |
+| 5 | `w5-data-consistency`, `w5-platform-fixes`, `w5-dividends-bdr-data`, `w5-mobile-ben-a11y` (pendências acumuladas das ondas 0–3; um lote por vez) | Pendente |
 
 Lotes da mesma onda não compartilham arquivos (verificado), então rodam em paralelo na mesma working tree.
 

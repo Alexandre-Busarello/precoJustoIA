@@ -78,3 +78,8 @@ Owner request (2026-10-09): a "quick backtest" started on another screen does no
 - Free + anon: capture the upgrade/login paths for the asset header and the ranking.
 - DB check (local only): `select count(*) from backtest_configs where user_id=<premium>` before/after 3 repeated clicks.
 - Screenshots: `npx tsx scripts/local/screenshots.ts --routes /backtest,/acao/petr4,/ranking,/carteira/<id> --auth both --viewports small,mobile,desktop --theme both`.
+
+## OWNER DECISION (2026-10-10) — free plan gets 1 quick backtest per month
+- Enable the existing `backtest_run` free limit (src/lib/usage-based-pricing-service.ts; this batch may edit it for this purpose only): free and logged-in users can run **1 quick backtest per calendar month** through `/api/backtest/quick`, and they see the FULL result. From the 2nd run on, show the upgrade state with "Você já usou o backtest grátis deste mês" + "Ver planos". Anonymous users get a login prompt.
+- `/api/backtest/run` (saved configs, custom params) stays Premium. The free quick run uses the fixed defaults only; the "Ajustar configuração" button is Premium-gated for free, with clear copy.
+- This makes the "1 backtest por mês" promise on /planos and the home TRUE, so w7-ux-coherence must NOT remove it.

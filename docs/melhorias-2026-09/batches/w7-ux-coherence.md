@@ -15,9 +15,9 @@ Read docs/melhorias-2026-09/backlog-rules.md first, plus the findings table in d
 - src/app/analise-setorial/page.tsx, src/app/radar-dividendos/page.tsx, src/app/pl-bolsa/page.tsx, src/app/comparador/comparador-hub.tsx, src/app/comparador/page.tsx (breadcrumb + metadata title only)
 
 ## TASKS
-1. **Plan promise vs. reality (P0, C-01).**
-   - `/planos` (`plan-comparison.tsx`: "Backtest de carteiras · Grátis: 1 por mês") and the home pricing (`landing-pricing-section.tsx`: "1 backtest por mês") promise a free backtest, but `/backtest` and `/api/backtest/run` require Premium. The `backtest_run` free limit in `usage-based-pricing-service.ts` is never used. **Default:** align the copy to reality. Free shows "—" / "Premium", and the list item is removed. Leave a `// DECISÃO DO DONO` note pointing to the option of enabling 1 quick backtest/month for free, which is a gating change and out of this batch.
-   - Same audit for "1 carteira com acompanhamento": free users can create 1 carteira, but /onde-aportar locks "Minha carteira" for free (`onde-aportar-client.tsx:239`). Do not change the gating. List it in the report as an owner decision, since it contradicts the core promise.
+1. **Plan promise vs. reality (P0, C-01). OWNER DECISION (2026-10-10):**
+   - Keep the "1 backtest por mês" promise: w7-backtest-flow enables it as 1 quick backtest per month for free. Check that the /planos and home copy say "1 backtest rápido por mês".
+   - "Minha carteira" on /onde-aportar is **enabled for free users** for their 1 carteira (`onde-aportar-client.tsx:239` gating, plus the matching check in src/app/api/allocation/simulate/route.ts and src/lib/allocation/service.ts, approved for this batch). "Todo o mercado" stays Premium, and the 3-ticker list limit for free stays.
    - `portfolio-empty-state.tsx`: hide "Criar a partir de um backtest" when the user is not Premium (dead end, C-12).
 2. **One vocabulary for valuation numbers (P0, C-02).** The rule from ux-ui.md §1.1 is that the 4 answers are Preço · Preço justo · Margem de segurança · Score.
    - Screening cards, the screening table (`header: "Upside"`), the blur preview and the dividend radar (`'Upside · P/VP e DY'`) show "Upside" (VJ/P − 1). The asset header and the ranking show "Margem de segurança" (1 − P/VJ). PETR4 reads "Upside +11,9%" in the screening and "Margem de segurança +10,6%" on the asset page for the same FCD price.

@@ -16,7 +16,7 @@ Plano de melhoria de UX/UI, mobile, correções financeiras e novas features do 
 | 1 | `w1-asset-stock`, `w1-asset-indicators-ai`, `w1-asset-fii-etf-bdr`, `w1-technical-radars`, `w1-home-pricing-checkout`, `w1-dashboard-alerts`, `w1-account-ben-onboarding`, `w1-portfolio`, `w1-ranking`, `w1-backtest`, `w1-screening`, `w1-comparador`, `w1-finance-foundation` | **Concluída** (30/09) — 13 lotes aprovados pelo testador (`395302f`…`7ff4c71`) + integração `7134d14` |
 | 2 | `w2-valuation-core`, `w2-rankings-new-models`, `w2-score-compliance-fii`, `w2-returns`, `w2-dividends-agenda`, `w2-alerts`, `w2-platform-seo-pwa`, `w2-ui-market-tools`, `w2-ui-institutional-auth` | **Concluída** (05/10) — 8 lotes aprovados + `w2-rankings-new-models` como `wip` (`986090d`, bloqueante resolvido em `1e188da`); correções do coordenador `3743315`, `9680fb4`; integração `74f4774` (tsc e eslint limpos) |
 | 3 | `w3-onde-aportar`, `w3-screening-filters`, `w3-ibov-projections` | **Concluída** (08/10) — `407e805` (Onde aportar, 2 ciclos), `1c9af1d` (screening, 1 ciclo), `61481fa` (IBOV estatístico, 1 ciclo) + integração `8a8f442` (tsc/eslint limpos, 326 testes). Tokens dos agentes: 878k + 496k + 412k + integração |
-| 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` (libera o toggle de tema) | Pendente |
+| 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` | **Concluída** (09/10) — `ad4cc22` (código morto, deps, CI `.github/workflows/quality.yml`), `85eeb53` (compliance), `e0c3907` (**dark mode liberado**, padrão = sistema, seletor no header/menu/perfil) + integração `57fc0f1` (tsc/eslint/check-ui/check-compliance limpos, 343 testes; prompts de IA reescritos sem "recomendação") |
 | 5 | `w5-data-consistency`, `w5-platform-fixes`, `w5-dividends-bdr-data`, `w5-mobile-ben-a11y` (pendências acumuladas das ondas 0–3; um lote por vez) | Pendente |
 | 6 | `w6-ben-context` → `w6-ben-ui` (Ben mais fácil e contextualizado com a tela; em sequência) | Pendente |
 
@@ -67,6 +67,13 @@ Depois da onda 2: logo em SVG (`127bb16`, fonte Ubuntu do logo original, ícones
 - Mobile: `Button size="sm"` 40 px e abas do `rentability-selector` 38 px; botão do Ben cobre a fila de abas do índice a 390 px; tabela de valuation rola 16 px a 1440 com o status "Dentro da faixa estimada".
 - Seed local: `free@local.test` tem 7 dias de trial (decisão do dono é 1 dia) — ajustar o script.
 - `scripts/local/screenshots.ts` ignora `--help` e grava em `<cwd>/shots` dentro do repo.
+
+## Pendências ao fim da onda 4 (09/10)
+- Capturas do produto (`public/images/product/*`, `how-it-works/*`) só existem em versão clara — fazer versões escuras.
+- Análise técnica: o rótulo "Preço Justo de Entrada" (metas por regra) sugere ponto de entrada — revisar a copy.
+- `src/app/admin/**` ainda tem gradientes e classes antigas (fora do escopo do dark mode).
+- `src/lib/security-middleware.ts` mantido porque `examples/` importa; apagar `examples/` e o middleware.
+- `package.json` engines `>=20`, mas `yarn test` precisa de Node ≥ 21 (glob) — subir para `>=22` após checar o runtime da Vercel.
 
 ## Pendências ao fim da onda 3 (09/10)
 

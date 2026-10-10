@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
-import { useRouter } from 'next/navigation';
+import { forwardRef, useState, useSyncExternalStore } from 'react';
 import { useSession } from 'next-auth/react';
-import { BarChart3, Bell, Check, GitCompare, TriangleAlert } from 'lucide-react';
+import { BarChart3, Bell, Check, GitCompare, Loader2, TriangleAlert, type LucideIcon, type LucideProps } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { usePremiumStatus } from '@/hooks/use-premium-status';
 import { useCompanyAnalysis } from '@/hooks/use-company-data';
 import { marginOfSafety } from '@/lib/valuation-metrics';
@@ -22,7 +22,10 @@ import {
   type StrategiesMap,
   type StrategyResult,
 } from '@/components/asset/valuation-models';
-import { BacktestConfigSelector } from '@/components/backtest-config-selector';
+import { useQuickBacktest } from '@/components/backtest/quick-backtest-button';
+import { busyLabel } from '@/lib/backtest/quick-backtest';
+import { BenPageContextRegistrar } from '@/components/ben/page-context-registrar';
+import { buildAssetContext } from '@/lib/ben-context/builders';
 
 interface StatementsAnalysis {
   score: number;
@@ -48,6 +51,11 @@ interface CompanyAnalysisResponse {
 }
 
 const subscribeNoop = () => () => {};
+
+/** Ícone girando para a ação "Backtest" enquanto a simulação roda. */
+const SpinnerIcon = forwardRef<SVGSVGElement, LucideProps>(function SpinnerIcon({ className, ...props }, ref) {
+  return <Loader2 ref={ref} className={cn('animate-spin', className)} {...props} />;
+}) as LucideIcon;
 
 /**
  * false no servidor e durante a hidratação; true depois da montagem no cliente.
@@ -198,11 +206,9 @@ export function StockSummaryHeader({
   compareHref,
   followAnchorId = 'acompanhar',
 }: StockSummaryHeaderProps) {
-  const router = useRouter();
   const { data } = useTypedCompanyAnalysis(ticker, canViewFullContent);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [backtestOpen, setBacktestOpen] = useState(false);
-  const [backtestAdded, setBacktestAdded] = useState(false);
+  const quickBacktest = useQuickBacktest();
 
   const access = { isPremium: canViewFullContent, isLoggedIn };
   const isFinancial = isFinancialCompany(sector, industry);
@@ -232,16 +238,9 @@ export function StockSummaryHeader({
     target.querySelector<HTMLInputElement>('input[type="email"]')?.focus({ preventScroll: true });
   };
 
+  // Um clique: simula 5 anos com os padrões e abre o resultado (grátis: 1 por mês; visitante: login)
   const openBacktest = () => {
-    if (!isLoggedIn) {
-      router.push('/login?redirect=/backtest');
-      return;
-    }
-    if (!canViewFullContent) {
-      router.push('/checkout?product=backtest');
-      return;
-    }
-    setBacktestOpen(true);
+    void quickBacktest.run({ tickers: [ticker], source: 'asset', sourceLabel: ticker });
   };
 
   const actions: AssetHeaderAction[] = [
@@ -249,7 +248,14 @@ export function StockSummaryHeader({
       ? { label: 'Acompanhar', icon: Bell, href: `/dashboard/monitoramentos-customizados/criar?ticker=${ticker}` }
       : { label: 'Acompanhar', icon: Bell, onClick: scrollToFollow },
     { label: 'Comparar', icon: GitCompare, href: compareHref },
-    { label: backtestAdded ? 'No backtest' : 'Backtest', icon: backtestAdded ? Check : BarChart3, onClick: openBacktest },
+    // Ocupado: mesmo rótulo (sem salto de largura), o ícone vira spinner e o botão fica desabilitado;
+    // o texto vai para a região viva
+    {
+      label: 'Backtest',
+      icon: quickBacktest.busy ? SpinnerIcon : BarChart3,
+      onClick: openBacktest,
+      busy: quickBacktest.busy,
+    },
   ];
 
   const fairValueSlot = fairLocked ? (
@@ -280,6 +286,18 @@ export function StockSummaryHeader({
 
   return (
     <>
+      {/* Contexto do Ben: só o que o usuário vê (preço justo e score bloqueados ficam de fora) */}
+      <BenPageContextRegistrar
+        context={buildAssetContext({
+          companyName: name,
+          price,
+          valuations:
+            !fairLocked && activeModel
+              ? [{ model: activeModel.shortLabel, fairValue, margin: headerMargin, score: activeStrategy?.score }]
+              : [],
+          ...(scoreLocked ? {} : { score: overallScore?.score ?? null }),
+        })}
+      />
       <AssetHeader
         ticker={ticker}
         name={name}
@@ -299,21 +317,14 @@ export function StockSummaryHeader({
           fairValue: fairLocked,
           score: scoreLocked,
           cta: isLoggedIn
-            ? { label: 'Desbloquear o score', href: '/checkout' }
+            ? { label: 'Desbloquear o score', href: '/planos' }
             : { label: 'Desbloquear com 1 dia grátis', href: '/register' },
         }}
       />
-      {canViewFullContent && isLoggedIn && (
-        <BacktestConfigSelector
-          isOpen={backtestOpen}
-          onClose={() => setBacktestOpen(false)}
-          asset={{ ticker, companyName: name, sector: sector ?? undefined, currentPrice: price ?? undefined }}
-          onConfigSelected={() => {
-            setBacktestAdded(true);
-            setBacktestOpen(false);
-          }}
-        />
-      )}
+      <span className="sr-only" role="status" aria-live="polite">
+        {quickBacktest.busy ? busyLabel() : ''}
+      </span>
+      {quickBacktest.dialogs}
     </>
   );
 }

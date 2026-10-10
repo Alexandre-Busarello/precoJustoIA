@@ -48,7 +48,7 @@ export async function shouldRegisterMemory(conversationId: string): Promise<{ sh
 
 2. **EMPRESAS DE INTERESSE** (Score: 60-80)
    - Tickers mencionados com contexto ou razão de interesse
-   - Decisões sobre compra/venda
+   - Movimentações que o usuário relata ter feito ou planejar na carteira
    - Análises solicitadas sobre empresas específicas
    - **REMOÇÃO DE INTERESSE** (Score: 70-90) - Se o usuário mencionar explicitamente que NÃO tem interesse em uma empresa (ex: "não tenho interesse em GNDI3"), isso é MUITO RELEVANTE e deve ser registrado
 

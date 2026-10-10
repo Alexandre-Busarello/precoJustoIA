@@ -1,7 +1,9 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { BacktestShowcaseStrip } from '@/components/backtest-showcase/showcase-section'
 import { ExamplePortfolioCard } from './example-portfolio-card'
 
 const BENEFITS = [
@@ -40,7 +42,10 @@ export function BacktestUpgradeCard() {
           </Button>
         </div>
       </section>
-      <ExamplePortfolioCard />
+      {/* Vitrine compacta; sem ela, a carteira de exemplo da ferramenta */}
+      <Suspense fallback={null}>
+        <BacktestShowcaseStrip fallback={<ExamplePortfolioCard />} />
+      </Suspense>
     </div>
   )
 }

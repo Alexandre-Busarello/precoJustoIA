@@ -15,6 +15,15 @@ import {
   type MethodologyDoc,
 } from "@/lib/metodologia-content"
 import { formatLiquidityLimit } from "@/lib/ranking-methodology"
+import { ALLOCATION_PRESETS, DEFAULT_ALLOCATION_OPTIONS, DEFAULT_MARKET_OPTIONS, FREE_MAX_TICKERS } from "@/lib/allocation/constants"
+import { BACKTEST_TRADING_COST_RATE } from "@/lib/adaptive-backtest-service"
+import {
+  SHOWCASE_DEFINITIONS,
+  SHOWCASE_DEFINITIONS_SINCE,
+  SHOWCASE_MIN_MONTHS,
+  SHOWCASE_YEARS,
+} from "@/lib/backtest-showcase/definitions"
+import { showcaseCompositionLabel, showcaseMoneyLabel } from "@/components/backtest-showcase/labels"
 
 // As premissas vêm do banco (BCB SGS) com cache de 1 hora; a página acompanha esse ritmo.
 export const revalidate = 3600
@@ -386,6 +395,126 @@ export default async function MetodologiaPage() {
                 ))}
               </section>
             ))}
+
+            <Section id="onde-aportar" title="Onde aportar">
+              <p className="text-base text-foreground">
+                A calculadora distribui um valor entre os ativos que você escolher (ou, no Premium, entre todos os ativos da
+                plataforma) segundo os critérios que você definir. É uma conta determinística sobre os mesmos preços justos da
+                página de cada ativo, sem IA nos números. O resultado é uma simulação, não uma indicação de compra.
+              </p>
+              <SubHeading>1. Filtros</SubHeading>
+              <List
+                items={[
+                  `Liquidez média diária mínima: ${formatLiquidityLimit(LIQUIDITY_DEFAULTS.stock)} para ações e ${formatLiquidityLimit(LIQUIDITY_DEFAULTS.fii)} para FIIs.`,
+                  `Dados suficientes: a nota de qualidade precisa usar pelo menos ${formatPct(DEFAULT_ALLOCATION_OPTIONS.minCoverage, { digits: 0 })} dos critérios aplicáveis. Dado ausente exclui o ativo.`,
+                  `Nota de qualidade mínima de ${DEFAULT_ALLOCATION_OPTIONS.minQualityScore} (de 0 a 100).`,
+                  "Fundamentos preservados: lucro líquido 12 meses sem queda maior que 15%, ROE e margem líquida sem queda maior que 3 p.p. e dívida líquida/EBITDA sem alta maior que 1,0x em relação aos 12 meses anteriores (em bancos e seguradoras, a alavancagem por EBITDA não se aplica).",
+                  "Preço abaixo do valor estimado em pelo menos um dos modelos escolhidos (Graham, FCD, Gordon, preço-teto de Bazin, P/VP justo para bancos e preço-teto de FIIs). Peter Lynch não entra porque não tem preço-alvo.",
+                  "ETFs e BDRs ficam de fora: a plataforma não calcula preço justo para eles.",
+                ]}
+              />
+              <SubHeading>2. Prioridade</SubHeading>
+              <Formula>{`prioridade = peso_desconto × min(margem mediana ÷ 50%, 1)
+           + peso_qualidade × nota ÷ 100
+           + peso_alvo × (distância até o peso-alvo ÷ maior distância)
+margem de segurança = 1 − preço ÷ preço justo`}</Formula>
+              <dl className="grid gap-3 sm:grid-cols-3">
+                {ALLOCATION_PRESETS.map((preset) => (
+                  <div key={preset.id} className="rounded-lg border border-border bg-card p-4">
+                    <dt className="text-sm font-medium text-foreground">{preset.label}</dt>
+                    <dd className="mt-1 text-sm tabular-nums text-muted-foreground">
+                      Desconto {formatPct(preset.weights.valuation, { digits: 0 })} · qualidade {formatPct(preset.weights.quality, { digits: 0 })} ·
+                      pesos-alvo {formatPct(preset.weights.targetGap, { digits: 0 })}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-sm text-muted-foreground">
+                Sem carteira com pesos-alvo, o peso dos alvos é redistribuído entre desconto e qualidade. No modo “Complementar
+                minha carteira”, a prioridade cai à metade quando o setor ou o ativo já passou do limite na sua carteira.
+              </p>
+              <SubHeading>3. Distribuição</SubHeading>
+              <List
+                items={[
+                  "Cada ativo recebe uma parte do valor proporcional à prioridade, em quantidades inteiras (mercado fracionário, a partir de 1 ação; sem fracionário, lotes de 100 ações).",
+                  `Limites: até ${formatPct(DEFAULT_ALLOCATION_OPTIONS.maxPerAssetPct, { digits: 0 })} do aporte por ativo e, com carteira, até ${formatPct(DEFAULT_ALLOCATION_OPTIONS.maxPortfolioPct, { digits: 0 })} da carteira depois do aporte (ou o peso-alvo, se for maior). Seguindo pesos-alvo, nenhum ativo passa do alvo.`,
+                  `Todo o mercado: ${DEFAULT_MARKET_OPTIONS.maxAssets} ativos por padrão (de 1 a 10), até ${DEFAULT_MARKET_OPTIONS.sectorMaxAssets} por setor e ${formatPct(DEFAULT_MARKET_OPTIONS.sectorMaxPct, { digits: 0 })} do aporte no mesmo setor.`,
+                  "O que sobra vai, uma ação por vez, a quem ficou mais longe da sua parte e depois na ordem de prioridade, até os limites. O valor que não cabe em ações inteiras aparece como sobra.",
+                  "Desempate: maior desconto, depois maior liquidez, depois ordem alfabética do ticker. Os mesmos dados e critérios sempre dão o mesmo resultado.",
+                ]}
+              />
+              <SubHeading>Limites do plano</SubHeading>
+              <p className="text-base text-foreground">
+                Sem assinatura, a simulação aceita até {FREE_MAX_TICKERS} ativos e usa o modelo de Graham. O Premium libera todos os
+                modelos, a carteira, o radar e o modo “Todo o mercado”.
+              </p>
+            </Section>
+
+            <Section id="backtest" title="Backtest">
+              <p className="text-base text-foreground">
+                O backtest simula, mês a mês, como uma carteira teria se comportado com cotações e proventos reais. É um estudo
+                do passado com as regras abaixo, não uma previsão.
+              </p>
+              <SubHeading>Como a simulação funciona</SubHeading>
+              <List
+                items={[
+                  "A simulação é mensal: aportes e rebalanceamentos acontecem uma vez por mês, com as operações pelo preço de fechamento do mês.",
+                  "Os preços são ajustados só por eventos de capital (desdobramentos e grupamentos), para os proventos não entrarem duas vezes.",
+                  "Os proventos vêm do histórico real de cada ativo: são creditados na data-com e reinvestidos no mês seguinte, junto do aporte.",
+                  `JCP entra líquido de IRRF (${formatPct(JCP_IRRF_RATE_UNTIL_2025, { digits: 0 })} até 2025 e ${formatPct(JCP_IRRF_RATE_FROM_2026)} a partir de 2026).`,
+                  `Cada operação paga ${formatPct(BACKTEST_TRADING_COST_RATE, { digits: 2 })} do valor negociado (corretagem e emolumentos).`,
+                  "Só ações inteiras: o valor que não completa uma ação fica em caixa para o mês seguinte.",
+                ]}
+              />
+              <SubHeading>O que não entra</SubHeading>
+              <List
+                items={[
+                  "Imposto de renda sobre ganho de capital.",
+                  "Spread: a diferença entre as melhores ofertas do livro de ofertas.",
+                  "Slippage: a diferença entre o preço de fechamento e o preço que uma ordem real conseguiria.",
+                  "Empresas que saíram da bolsa: a simulação só usa ativos com cotação, o que tende a melhorar o resultado (viés de sobrevivência).",
+                ]}
+              />
+              <SubHeading>Benchmarks</SubHeading>
+              <List
+                items={[
+                  "CDI: série 12 do SGS do Banco Central, com os mesmos aportes nas mesmas datas da carteira.",
+                  "Ibovespa: índice ^BVSP, que é um índice de preço, sem dividendos. Por isso a comparação favorece carteiras que pagam proventos.",
+                ]}
+              />
+              <SubHeading>Vitrine de backtests</SubHeading>
+              <p className="text-base text-foreground">
+                A página do backtest e a página inicial mostram estas carteiras, calculadas com o mesmo motor da ferramenta:
+              </p>
+              <List
+                items={SHOWCASE_DEFINITIONS.map(
+                  (definition) =>
+                    `${definition.title}: ${showcaseCompositionLabel({
+                      tickers: definition.tickers,
+                      allocations: definition.tickers.map(() => 1 / definition.tickers.length),
+                    })}; ${showcaseMoneyLabel(definition)}. ${definition.why}`
+                )}
+              />
+              <List
+                items={[
+                  "As definições foram fixadas por regra antes de olhar qualquer resultado. As carteiras aparecem sempre juntas e na mesma ordem, inclusive quando rendem menos que o CDI. Se uma não puder ser calculada, nenhuma aparece.",
+                  `Período: os últimos ${SHOWCASE_YEARS} anos completos até o 1º dia do mês corrente, recalculados uma vez por mês e revistos ao menos uma vez por semana. Se algum ativo tiver histórico menor, todas usam o período comum, desde que tenha pelo menos ${SHOWCASE_MIN_MONTHS / 12} anos.`,
+                  "Cada card mostra o período, os valores, o custo total, a queda máxima, os dois benchmarks e a data do cálculo. No Premium, “Abrir no backtest” roda a mesma carteira na ferramenta com os mesmos parâmetros.",
+                  "Nenhuma vitrine sai do ranking de hoje: sem os fundamentos de cada época, escolher ações pelo ranking atual e simular o passado seria olhar para trás.",
+                ]}
+              />
+              <p className="text-base text-foreground">
+                O histórico das estratégias está nos{" "}
+                <Link href="/indices" className="text-brand underline-offset-4 hover:underline">
+                  índices Preço Justo (IPJ)
+                </Link>
+                , acompanhados a partir da data de criação de cada um, informada na página do índice.
+              </p>
+              <p className="rounded-lg border border-border bg-surface p-4 text-sm text-muted-foreground">
+                Definições em vigor desde <span className="tabular-nums">{formatDate(SHOWCASE_DEFINITIONS_SINCE)}</span>. Qualquer mudança
+                será registrada aqui, com data. Rentabilidade passada não garante resultados futuros. Simulação, não é recomendação.
+              </p>
+            </Section>
 
             <Section id="limitacoes" title="Limitações gerais">
               <List

@@ -1,13 +1,13 @@
 'use client'
 
 /**
- * Conversas com o Ben: lista pesquisável, abrir no chat, renomear e excluir.
+ * Conversas com o Ben: lista pesquisável com título, contexto e data; continuar no painel do Ben, renomear e excluir.
  */
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Loader2, MessageSquare, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,9 +37,13 @@ import {
   useSearchBenConversations,
   useUpdateBenConversationTitle,
   useDeleteBenConversation,
+  dismissBenRun,
+  stopBenRun,
 } from '@/hooks/use-ben-chat'
 import { useToast } from '@/hooks/use-toast'
-import { BenChatSidebar } from '@/components/ben-chat-sidebar'
+import { contextKeyFromUrl, contextLabel } from '@/components/ben/ben-chat-utils'
+import { forgetBenConversation, openBenPanel } from '@/components/ben/panel-store'
+import { contextFromPath } from '@/lib/ben-context/builders'
 import { formatDate, formatNumber } from '@/lib/format'
 
 type Conversation = NonNullable<ReturnType<typeof useBenConversations>['data']>[number]
@@ -55,6 +59,17 @@ function plainPreview(markdown: string): string {
     .trim()
 }
 
+/** Contexto em que a conversa começou ("PETR4 · Valuation", "Carteira"), a partir da URL salva. */
+function conversationContext(conversation: Conversation): string | null {
+  return conversation.contextUrl ? contextLabel(contextFromPath(conversation.contextUrl)) : null
+}
+
+function conversationTitle(conversation: Conversation): string {
+  const title = conversation.title?.trim()
+  if (title && title !== 'Nova conversa') return title
+  return conversation.lastMessage ? plainPreview(conversation.lastMessage).slice(0, 60) : 'Conversa sem título'
+}
+
 export default function ConversasBenPage() {
   const { status } = useSession()
   const router = useRouter()
@@ -65,9 +80,6 @@ export default function ConversasBenPage() {
   const [renaming, setRenaming] = useState<Conversation | null>(null)
   const [renameTitle, setRenameTitle] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
-  const [isChatOpen, setIsChatOpen] = useState(false)
-  const [forceNewConversation, setForceNewConversation] = useState(false)
 
   useEffect(() => {
     const timer = setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS)
@@ -81,27 +93,23 @@ export default function ConversasBenPage() {
   const searching = searchQuery.length > 0
   const { data: searchResults, isLoading: isSearching } = useSearchBenConversations(searchQuery)
   const { data: allConversations, isLoading: isLoadingAll } = useBenConversations()
-  const conversations = (searching ? searchResults : allConversations) ?? []
+  // Conversa sem mensagens = pergunta interrompida ou que falhou antes de ser salva: não entra no histórico
+  const conversations = useMemo(
+    () => ((searching ? searchResults : allConversations) ?? []).filter((c) => c.messageCount > 0),
+    [searching, searchResults, allConversations]
+  )
   const isLoading = status === 'loading' || (searching ? isSearching : isLoadingAll)
 
   const updateTitle = useUpdateBenConversationTitle()
   const deleteConversation = useDeleteBenConversation()
 
-  const openConversation = (conversationId: string) => {
-    setForceNewConversation(false)
-    setSelectedConversationId(conversationId)
-    setIsChatOpen(true)
+  // O painel do Ben é o do layout: no desktop continua aberto ao navegar para outra página
+  const openConversation = (conversation: Conversation) => {
+    openBenPanel({ conversationId: conversation.id, conversationKey: contextKeyFromUrl(conversation.contextUrl) })
   }
 
   const handleNewConversation = () => {
-    setSelectedConversationId(null)
-    setForceNewConversation(true)
-    setIsChatOpen(true)
-  }
-
-  const handleChatOpenChange = (open: boolean) => {
-    setIsChatOpen(open)
-    if (!open) setForceNewConversation(false)
+    openBenPanel({ fresh: true })
   }
 
   const startRename = (conversation: Conversation) => {
@@ -126,6 +134,10 @@ export default function ConversasBenPage() {
     if (!deletingId) return
     try {
       await deleteConversation.mutateAsync(deletingId)
+      // Se é a conversa aberta no painel, o painel passa para uma conversa nova (em vez de ficar preso nela)
+      stopBenRun(deletingId)
+      dismissBenRun(deletingId)
+      forgetBenConversation(deletingId)
       setDeletingId(null)
       toast({ title: 'Conversa excluída' })
     } catch {
@@ -138,13 +150,19 @@ export default function ConversasBenPage() {
       key: 'title',
       header: 'Conversa',
       sortable: true,
-      sortValue: (c) => c.title || '',
+      sortValue: (c) => conversationTitle(c),
       className: 'max-w-[11rem] py-2.5 min-[400px]:max-w-[13rem] sm:max-w-md',
       cell: (c) => (
         <div className="min-w-0 space-y-0.5">
-          <p className="truncate font-medium text-foreground">{c.title || 'Sem título'}</p>
-          {(c.shareToken || c.lastMessage) && (
+          <p className="truncate font-medium text-foreground">{conversationTitle(c)}</p>
+          {(c.shareToken || c.lastMessage || conversationContext(c)) && (
             <div className="flex min-w-0 items-center gap-2">
+              {/* No mobile o contexto fica aqui (a coluna some abaixo de md) */}
+              {conversationContext(c) && (
+                <Badge variant="neutral" className="max-w-[9rem] shrink-0 truncate md:hidden">
+                  {conversationContext(c)}
+                </Badge>
+              )}
               {c.shareToken && <Badge variant="neutral">Compartilhada</Badge>}
               {c.lastMessage && <p className="truncate text-xs text-muted-foreground">{plainPreview(c.lastMessage)}</p>}
             </div>
@@ -156,6 +174,24 @@ export default function ConversasBenPage() {
           </p>
         </div>
       ),
+    },
+    {
+      key: 'context',
+      header: 'Contexto',
+      sortable: true,
+      sortValue: (c) => conversationContext(c) ?? '',
+      className: 'hidden md:table-cell',
+      headerClassName: 'hidden md:table-cell',
+      cell: (c) => {
+        const contextText = conversationContext(c)
+        return contextText ? (
+          <Badge variant="neutral" className="max-w-[14rem] truncate">
+            {contextText}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground">Geral</span>
+        )
+      },
     },
     {
       key: 'messageCount',
@@ -180,13 +216,22 @@ export default function ConversasBenPage() {
       key: 'actions',
       header: <span className="sr-only">Ações</span>,
       align: 'right',
-      className: 'w-24',
+      className: 'w-36',
       cell: (c) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-          <Button variant="ghost" size="icon" aria-label={`Renomear ${c.title || 'conversa'}`} onClick={() => startRename(c)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Continuar no painel: ${conversationTitle(c)}`}
+            title="Continuar no painel"
+            onClick={() => openConversation(c)}
+          >
+            <MessageSquare className="size-4 text-muted-foreground" strokeWidth={1.75} />
+          </Button>
+          <Button variant="ghost" size="icon" aria-label={`Renomear ${conversationTitle(c)}`} onClick={() => startRename(c)}>
             <Pencil className="size-4 text-muted-foreground" strokeWidth={1.75} />
           </Button>
-          <Button variant="ghost" size="icon" aria-label={`Excluir ${c.title || 'conversa'}`} onClick={() => setDeletingId(c.id)}>
+          <Button variant="ghost" size="icon" aria-label={`Excluir ${conversationTitle(c)}`} onClick={() => setDeletingId(c.id)}>
             <Trash2 className="size-4 text-muted-foreground" strokeWidth={1.75} />
           </Button>
         </div>
@@ -202,7 +247,7 @@ export default function ConversasBenPage() {
         <PageHeader
           breadcrumb={[{ label: 'Minha conta', href: '/perfil' }, { label: 'Conversas com o Ben' }]}
           title="Conversas com o Ben"
-          description="Retome, renomeie ou exclua suas conversas com o assistente."
+          description="Continue uma conversa no painel do Ben, em qualquer página, ou renomeie e exclua."
           actions={
             <Button onClick={handleNewConversation}>
               <Plus className="size-4" strokeWidth={1.75} />
@@ -238,7 +283,7 @@ export default function ConversasBenPage() {
           loading={isLoading}
           stickyFirstColumn
           defaultSort={{ key: 'updatedAt', direction: 'desc' }}
-          onRowClick={(c) => openConversation(c.id)}
+          onRowClick={(c) => openConversation(c)}
           empty={
             searching
               ? { title: 'Nenhuma conversa encontrada', description: 'Tente outros termos.' }
@@ -303,13 +348,6 @@ export default function ConversasBenPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <BenChatSidebar
-        open={isChatOpen}
-        onOpenChange={handleChatOpenChange}
-        initialConversationId={selectedConversationId ?? undefined}
-        forceNewConversation={forceNewConversation}
-      />
     </>
   )
 }

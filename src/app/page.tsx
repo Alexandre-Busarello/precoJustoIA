@@ -1,15 +1,18 @@
 import Image from "next/image"
 import Link from "next/link"
+import { Suspense } from "react"
 import { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import CompanySearch from "@/components/company-search"
+import { Button } from "@/components/ui/button"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { CTASection } from "@/components/landing/cta-section"
 import { FAQSection } from "@/components/landing/faq-section"
 import { FloatingCTA } from "@/components/landing/floating-cta"
 import { LandingPricingSection } from "@/components/landing-pricing-section"
+import { BacktestShowcaseStrip } from "@/components/backtest-showcase/showcase-section"
 import {
   COVERED_ASSETS_LABEL,
   DATA_SOURCES_LABEL,
@@ -98,12 +101,13 @@ const PRODUCT_BLOCKS = [
     description:
       "Monte uma carteira, defina aportes e rebalanceamento e compare o resultado com o Ibovespa e o CDI. Rentabilidade passada não garante resultados futuros.",
     link: { href: "/backtest", label: "Criar um backtest" },
-    image: { src: "/images/product/backtest.webp", width: 1280, height: 800, alt: "Resultado de backtest de carteira comparado ao CDI e ao Ibovespa" },
+    // Sem captura estática de resultado: a vitrine mostra backtests reais, datados e com custos
+    image: null,
   },
 ]
 
 const MODELS = [
-  { name: "Fórmula de Graham", measures: "Valor justo pelo lucro e pelo patrimônio por ação", plan: "Grátis" },
+  { name: "Fórmula de Graham", measures: "Preço justo pelo lucro e pelo patrimônio por ação", plan: "Grátis" },
   { name: "Fluxo de caixa descontado", measures: "Valor presente do caixa que a empresa deve gerar", plan: "Premium" },
   { name: "Gordon", measures: "Valor pelos dividendos esperados e seu crescimento", plan: "Premium" },
   { name: "Preço-teto (Bazin)", measures: "Preço máximo para receber 6% ao ano em proventos", plan: "Premium" },
@@ -149,6 +153,10 @@ const FAQS = [
 function HeroSearch() {
   return (
     <div className="max-w-lg space-y-3">
+      <Button size="lg" asChild className="w-full sm:w-auto">
+        <Link href="/onde-aportar">Calcular onde aportar</Link>
+      </Button>
+      <p className="pt-2 text-sm text-muted-foreground">Ou veja o preço justo de uma ação:</p>
       <CompanySearch
         placeholder="Digite um ticker, ex.: PETR4"
         className="max-w-lg [&_input]:h-12 [&_input]:text-base md:[&_input]:h-12 md:[&_input]:text-base"
@@ -184,7 +192,7 @@ interface ProductShotProps {
   priority?: boolean
 }
 
-/** Screenshot real do produto (capturado do ambiente local, tema claro), com borda fina. */
+/** Screenshot real do produto (capturado do ambiente local, tema claro), com borda fina. No tema escuro o brilho cai um pouco para não ofuscar. */
 function ProductShot({ src, alt, width, height, priority = false }: ProductShotProps) {
   return (
     <figure className="overflow-hidden rounded-lg border border-border bg-card">
@@ -195,7 +203,7 @@ function ProductShot({ src, alt, width, height, priority = false }: ProductShotP
         height={height}
         priority={priority}
         sizes="(min-width: 1024px) 50vw, 100vw"
-        className="h-auto w-full"
+        className="h-auto w-full dark:brightness-[0.85]"
       />
     </figure>
   )
@@ -226,8 +234,8 @@ export default async function Home() {
 
       <LandingHero
         id={HERO_ID}
-        headline={`O preço justo de cada ação da B3, calculado por ${VALUATION_MODELS_SHORT_LABEL}.`}
-        subheadline={`Preço, preço justo, margem de segurança e score de ${COVERED_ASSETS_LABEL}, com a metodologia aberta.`}
+        headline="Descubra onde aportar"
+        subheadline={`Calcule em segundos a distribuição do seu aporte entre os ativos que você escolher, com o preço justo de ${COVERED_ASSETS_LABEL} calculado por ${VALUATION_MODELS_SHORT_LABEL} e a metodologia aberta.`}
         actions={<HeroSearch />}
         showQuickAccess={false}
         media={
@@ -270,7 +278,13 @@ export default async function Home() {
                   {block.link.label}
                 </Link>
               </div>
-              <ProductShot {...block.image} />
+              {block.image ? (
+                <ProductShot {...block.image} />
+              ) : (
+                <Suspense fallback={null}>
+                  <BacktestShowcaseStrip />
+                </Suspense>
+              )}
             </div>
           ))}
         </div>

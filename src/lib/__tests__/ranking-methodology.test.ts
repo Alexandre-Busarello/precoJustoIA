@@ -39,3 +39,8 @@ test('textos do "Como funciona" evitam linguagem de recomendação', () => {
     for (const text of [doc.summary, ...doc.steps]) assert.doesNotMatch(text, BANNED, `${key}: ${text}`)
   }
 })
+
+test('/metodologia tem as seções fixas (inclusive #backtest, citada pela vitrine)', () => {
+  const ids = new Set(metodologiaSectionIds())
+  for (const id of ['onde-aportar', 'backtest', 'limitacoes']) assert.ok(ids.has(id), `seção ausente: ${id}`)
+})

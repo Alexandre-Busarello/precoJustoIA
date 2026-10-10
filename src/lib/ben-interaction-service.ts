@@ -3,7 +3,7 @@
  */
 
 import { prisma } from './prisma'
-import type { PageContext } from './ben-page-context'
+import type { BenPageContext } from './ben-context/types'
 
 export interface BenInteractionState {
   hasInteracted: boolean
@@ -78,7 +78,7 @@ export async function recordBenInteraction(userId: string): Promise<void> {
  */
 export async function shouldShowProactiveMessage(
   userId: string,
-  pageContext?: PageContext
+  pageContext?: BenPageContext
 ): Promise<{ shouldShow: boolean; messageType: 'first_time' | 'inactive' | 'contextual' | null }> {
   try {
     const state = await getUserBenInteractionState(userId)
@@ -105,29 +105,15 @@ export async function shouldShowProactiveMessage(
       }
     }
 
-    // Contextual - baseado na página atual
-    if (pageContext) {
-      const { pageType, ticker } = pageContext
-      
-      // Se está em uma página específica de ação/BDR/análise técnica, pode sugerir perguntas
-      if ((pageType === 'action' || pageType === 'bdr' || pageType === 'technical_analysis' || pageType === 'dividend_radar') && ticker) {
-        // Mostrar apenas se não interagiu recentemente (últimas 24h)
-        if (state.lastInteractionAt) {
-          const hoursSinceLastInteraction = Math.floor(
-            (Date.now() - state.lastInteractionAt.getTime()) / (1000 * 60 * 60)
-          )
-          
-          if (hoursSinceLastInteraction >= 24) {
-            return {
-              shouldShow: true,
-              messageType: 'contextual'
-            }
-          }
-        } else {
-          return {
-            shouldShow: true,
-            messageType: 'contextual'
-          }
+    // Contextual - página de um ativo, se não interagiu nas últimas 24h
+    if (pageContext?.kind === 'asset') {
+      const hoursSinceLastInteraction = state.lastInteractionAt
+        ? Math.floor((Date.now() - state.lastInteractionAt.getTime()) / (1000 * 60 * 60))
+        : Infinity
+      if (hoursSinceLastInteraction >= 24) {
+        return {
+          shouldShow: true,
+          messageType: 'contextual'
         }
       }
     }
@@ -150,60 +136,58 @@ export async function shouldShowProactiveMessage(
  */
 export function generateProactiveMessage(
   messageType: 'first_time' | 'inactive' | 'contextual',
-  pageContext?: PageContext
+  pageContext?: BenPageContext
 ): { title: string; message: string; cta: string } {
   switch (messageType) {
     case 'first_time':
       return {
-        title: 'Olá! Sou o Ben',
-        message: 'Sou seu assistente de investimentos. Posso ajudar com análises fundamentalistas, projeções do IBOVESPA, análise técnica e responder suas dúvidas sobre o mercado brasileiro.',
+        title: 'Olá, sou o Ben',
+        message: 'Explico os números da plataforma: preço justo por modelo, fundamentos, dividendos, análise técnica e projeções do Ibovespa. Não é recomendação de investimento.',
         cta: 'Começar conversa'
       }
-    
+
     case 'inactive':
       return {
-        title: 'Faz um tempo que não conversamos!',
-        message: 'Quer que eu analise algo para você hoje? Posso ajudar com análises, projeções ou responder suas dúvidas sobre investimentos.',
+        title: 'Faz um tempo que não conversamos',
+        message: 'Quer que eu explique algo da plataforma hoje? Posso ajudar com análises de ativos, projeções e dúvidas sobre os modelos.',
         cta: 'Conversar agora'
       }
-    
-    case 'contextual':
-      const { pageType, ticker } = pageContext || {}
-      const companyName = (pageContext as any)?.companyName
-      const displayName = companyName || ticker || 'esta empresa'
-      
-      if (pageType === 'technical_analysis') {
+
+    case 'contextual': {
+      if (pageContext?.kind !== 'asset') {
         return {
-          title: 'Análise Técnica',
-          message: `Vejo que você está analisando a análise técnica de ${displayName}. Quer que eu explique algum indicador ou ajude a interpretar os sinais?`,
+          title: 'Precisa de ajuda?',
+          message: 'Posso explicar o que está nesta página ou responder dúvidas sobre os modelos da plataforma.',
+          cta: 'Conversar com o Ben'
+        }
+      }
+      const displayName = pageContext.companyName || pageContext.ticker
+      if (pageContext.section === 'technical') {
+        return {
+          title: 'Análise técnica',
+          message: `Está vendo a análise técnica de ${displayName}. Quer que eu explique algum indicador?`,
           cta: 'Perguntar ao Ben'
         }
-      } else if (pageType === 'dividend_radar') {
+      }
+      if (pageContext.section === 'dividends') {
         return {
           title: 'Dividendos',
-          message: `Está analisando as projeções de dividendos de ${displayName}. Posso ajudar a avaliar a sustentabilidade dos pagamentos ou comparar com outras empresas.`,
+          message: `Está vendo as projeções de dividendos de ${displayName}. Posso explicar a sustentabilidade dos pagamentos ou comparar com outras empresas.`,
           cta: 'Conversar sobre dividendos'
         }
-      } else if (pageType === 'action' || pageType === 'bdr') {
-        return {
-          title: `Análise de ${displayName}`,
-          message: `Quer que eu faça uma análise completa de ${displayName}? Posso avaliar fundamentos, análise técnica, dividendos e muito mais.`,
-          cta: 'Analisar com Ben'
-        }
       }
-      
       return {
-        title: 'Precisa de ajuda?',
-        message: 'Posso ajudar com análises, projeções ou responder suas dúvidas sobre investimentos.',
-        cta: 'Conversar com Ben'
+        title: `Análise de ${displayName}`,
+        message: `Quer um resumo de ${displayName}? Explico fundamentos, preço justo por modelo, dividendos e análise técnica.`,
+        cta: 'Perguntar ao Ben'
       }
-    
+    }
+
     default:
       return {
-        title: 'Olá!',
+        title: 'Olá',
         message: 'Como posso ajudar você hoje?',
         cta: 'Conversar'
       }
   }
 }
-

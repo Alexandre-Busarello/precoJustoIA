@@ -1,10 +1,19 @@
 import { AbstractStrategy, toNumber, formatPercent } from './base-strategy';
+import { formatBRLCompact, formatNumber } from '../format';
 import {
   CompanyData,
   FiiDividendYieldParams,
   RankBuilderResult,
   StrategyAnalysis,
 } from './types';
+
+/** Padrões do ranking de FIIs por dividend yield: os mesmos do registro (`ranking-models.ts`). */
+export const FII_DIVIDEND_YIELD_DEFAULTS = {
+  minYield: 0.08,
+  maxPvp: 1.1,
+  minLiquidity: 500_000,
+  limit: 50,
+} as const;
 
 function matchesTipo(f: CompanyData['financials'], tipo: FiiDividendYieldParams['tipoFii']): boolean {
   if (!tipo || tipo === 'both') return true;
@@ -17,11 +26,12 @@ export class FiiDividendYieldStrategy extends AbstractStrategy<FiiDividendYieldP
   readonly name = 'fiiDividendYield';
 
   generateRational(params: FiiDividendYieldParams): string {
-    const minY = params.minYield ?? 0.08;
-    const maxP = params.maxPvp ?? 1.3;
-    return `Ranking de FIIs por Dividend Yield, com P/VP ≤ ${maxP} e DY mínimo ${formatPercent(
+    const minY = params.minYield ?? FII_DIVIDEND_YIELD_DEFAULTS.minYield;
+    const maxP = params.maxPvp ?? FII_DIVIDEND_YIELD_DEFAULTS.maxPvp;
+    const minL = params.minLiquidity ?? FII_DIVIDEND_YIELD_DEFAULTS.minLiquidity;
+    return `Ranking de FIIs por dividend yield, com P/VP até ${formatNumber(maxP, { digits: 2 })}, DY mínimo de ${formatPercent(
       minY
-    )}, respeitando liquidez mínima.`;
+    )} e liquidez diária a partir de ${formatBRLCompact(minL)}.`;
   }
 
   validateCompanyData(companyData: CompanyData, params: FiiDividendYieldParams): boolean {
@@ -29,9 +39,9 @@ export class FiiDividendYieldStrategy extends AbstractStrategy<FiiDividendYieldP
     const dy = toNumber(f.dy);
     const pvp = toNumber(f.pvp);
     const liq = toNumber(f.fiiLiquidez);
-    const minY = params.minYield ?? 0.08;
-    const maxP = params.maxPvp ?? 1.3;
-    const minL = params.minLiquidity ?? 500_000;
+    const minY = params.minYield ?? FII_DIVIDEND_YIELD_DEFAULTS.minYield;
+    const maxP = params.maxPvp ?? FII_DIVIDEND_YIELD_DEFAULTS.maxPvp;
+    const minL = params.minLiquidity ?? FII_DIVIDEND_YIELD_DEFAULTS.minLiquidity;
     return !!(
       matchesTipo(f, params.tipoFii || 'both') &&
       dy !== null &&
@@ -80,7 +90,7 @@ export class FiiDividendYieldStrategy extends AbstractStrategy<FiiDividendYieldP
         fairValue: null,
         upside: null,
         marginOfSafety: null,
-        rational: `DY ${formatPercent(dy)} com P/VP ${toNumber(c.financials.pvp)?.toFixed(2) ?? 'N/A'} e liquidez adequada.`,
+        rational: `DY ${formatPercent(dy)} com P/VP ${formatNumber(toNumber(c.financials.pvp), { digits: 2 })} e liquidez adequada.`,
         key_metrics: {
           dy,
           pvp: toNumber(c.financials.pvp),
@@ -90,7 +100,7 @@ export class FiiDividendYieldStrategy extends AbstractStrategy<FiiDividendYieldP
     }
 
     rows.sort((a, b) => (b.key_metrics?.dy as number) - (a.key_metrics?.dy as number));
-    const lim = params.limit ?? 100;
+    const lim = params.limit ?? FII_DIVIDEND_YIELD_DEFAULTS.limit;
     return rows.slice(0, lim);
   }
 }

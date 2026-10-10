@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -246,13 +246,14 @@ const noopSubscribe = () => () => {};
  * Esqueleto estático do dashboard para o HTML do servidor e a hidratação.
  * Os blocos leem caches do localStorage e o tamanho da tela no primeiro render; montar só no cliente evita divergência de hidratação.
  */
-function DashboardSkeleton() {
+function DashboardSkeleton({ aporte }: { aporte?: ReactNode }) {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-8 px-4 py-6" aria-busy="true">
       <div className="space-y-4">
         <Skeleton className="h-10 w-full" />
         <PageHeader title="Visão geral" />
       </div>
+      {aporte}
       <Skeleton className="h-28 w-full" />
       <div className="space-y-3">
         <Skeleton className="h-6 w-32" />
@@ -262,13 +263,14 @@ function DashboardSkeleton() {
   );
 }
 
-export function DashboardClient() {
+/** `aporte`: bloco "Onde aportar este mês" (renderizado no servidor), logo abaixo do cabeçalho e dos avisos. */
+export function DashboardClient({ aporte }: { aporte?: ReactNode }) {
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
-  if (!mounted) return <DashboardSkeleton />;
-  return <DashboardContent />;
+  if (!mounted) return <DashboardSkeleton aporte={aporte} />;
+  return <DashboardContent aporte={aporte} />;
 }
 
-function DashboardContent() {
+function DashboardContent({ aporte }: { aporte?: ReactNode }) {
   const { isPremium, isLoading: premiumLoading } = usePremiumStatus();
   useCacheInvalidation();
   useProcessActiveCampaigns();
@@ -283,6 +285,8 @@ function DashboardContent() {
         <PageNotice />
         <BenIntroCard />
       </div>
+
+      {aporte}
 
       <DashboardStats />
 

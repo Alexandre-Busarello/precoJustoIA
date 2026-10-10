@@ -31,7 +31,10 @@ export function PageHeader({ title, description, breadcrumb, actions, className 
               return (
                 <li key={`${item.label}-${index}`} className="flex items-center gap-1">
                   {item.href && !last ? (
-                    <Link href={item.href} className="hover:text-foreground hover:underline underline-offset-4">
+                    <Link
+                      href={item.href}
+                      className="relative hover:text-foreground hover:underline underline-offset-4 before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-[''] pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:before:content-none"
+                    >
                       {item.label}
                     </Link>
                   ) : (

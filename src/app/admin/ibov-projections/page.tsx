@@ -1,5 +1,5 @@
 /**
- * Página Admin: Gerenciar Projeções IBOV
+ * Página Admin: faixas estatísticas do Ibovespa
  */
 
 import { Metadata } from 'next'
@@ -10,8 +10,9 @@ import { requireAdminUser } from '@/lib/user-service'
 import { IbovProjectionsManager } from '@/components/admin/ibov-projections-manager'
 
 export const metadata: Metadata = {
-  title: 'Gerenciar Projeções IBOV - Admin',
-  description: 'Gerencie e recrie projeções do IBOVESPA',
+  title: 'Admin: projeções do Ibovespa',
+  description: 'Estado das faixas estatísticas do Ibovespa e registros diários',
+  robots: { index: false, follow: false },
 }
 
 export default async function AdminIbovProjectionsPage() {
@@ -21,7 +22,6 @@ export default async function AdminIbovProjectionsPage() {
     redirect('/login?callbackUrl=/admin/ibov-projections')
   }
 
-  // Verificar se o usuário é admin
   const user = await requireAdminUser()
 
   if (!user) {
@@ -29,13 +29,10 @@ export default async function AdminIbovProjectionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-4 sm:py-8">
-      <div className="container mx-auto px-4">
-        <div className="max-w-7xl mx-auto">
-          <IbovProjectionsManager />
-        </div>
+    <div className="min-h-screen bg-background py-6 sm:py-8">
+      <div className="container mx-auto max-w-6xl px-4">
+        <IbovProjectionsManager />
       </div>
     </div>
   )
 }
-

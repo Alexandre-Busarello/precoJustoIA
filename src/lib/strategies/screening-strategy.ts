@@ -2,7 +2,143 @@ import { AbstractStrategy } from './base-strategy';
 import { ScreeningParams, CompanyData, StrategyAnalysis, RankBuilderResult, ScreeningFilter } from './types';
 import { toNumber } from './base-strategy';
 import { GrahamStrategy } from './graham-strategy';
+import { BazinStrategy, resolveTargetYield, BAZIN_DEFAULTS } from './bazin-strategy';
+import { LynchStrategy } from './lynch-strategy';
 import { applyLiquidityRules } from '@/lib/ranking-models';
+import { dedupedDividendEvents, sumTTM } from '@/lib/finance/dividends';
+import { dipWithIntactFundamentals } from '@/lib/finance/signals';
+import { isFinancial } from '@/lib/finance/sector-classification';
+import { fundamentalsStatus, type AnnualFundamentals } from '@/lib/allocation/fundamentals';
+import { formatBRLCompact, formatDeltaPct, formatNumber, formatPct } from '@/lib/format';
+
+/** Filtros do screening alinhados aos modelos do "Onde aportar" (fora de `ScreeningParams` por compatibilidade). */
+export interface ScreeningSignalParams {
+  /** Desconto vs. preço-teto Bazin (1 − P/teto), em fração: `{ min: 0.2 }` = pelo menos 20% abaixo do teto. */
+  bazinDiscountFilter?: ScreeningFilter;
+  /** DY alvo do preço-teto Bazin, em fração (padrão 6%). */
+  bazinTargetYield?: number;
+  /** PEG de Peter Lynch (P/L ÷ crescimento de LPA em %). Empresas fora do modelo não passam. */
+  pegFilter?: ScreeningFilter;
+  /** Preço abaixo da MM200 ou ≥ 20% abaixo da máxima de 52 semanas, com fundamentos preservados. */
+  dipWithIntactFundamentals?: boolean;
+}
+
+export type ExtendedScreeningParams = ScreeningParams & ScreeningSignalParams;
+
+/** Sinais de preço pré-calculados em lote pela rota (série diária), em fração. */
+export interface ScreeningPriceSignals {
+  /** Último fechamento ÷ média de 200 pregões − 1; `null` com menos de 200 pregões. */
+  pctAboveSma200: number | null;
+  /** Último fechamento ÷ máxima de 52 semanas − 1. */
+  drawdown52w: number | null;
+}
+
+export type ScreeningCompanyData = CompanyData & { priceSignals?: ScreeningPriceSignals | null };
+
+/** Métricas de modelos Premium (Bazin, Lynch) que a rota remove das respostas fora do Premium. */
+export const PREMIUM_SCREENING_METRICS = ['bazinCeiling', 'bazinDiscount', 'peg'] as const;
+
+/**
+ * DY 12m com proventos reais: soma dos proventos brutos (dividendos + JCP) com data-com nos últimos 12 meses ÷ preço.
+ * `0` quando não houve pagamento; `null` sem preço ou sem histórico carregado.
+ */
+export function dividendYield12m(company: CompanyData, asOf: Date = new Date()): number | null {
+  if (!company.dividendHistory || !(company.currentPrice > 0)) return null;
+  return sumTTM(dedupedDividendEvents(company.dividendHistory), asOf) / company.currentPrice;
+}
+
+export interface BazinScreening {
+  ceiling: number | null;
+  /** 1 − P/teto, em fração (negativo acima do teto). */
+  discount: number | null;
+}
+
+/** Preço-teto Bazin e desconto pelo modelo da plataforma (mesmo cálculo da página do ativo). */
+export function bazinScreening(company: CompanyData, targetYield?: number): BazinScreening {
+  const analysis = new BazinStrategy().runAnalysis(company, { targetDividendYield: resolveTargetYield(targetYield) });
+  return { ceiling: analysis.fairValue, discount: analysis.discount ?? null };
+}
+
+/** PEG de Lynch; `null` quando o modelo não se aplica (financeiras, cíclicas, prejuízo, crescimento ≤ 0, BDRs). */
+export function lynchPeg(company: CompanyData): number | null {
+  const value = new LynchStrategy().runAnalysis(company, {}).key_metrics?.peg;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** Os dois períodos de 12 meses mais recentes de `FinancialData` (atual + históricos), do mais novo ao mais antigo. */
+function latestAnnualFundamentals(company: CompanyData): AnnualFundamentals[] {
+  const rows = [company.financials, ...(company.historicalFinancials ?? [])]
+    .filter((row) => typeof row.year === 'number')
+    .sort((a, b) => (b.year as number) - (a.year as number));
+  return rows.slice(0, 2).map((row) => ({
+    year: row.year as number,
+    lucroLiquido: toNumber(row.lucroLiquido),
+    roe: toNumber(row.roe),
+    margemLiquida: toNumber(row.margemLiquida),
+    ebitda: toNumber(row.ebitda),
+    dividaLiquidaEbitda: toNumber(row.dividaLiquidaEbitda),
+  }));
+}
+
+export interface DipEvaluation {
+  passed: boolean;
+  /** Sem 200 pregões de preço ou sem dois períodos de 12 meses consecutivos: fica de fora e entra na contagem. */
+  insufficient: boolean;
+  pctAboveSma200: number | null;
+  drawdown52w: number | null;
+  /** Variação do lucro líquido 12m vs. os 12m anteriores (fração). */
+  netIncomeChange: number | null;
+  /** Variação do ROE 12m em pontos (fração: 0,01 = 1 p.p.). */
+  roeChange: number | null;
+}
+
+/**
+ * "Queda com fundamentos intactos": `dipWithIntactFundamentals` com os sinais de preço da rota e a mesma checagem de
+ * fundamentos do "Onde aportar" (`fundamentalsStatus` sobre os dois últimos períodos de 12 meses).
+ */
+export function evaluateDip(company: ScreeningCompanyData): DipEvaluation {
+  const pctAboveSma200 = company.priceSignals?.pctAboveSma200 ?? null;
+  const drawdown52w = company.priceSignals?.drawdown52w ?? null;
+  const annual = latestAnnualFundamentals(company);
+  const status = fundamentalsStatus({ annual, financial: isFinancial(company.sector, company.industry) });
+  const [last, previous] = annual;
+  const netIncomeChange =
+    last?.lucroLiquido != null && previous?.lucroLiquido != null && previous.lucroLiquido > 0
+      ? last.lucroLiquido / previous.lucroLiquido - 1
+      : null;
+  const roeChange = last?.roe != null && previous?.roe != null ? last.roe - previous.roe : null;
+  const insufficient = pctAboveSma200 === null || status.insufficient === true;
+  const passed =
+    !insufficient &&
+    dipWithIntactFundamentals({
+      priceVsSma200: { pctAbove: pctAboveSma200 },
+      drawdown52w,
+      fundamentals: { intact: status.intact === true },
+    });
+  return { passed, insufficient, pctAboveSma200, drawdown52w, netIncomeChange, roeChange };
+}
+
+/** Valores calculados uma vez por empresa e usados nos critérios e nas métricas. */
+interface CompanySignals {
+  dy12m: number | null;
+  bazin: BazinScreening;
+  peg: number | null;
+  dip: DipEvaluation | null;
+}
+
+function rangeText(filter: ScreeningFilter, format: (value: number) => string): string {
+  const parts: string[] = [];
+  if (filter.min !== undefined) parts.push(`≥ ${format(filter.min)}`);
+  if (filter.max !== undefined) parts.push(`≤ ${format(filter.max)}`);
+  return parts.join(' e ');
+}
+
+/** Descrição do limite de liquidez aplicado (para o racional). */
+function liquidityText(minLiquidity: number | null | undefined): string {
+  if (minLiquidity === null) return 'inclui ativos com baixa liquidez (marcados)';
+  if (typeof minLiquidity === 'number') return `volume médio diário ≥ ${formatBRLCompact(minLiquidity)}`;
+  return 'volume médio diário ≥ R$ 1 mi para ações (padrão)';
+}
 
 /**
  * Estratégia de Screening Customizável
@@ -14,11 +150,10 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
   /**
    * Valida se um valor está dentro do range especificado no filtro
    */
-  private isValueInRange(value: number | null, filter: ScreeningFilter | undefined, strictNullCheck: boolean = false): boolean {
+  private isValueInRange(value: number | null, filter: ScreeningFilter | undefined): boolean {
     if (!filter || !filter.enabled) return true; // Filtro desativado, aceita qualquer valor
     
     // Se o valor é null (N/A), a empresa deve ser reprovada quando o filtro está ativo
-    // strictNullCheck=true mantém o comportamento antigo para compatibilidade (mas não é mais necessário)
     if (value === null) {
       return false; // Sem dados, REPROVA o filtro (empresa não passa)
     }
@@ -35,8 +170,13 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
   /**
    * Conta quantos filtros estão ativos
    */
-  private countActiveFilters(params: ScreeningParams): number {
+  private countActiveFilters(params: ExtendedScreeningParams): number {
     let count = 0;
+
+    // Modelos e sinais
+    if (params.bazinDiscountFilter?.enabled) count++;
+    if (params.pegFilter?.enabled) count++;
+    if (params.dipWithIntactFundamentals) count++;
     
     // Valuation
     if (params.plFilter?.enabled) count++;
@@ -85,7 +225,8 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
    */
   private generateCriteria(
     companyData: CompanyData,
-    params: ScreeningParams
+    params: ExtendedScreeningParams,
+    signals: CompanySignals
   ): { label: string; value: boolean; description: string }[] {
     const criteria: { label: string; value: boolean; description: string }[] = [];
     const financials = companyData.financials;
@@ -204,13 +345,13 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     }
 
     // Dividendos
+    // DY 12m com proventos reais (o nome `dyFilter` continua o mesmo para URLs e presets salvos)
     if (params.dyFilter?.enabled) {
-      const dy = toNumber(financials.dy);
-      const inRange = this.isValueInRange(dy, params.dyFilter);
+      const inRange = this.isValueInRange(signals.dy12m, params.dyFilter);
       criteria.push({
-        label: 'Dividend Yield',
+        label: 'DY 12m',
         value: inRange,
-        description: `${params.dyFilter.min !== undefined ? `≥ ${(params.dyFilter.min * 100).toFixed(1)}%` : ''}${params.dyFilter.min !== undefined && params.dyFilter.max !== undefined ? ' e ' : ''}${params.dyFilter.max !== undefined ? `≤ ${(params.dyFilter.max * 100).toFixed(1)}%` : ''} (atual: ${dy ? (dy * 100).toFixed(1) + '%' : 'N/A'})`
+        description: `${rangeText(params.dyFilter, (v) => formatPct(v))} (atual: ${formatPct(signals.dy12m)})`
       });
     }
 
@@ -286,12 +427,42 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       // Se o valor existe, verifica se está no range
       const inRange = grahamUpside !== null ? this.isValueInRange(grahamUpside, params.grahamUpsideFilter) : false;
       criteria.push({
-        label: 'Graham Upside',
+        label: 'Potencial Graham',
         value: inRange,
         description: `${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}${params.grahamUpsideFilter.min !== undefined && params.grahamUpsideFilter.max !== undefined ? ' e ' : ''}${params.grahamUpsideFilter.max !== undefined ? `≤ ${params.grahamUpsideFilter.max.toFixed(0)}%` : ''} (atual: ${grahamUpside !== null ? grahamUpside.toFixed(1) + '%' : 'N/A - reprovado'})`
       });
     }
     
+    // Desconto vs. preço-teto Bazin
+    if (params.bazinDiscountFilter?.enabled) {
+      criteria.push({
+        label: 'Desconto vs. preço-teto Bazin',
+        value: this.isValueInRange(signals.bazin.discount, params.bazinDiscountFilter),
+        description: `${rangeText(params.bazinDiscountFilter, (v) => formatPct(v))} (teto ${signals.bazin.ceiling === null ? 'indisponível' : `com DY alvo de ${formatPct(resolveTargetYield(params.bazinTargetYield))}`}; atual: ${formatPct(signals.bazin.discount)})`
+      });
+    }
+
+    // PEG de Peter Lynch
+    if (params.pegFilter?.enabled) {
+      criteria.push({
+        label: 'PEG',
+        value: this.isValueInRange(signals.peg, params.pegFilter),
+        description: `${rangeText(params.pegFilter, (v) => formatNumber(v, { digits: 2 }))} (atual: ${signals.peg === null ? 'modelo não se aplica' : formatNumber(signals.peg, { digits: 2 })})`
+      });
+    }
+
+    // Queda com fundamentos intactos
+    if (params.dipWithIntactFundamentals) {
+      const dip = signals.dip;
+      criteria.push({
+        label: 'Queda com fundamentos intactos',
+        value: dip?.passed === true,
+        description: !dip || dip.insufficient
+          ? 'Sem dados suficientes (200 pregões de preço e dois períodos de 12 meses)'
+          : `${formatDeltaPct(dip.pctAboveSma200)} vs. MM200 · ${formatDeltaPct(dip.drawdown52w)} da máxima de 52 semanas`
+      });
+    }
+
     // Setor
     if (params.selectedSectors && params.selectedSectors.length > 0) {
       const companySector = companyData.sector;
@@ -342,9 +513,23 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     }
   }
 
+  /** DY 12m, Bazin e PEG sempre (viram colunas); a queda só quando o filtro está ativo (depende dos preços da rota). */
+  private computeSignals(companyData: ScreeningCompanyData, params: ExtendedScreeningParams): CompanySignals {
+    return {
+      dy12m: dividendYield12m(companyData),
+      bazin: bazinScreening(companyData, params.bazinTargetYield),
+      peg: lynchPeg(companyData),
+      dip: params.dipWithIntactFundamentals ? evaluateDip(companyData) : null,
+    };
+  }
+
   runAnalysis(companyData: CompanyData, params: ScreeningParams): StrategyAnalysis {
+    return this.analyze(companyData, params, this.computeSignals(companyData, params));
+  }
+
+  private analyze(companyData: CompanyData, params: ExtendedScreeningParams, signals: CompanySignals): StrategyAnalysis {
     const financials = companyData.financials;
-    const criteria = this.generateCriteria(companyData, params);
+    const criteria = this.generateCriteria(companyData, params, signals);
     
     // Conta quantos critérios passaram
     const passedCriteria = criteria.filter(c => c.value).length;
@@ -375,19 +560,28 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       }
     }
 
-    // Coletar métricas-chave
+    // Coletar métricas-chave (DY = DY 12m com proventos reais, em fração)
     const key_metrics: Record<string, number | null> = {
       pl: toNumber(financials.pl),
       pvp: toNumber(financials.pvp),
       roe: toNumber(financials.roe),
       roic: toNumber(financials.roic),
-      dy: toNumber(financials.dy),
+      dy: signals.dy12m,
+      peg: signals.peg,
+      bazinCeiling: signals.bazin.ceiling,
       margemLiquida: toNumber(financials.margemLiquida),
       liquidezCorrente: toNumber(financials.liquidezCorrente),
       dividaLiquidaPl: toNumber(financials.dividaLiquidaPl),
       cagrReceitas: toNumber(financials.cagrReceitas5a),
       marketCap: toNumber(financials.marketCap)
     };
+    if (params.bazinDiscountFilter?.enabled) key_metrics.bazinDiscount = signals.bazin.discount;
+    if (signals.dip) {
+      key_metrics.priceVsSma200 = signals.dip.pctAboveSma200;
+      key_metrics.drawdown52w = signals.dip.drawdown52w;
+      key_metrics.netIncomeChange = signals.dip.netIncomeChange;
+      key_metrics.roeChange = signals.dip.roeChange;
+    }
 
     return {
       isEligible,
@@ -400,119 +594,81 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     };
   }
 
-  runRanking(companies: CompanyData[], params: ScreeningParams): RankBuilderResult[] {
+  /**
+   * Screening completo, sem limite: resultados ordenados e quantas empresas ficaram de fora só por falta de dados
+   * para o filtro "Queda com fundamentos intactos" (passariam em todos os outros critérios).
+   */
+  screen(companies: CompanyData[], params: ExtendedScreeningParams): { results: RankBuilderResult[]; insufficientData: number } {
     const activeFiltersCount = this.countActiveFilters(params);
     
     // Liquidez mínima padrão (ou `params.minLiquidity`) e uma classe por empresa, a mais líquida.
     // Só age sobre empresas com liquidez calculada pelo carregador; `minLiquidity: null` inclui as ilíquidas.
     const companiesFiltered = applyLiquidityRules(companies, params.minLiquidity);
     
-    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
-    const filteredCompaniesForEmptyFilters = this.filterByAssetType(companiesFiltered, params.assetTypeFilter);
-    
-    if (activeFiltersCount === 0) {
-      // Se não há filtros ativos, retorna todas as empresas ordenadas por market cap
-      const allResults = filteredCompaniesForEmptyFilters
-        .map(company => {
-          const marketCap = toNumber(company.financials.marketCap) || 0;
-          return {
-            ticker: company.ticker,
-            name: company.name,
-            sector: company.sector,
-            currentPrice: company.currentPrice,
-            logoUrl: company.logoUrl,
-            fairValue: null,
-            upside: null,
-            marginOfSafety: null,
-            rational: '**Nenhum filtro ativo**: configure ao menos um filtro para fazer o screening.',
-            key_metrics: {
-              marketCap: toNumber(company.financials.marketCap)
-            }
-          };
-        })
-        .sort((a, b) => ((b.key_metrics?.marketCap as number) || 0) - ((a.key_metrics?.marketCap as number) || 0));
-      
-      // Screening NÃO remove tickers duplicados da mesma empresa (ex: BEES3, BEES4)
-      // Permite que múltiplos tickers da mesma empresa apareçam nos resultados
-      
-      // Se limit for undefined, retornar todos os resultados (sem limite)
-      if (params.limit === undefined || params.limit === null) {
-        return allResults;
-      }
-      
-      return allResults.slice(0, params.limit);
-    }
-
-    // Filtrar por tipo de ativo primeiro (b3, bdr, both)
-    let filteredCompanies = this.filterByAssetType(companiesFiltered, params.assetTypeFilter);
-    
-    // Filtrar por tamanho de empresa (se configurado)
+    // Filtrar por tipo de ativo (b3, bdr, both) e por tamanho de empresa
+    let candidates = this.filterByAssetType(companiesFiltered, params.assetTypeFilter);
     if (params.companySize && params.companySize !== 'all') {
-      filteredCompanies = this.filterCompaniesBySize(filteredCompanies, params.companySize);
+      candidates = this.filterCompaniesBySize(candidates, params.companySize);
     }
 
-    // Aplicar filtros e ranquear
     const results: RankBuilderResult[] = [];
+    let insufficientData = 0;
+    // Upside de Graham para o filtro ou para a ordenação por upside
+    const needsUpside = params.grahamUpsideFilter?.enabled || params.sortBy === 'upside_desc' || params.sortBy === 'upside_asc';
 
-    for (const company of filteredCompanies) {
-      const analysis = this.runAnalysis(company, params);
-      
-      if (analysis.isEligible) {
-        // Calcular upside se necessário para ordenação (grahamUpsideFilter ativo OU ordenação por upside)
-        let upside: number | null = null;
-        const needsUpside = params.grahamUpsideFilter?.enabled || params.sortBy === 'upside_desc' || params.sortBy === 'upside_asc';
-        if (needsUpside) {
-          upside = this.calculateGrahamUpside(company);
+    for (const company of candidates) {
+      const signals = this.computeSignals(company, params);
+      const analysis = this.analyze(company, params, signals);
+
+      if (activeFiltersCount > 0 && !analysis.isEligible) {
+        const failed = analysis.criteria.filter((criterion) => !criterion.value);
+        if (signals.dip?.insufficient && failed.length === 1 && failed[0].label === 'Queda com fundamentos intactos') {
+          insufficientData++;
         }
-        
-        results.push({
-          ticker: company.ticker,
-          name: company.name,
-          sector: company.sector,
-          currentPrice: company.currentPrice,
-          logoUrl: company.logoUrl,
-          fairValue: null,
-          upside: upside,
-          marginOfSafety: null,
-          rational: this.generateIndividualRational(company, params, analysis),
-          key_metrics: analysis.key_metrics
-        });
+        continue;
       }
+
+      results.push({
+        ticker: company.ticker,
+        name: company.name,
+        sector: company.sector,
+        currentPrice: company.currentPrice,
+        logoUrl: company.logoUrl,
+        fairValue: null,
+        upside: activeFiltersCount > 0 && needsUpside ? this.calculateGrahamUpside(company) : null,
+        marginOfSafety: null,
+        rational: activeFiltersCount > 0
+          ? this.generateIndividualRational(company, params, analysis)
+          : '**Nenhum filtro ativo**: configure ao menos um filtro para fazer o screening.',
+        key_metrics: analysis.key_metrics
+      });
     }
 
-    // Ordenar por score (mais alto primeiro) ou ordenação customizada
+    // Sem filtros: maiores valores de mercado primeiro. Com filtros: ordenação customizada (rotas de marketing),
+    // priorização técnica e valor de mercado como desempate.
     results.sort((a, b) => {
-      // Ordenação customizada para rotas de marketing
-      if (params.sortBy) {
-        const sortResult = this.customSort(a, b, params.sortBy);
-        if (sortResult !== 0) return sortResult;
+      if (activeFiltersCount > 0) {
+        if (params.sortBy) {
+          const sortResult = this.customSort(a, b, params.sortBy);
+          if (sortResult !== 0) return sortResult;
+        }
+        if (params.useTechnicalAnalysis && a.key_metrics?.technicalScore && b.key_metrics?.technicalScore) {
+          const techDiff = (b.key_metrics.technicalScore as number) - (a.key_metrics.technicalScore as number);
+          if (Math.abs(techDiff) > 5) return techDiff;
+        }
       }
-      
-      // Priorizar por análise técnica se ativada
-      if (params.useTechnicalAnalysis && a.key_metrics?.technicalScore && b.key_metrics?.technicalScore) {
-        const techDiff = (b.key_metrics.technicalScore as number) - (a.key_metrics.technicalScore as number);
-        if (Math.abs(techDiff) > 5) return techDiff;
-      }
-      
-      // Ordenar por market cap (maiores primeiro) como fallback
       return ((b.key_metrics?.marketCap as number) || 0) - ((a.key_metrics?.marketCap as number) || 0);
     });
 
-    // Screening NÃO remove tickers duplicados da mesma empresa (ex: BEES3, BEES4)
-    // Permite que múltiplos tickers da mesma empresa apareçam nos resultados
-    
-    // Se limit for undefined, retornar todos os resultados (sem limite)
-    // Se limit for definido, aplicar o limite
-    console.log(`[SCREENING-STRATEGY] Limit recebido: ${params.limit}, Tipo: ${typeof params.limit}, Total resultados: ${results.length}`);
-    
-    if (params.limit === undefined || params.limit === null) {
-      console.log(`[SCREENING-STRATEGY] Retornando todos os ${results.length} resultados (sem limite)`);
-      return results;
-    }
-    
-    const limitedResults = results.slice(0, params.limit);
-    console.log(`[SCREENING-STRATEGY] Aplicando limite de ${params.limit}, retornando ${limitedResults.length} resultados`);
-    return limitedResults;
+    // Screening NÃO remove tickers duplicados da mesma empresa além da regra de liquidez (classe mais líquida).
+    return { results, insufficientData };
+  }
+
+  runRanking(companies: CompanyData[], params: ScreeningParams): RankBuilderResult[] {
+    const { results } = this.screen(companies, params);
+    // `limit` indefinido: todos os resultados
+    if (params.limit === undefined || params.limit === null) return results;
+    return results.slice(0, params.limit);
   }
 
   private generateIndividualRational(
@@ -520,7 +676,6 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     params: ScreeningParams,
     analysis: StrategyAnalysis
   ): string {
-    const financials = company.financials;
     let rational = `**${company.ticker}** passou em todos os filtros configurados.\n\n`;
     
     rational += `**Critérios atendidos**:\n`;
@@ -531,22 +686,24 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
     return rational;
   }
 
-  generateRational(params: ScreeningParams): string {
+  generateRational(params: ExtendedScreeningParams): string {
     const activeFiltersCount = this.countActiveFilters(params);
     
     if (activeFiltersCount === 0) {
-      return `**SCREENING CUSTOMIZÁVEL DE AÇÕES**
+      return `**Screening de ações**
 
-**Status**: Nenhum filtro ativo
+**Status**: nenhum filtro ativo. Liquidez: ${liquidityText(params.minLiquidity)}.
 
-Configure pelo menos um filtro nas categorias disponíveis para realizar o screening.`;
+Configure ao menos um filtro nas categorias disponíveis para fazer o screening.`;
     }
 
-    let rational = `**SCREENING CUSTOMIZÁVEL DE AÇÕES**
+    let rational = `**Screening de ações**
 
-**Filosofia**: Busca personalizada de ações baseada nos seus critérios específicos de investimento.
+**Filtros quantitativos** sobre dados públicos, com os critérios que você escolheu.
 
-**Filtros Ativos**: ${activeFiltersCount}
+**Filtros ativos**: ${activeFiltersCount}
+
+**Liquidez**: ${liquidityText(params.minLiquidity)}
 
 `;
 
@@ -607,7 +764,7 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
     // Dividendos
     const dividendosFilters: string[] = [];
     if (params.dyFilter?.enabled) {
-      dividendosFilters.push(`• **Dividend Yield**: ${params.dyFilter.min !== undefined ? `≥ ${(params.dyFilter.min * 100).toFixed(1)}%` : ''}${params.dyFilter.min !== undefined && params.dyFilter.max !== undefined ? ' e ' : ''}${params.dyFilter.max !== undefined ? `≤ ${(params.dyFilter.max * 100).toFixed(1)}%` : ''}`);
+      dividendosFilters.push(`• **DY 12m (proventos reais, bruto)**: ${params.dyFilter.min !== undefined ? `≥ ${(params.dyFilter.min * 100).toFixed(1)}%` : ''}${params.dyFilter.min !== undefined && params.dyFilter.max !== undefined ? ' e ' : ''}${params.dyFilter.max !== undefined ? `≤ ${(params.dyFilter.max * 100).toFixed(1)}%` : ''}`);
     }
     if (params.payoutFilter?.enabled) {
       dividendosFilters.push(`• **Payout**: ${params.payoutFilter.min !== undefined ? `≥ ${(params.payoutFilter.min * 100).toFixed(1)}%` : ''}${params.payoutFilter.min !== undefined && params.payoutFilter.max !== undefined ? ' e ' : ''}${params.payoutFilter.max !== undefined ? `≤ ${(params.payoutFilter.max * 100).toFixed(1)}%` : ''}`);
@@ -644,10 +801,25 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
       advancedFilters.push(`• **Score Geral**: ${params.overallScoreFilter.min !== undefined ? `≥ ${params.overallScoreFilter.min.toFixed(0)}` : ''}${params.overallScoreFilter.min !== undefined && params.overallScoreFilter.max !== undefined ? ' e ' : ''}${params.overallScoreFilter.max !== undefined ? `≤ ${params.overallScoreFilter.max.toFixed(0)}` : ''}`);
     }
     if (params.grahamUpsideFilter?.enabled) {
-      advancedFilters.push(`• **Graham Upside**: ${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}${params.grahamUpsideFilter.min !== undefined && params.grahamUpsideFilter.max !== undefined ? ' e ' : ''}${params.grahamUpsideFilter.max !== undefined ? `≤ ${params.grahamUpsideFilter.max.toFixed(0)}%` : ''}`);
+      advancedFilters.push(`• **Potencial Graham**: ${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}${params.grahamUpsideFilter.min !== undefined && params.grahamUpsideFilter.max !== undefined ? ' e ' : ''}${params.grahamUpsideFilter.max !== undefined ? `≤ ${params.grahamUpsideFilter.max.toFixed(0)}%` : ''}`);
     }
     if (advancedFilters.length > 0) {
-      sections.push({ title: '**Qualidade & Oportunidade**', filters: advancedFilters });
+      sections.push({ title: '**Desconto e qualidade**', filters: advancedFilters });
+    }
+
+    // Modelos e sinais (Bazin, Lynch, queda com fundamentos intactos)
+    const signalFilters: string[] = [];
+    if (params.bazinDiscountFilter?.enabled) {
+      signalFilters.push(`• **Desconto vs. preço-teto Bazin** (DY alvo de ${formatPct(resolveTargetYield(params.bazinTargetYield ?? BAZIN_DEFAULTS.targetDividendYield))}): ${rangeText(params.bazinDiscountFilter, (v) => formatPct(v))}`);
+    }
+    if (params.pegFilter?.enabled) {
+      signalFilters.push(`• **PEG (Peter Lynch)**: ${rangeText(params.pegFilter, (v) => formatNumber(v, { digits: 2 }))}; fora do modelo (financeiras, cíclicas, prejuízo ou crescimento ≤ 0) não entra`);
+    }
+    if (params.dipWithIntactFundamentals) {
+      signalFilters.push('• **Queda com fundamentos intactos**: preço abaixo da MM200 ou ≥ 20% abaixo da máxima de 52 semanas, sem piora relevante de lucro, ROE, margem e endividamento nos últimos 12 meses');
+    }
+    if (signalFilters.length > 0) {
+      sections.push({ title: '**Modelos e sinais**', filters: signalFilters });
     }
     
     // Setores e Indústrias
@@ -671,9 +843,9 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
       rational += '\n';
     });
 
-    rational += `**Ordenação**: Empresas que atendem TODOS os critérios, ordenadas por Market Cap${params.useTechnicalAnalysis ? ' + Priorização por Análise Técnica' : ''}.
+    rational += `**Ordenação**: empresas que atendem a todos os critérios, ordenadas por valor de mercado${params.useTechnicalAnalysis ? ', com ativos em sobrevenda primeiro' : ''}.
 
-**Objetivo**: Encontrar empresas que atendem seus critérios específicos de investimento${params.useTechnicalAnalysis ? '. Com análise técnica ativa, priorizamos ativos em sobrevenda para melhor timing de entrada' : ''}.`;
+Filtros quantitativos sobre dados públicos. Não é recomendação de investimento.`;
 
     return rational;
   }
@@ -705,6 +877,11 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
         aValue = a.key_metrics?.cagrReceitas as number ?? null;
         bValue = b.key_metrics?.cagrReceitas as number ?? null;
         break;
+      case 'drawdown':
+        // Maior queda desde a máxima de 52 semanas primeiro (drawdown_asc)
+        aValue = a.key_metrics?.drawdown52w ?? null;
+        bValue = b.key_metrics?.drawdown52w ?? null;
+        break;
       case 'upside':
         // Maior Upside primeiro (maior potencial)
         aValue = a.upside ?? null;
@@ -731,7 +908,7 @@ Configure pelo menos um filtro nas categorias disponíveis para realizar o scree
     }
   }
 
-  validateCompanyData(companyData: CompanyData, params: ScreeningParams): boolean {
+  validateCompanyData(companyData: CompanyData): boolean {
     // Screening precisa de pelo menos market cap
     const marketCap = toNumber(companyData.financials.marketCap);
     return marketCap !== null && marketCap > 0;

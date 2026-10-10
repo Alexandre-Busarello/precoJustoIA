@@ -2,6 +2,12 @@
 
 Uma plataforma SaaS que simplifica a análise fundamentalista de ações para investidores pessoa física, utilizando modelos de valuation consagrados e o poder da IA.
 
+## Antes de cada nova implementação
+
+Antes de cada nova implementação, consulte [`docs/vault/00 - Início.md`](docs/vault/00%20-%20In%C3%ADcio.md) (segundo cérebro do projeto: decisões do dono, fórmulas dos modelos, arquitetura, armadilhas e pendências; abre como vault do Obsidian) e [`docs/harness/README.md`](docs/harness/README.md) (método de implementação multiagente: papéis, ondas e lotes, regras de segurança e scripts).
+
+> O `.env` aponta para o banco de **produção**: não rode `yarn build`/`npm run build` (executa `prisma db push`) nem migrações contra ele. Ambiente local em [`scripts/local/README.md`](scripts/local/README.md).
+
 ## 🚀 Tecnologias
 
 - **Frontend:** Next.js 14 + TypeScript + Tailwind CSS

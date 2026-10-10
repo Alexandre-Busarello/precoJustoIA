@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import { Lock } from 'lucide-react';
 import { ScoreCard } from '@/components/asset/score-card';
 
 interface OverallScore {
@@ -20,7 +20,10 @@ interface CompactScoreProps {
   ticker?: string;
 }
 
-/** Score geral compacto (wrapper do ScoreCard) com link para o detalhamento ou um único CTA quando bloqueado. */
+/**
+ * Score geral compacto (wrapper do ScoreCard) com link para o detalhamento. Bloqueado, mostra só uma linha discreta
+ * com link: o CTA primário da página fica no cabeçalho do ativo.
+ */
 export default function CompactScore({ overallScore, isPremium, isLoggedIn, ticker }: CompactScoreProps) {
   const locked = !isPremium;
   // Premium sem score calculado: estado vazio, sem blur nem CTA de desbloqueio
@@ -37,11 +40,19 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
         locked={locked}
       />
       {locked ? (
-        <Button asChild size="sm" variant="outline" className="min-h-11 w-full md:min-h-9">
-          <Link href={isLoggedIn ? '/checkout' : '/register'}>
-            {isLoggedIn ? 'Desbloquear o score' : 'Criar conta grátis'}
-          </Link>
-        </Button>
+        <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+          <Lock className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          <span>
+            {/* Score geral é do Premium: a conta grátis não libera; o cadastro começa com 1 dia de teste (mesma copy do cabeçalho) */}
+            Disponível no Premium.{' '}
+            <Link
+              href={isLoggedIn ? '/planos' : '/register'}
+              className="whitespace-nowrap py-3 font-medium text-brand underline-offset-4 hover:underline"
+            >
+              {isLoggedIn ? 'Ver planos' : 'Desbloquear com 1 dia grátis'}
+            </Link>
+          </span>
+        </p>
       ) : (
         ticker && (
           <Link

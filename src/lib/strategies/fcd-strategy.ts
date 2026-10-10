@@ -281,7 +281,8 @@ export class FCDStrategy extends AbstractStrategy<FCDParams> {
     else if (discount === null || discount < minMarginOfSafety) verdict = `Preço justo estimado em ${formatCurrency(fairValue)}; margem de segurança de ${formatPercent(discount)}, abaixo do mínimo de ${formatPercent(minMarginOfSafety)}.`;
     else verdict = `Preço justo estimado em ${formatCurrency(fairValue)}, mas apenas ${passedCriteria} de ${criteria.length} critérios de qualidade atendidos.`;
 
-    const reasoning = `${verdict} ${assumptions}${bridgeNote}${terminalNote}${currencyNote}`.replace(/\s+/g, ' ').trim();
+    const bdrNote = this.bdrConversionNote(companyData);
+    const reasoning = `${verdict} ${assumptions}${bridgeNote}${terminalNote}${currencyNote}${bdrNote ? ` ${bdrNote}` : ''}`.replace(/\s+/g, ' ').trim();
 
     return {
       isEligible,

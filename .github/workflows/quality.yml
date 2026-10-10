@@ -1,0 +1,64 @@
+# Verificações de qualidade em pull requests.
+# Não roda build (o script de build executa "prisma db push") e nada aqui usa DATABASE_URL:
+# "prisma generate" (postinstall) só lê o schema.
+# check-ui e check-compliance rodam só nos arquivos de src/ alterados no PR: violações antigas em arquivos não tocados
+# não bloqueiam (o passo "Métricas" mostra o total do check-ui, só como informação).
+name: Quality
+
+on:
+  pull_request:
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 22: "yarn test" passa o glob "src/**/*.test.ts" ao test runner, que só expande glob a partir do Node 21
+          # (uma lista expandida pelo shell não serve: caminhos como app/acao/[ticker] seriam lidos como glob).
+          node-version: 22
+          cache: yarn
+
+      - name: Instalar dependências
+        run: yarn install --frozen-lockfile
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npx eslint src
+
+      - name: Testes unitários
+        run: yarn test
+
+      - name: Arquivos alterados no PR
+        id: changed
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git diff --name-only --diff-filter=ACMR "origin/${BASE_REF}...HEAD" -- src > "$RUNNER_TEMP/changed-src.txt"
+          echo "count=$(wc -l < "$RUNNER_TEMP/changed-src.txt" | tr -d ' ')" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/changed-src.txt"
+
+      - name: Design system (check-ui)
+        if: steps.changed.outputs.count != '0'
+        run: xargs -a "$RUNNER_TEMP/changed-src.txt" -d '\n' bash scripts/check-ui.sh
+
+      - name: Compliance (check-compliance)
+        if: steps.changed.outputs.count != '0'
+        run: xargs -a "$RUNNER_TEMP/changed-src.txt" -d '\n' bash scripts/check-compliance.sh
+
+      - name: Métricas do design system (informativo)
+        run: bash scripts/check-ui.sh --all

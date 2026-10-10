@@ -25,7 +25,7 @@ const STOCK_FAQS: Faq[] = [
   {
     question: "O screening é gratuito?",
     answer:
-      "Sim. Os filtros de valuation (P/L, P/VP, EV/EBITDA, PSR e upside de Graham) são gratuitos e mostram até 3 resultados. No Premium você libera todos os filtros, a configuração com IA e a lista completa.",
+      "Sim. Os filtros de valuation (P/L, P/VP, EV/EBITDA, PSR e potencial de Graham) são gratuitos e mostram até 3 resultados. No Premium você libera todos os filtros, a configuração com IA e a lista completa.",
   },
   {
     question: "Quais indicadores estão disponíveis?",

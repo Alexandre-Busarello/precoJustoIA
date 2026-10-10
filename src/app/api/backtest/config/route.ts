@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma, safeWrite, safeTransaction } from '@/lib/prisma-wrapper';
+import { prisma } from '@/lib/prisma-wrapper';
+import { upsertBacktestConfig } from '@/lib/adaptive-backtest-service';
 import { getCurrentUser } from '@/lib/user-service';
 
-// POST /api/backtest/config - Criar nova configuração
+// POST /api/backtest/config - Criar (ou reaproveitar) uma configuração
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -45,36 +46,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const config = await safeWrite('create-backtest-config', () =>
-      prisma.backtestConfig.create({
-        data: {
-          userId: currentUser.id,
-          name: body.name,
-          description: body.description,
-          startDate: new Date(body.startDate),
-          endDate: new Date(body.endDate),
-          initialCapital: body.initialCapital,
-          monthlyContribution: body.monthlyContribution,
-          rebalanceFrequency: body.rebalanceFrequency,
-          assets: {
-            create: body.assets.map((asset: any) => ({
-              ticker: asset.ticker.toUpperCase(),
-              targetAllocation: asset.allocation,
-              averageDividendYield: asset.averageDividendYield || null
-            }))
-          }
-        },
-        include: { assets: true }
-      }),
-      ['backtest_configs', 'backtest_assets']
-    );
-
-    console.log(`✅ Configuração ${config.id} criada com sucesso`);
+    // Reaproveita a configuração do usuário com o mesmo nome e os mesmos ativos (sem duplicar a cada execução)
+    const { id, reused } = await upsertBacktestConfig(currentUser.id, {
+      name: body.name,
+      description: body.description,
+      startDate: new Date(body.startDate),
+      endDate: new Date(body.endDate),
+      initialCapital: Number(body.initialCapital),
+      monthlyContribution: Number(body.monthlyContribution),
+      rebalanceFrequency: body.rebalanceFrequency || 'monthly',
+      assets: body.assets.map((asset: { ticker: string; allocation: number }) => ({
+        ticker: asset.ticker,
+        allocation: Number(asset.allocation)
+      }))
+    });
+    const config = await prisma.backtestConfig.findUnique({ where: { id }, include: { assets: true } });
 
     return NextResponse.json({ 
-      configId: config.id,
+      configId: id,
       config,
-      message: 'Configuração criada com sucesso'
+      message: reused ? 'Configuração atualizada' : 'Configuração criada'
     });
 
   } catch (error) {

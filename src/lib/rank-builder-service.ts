@@ -7,42 +7,52 @@ import {
   RankBuilderResult,
   dividendHistoryStart,
   toDividendHistory,
+  type HistoricalFinancialData,
 } from '@/lib/strategies';
 import { TechnicalIndicators, type PriceData } from '@/lib/technical-indicators';
 import { getAverageDailyTradedValue } from '@/lib/finance/liquidity';
 import { LIQUIDITY_DEFAULTS, isIlliquid, toLiquidityAssetType } from '@/lib/finance/liquidity-rules';
 import { applyLiquidityRules } from '@/lib/ranking-models';
 import { formatBRLCompact } from '@/lib/format';
+import { BDRDataService } from '@/lib/bdr-data-service';
 
-/** Campos de cada ano de `FinancialData` levados para `historicalFinancials` (inclui o lucro, usado em "lucros consistentes"). */
-export function toHistoricalFinancial(data: Record<string, unknown> & { year: number }) {
-  return {
-    year: data.year,
-    roe: data.roe,
-    roic: data.roic,
-    pl: data.pl,
-    pvp: data.pvp,
-    dy: data.dy,
-    payout: data.payout,
-    margemLiquida: data.margemLiquida,
-    margemEbitda: data.margemEbitda,
-    margemBruta: data.margemBruta,
-    liquidezCorrente: data.liquidezCorrente,
-    liquidezRapida: data.liquidezRapida,
-    dividaLiquidaPl: data.dividaLiquidaPl,
-    dividaLiquidaEbitda: data.dividaLiquidaEbitda,
-    lpa: data.lpa,
-    vpa: data.vpa,
-    marketCap: data.marketCap,
-    earningsYield: data.earningsYield,
-    evEbitda: data.evEbitda,
-    roa: data.roa,
-    passivoAtivos: data.passivoAtivos,
-    lucroLiquido: data.lucroLiquido,
-    receitaTotal: data.receitaTotal,
-    ebitda: data.ebitda,
-    fluxoCaixaOperacional: data.fluxoCaixaOperacional,
-  };
+/** Campos de cada ano de `FinancialData` levados para `historicalFinancials` (inclui o payout e o lucro, usados nas médias e em "lucros consistentes"). */
+const HISTORICAL_FINANCIAL_FIELDS = [
+  'roe',
+  'roic',
+  'pl',
+  'pvp',
+  'dy',
+  'payout',
+  'margemLiquida',
+  'margemEbitda',
+  'margemBruta',
+  'liquidezCorrente',
+  'liquidezRapida',
+  'dividaLiquidaPl',
+  'dividaLiquidaEbitda',
+  'lpa',
+  'vpa',
+  'marketCap',
+  'earningsYield',
+  'evEbitda',
+  'roa',
+  'passivoAtivos',
+  'lucroLiquido',
+  'receitaTotal',
+  'ebitda',
+  'fluxoCaixaOperacional',
+] as const;
+
+/**
+ * Um ano de `FinancialData` no formato de `historicalFinancials`, com valores numéricos. É o único mapeamento usado
+ * pelo ranking (`getCompaniesData`) e pela página do ativo (`executeCompanyAnalysis`), para as médias de 7 anos
+ * serem as mesmas nos dois lugares.
+ */
+export function toHistoricalFinancial(data: Record<string, unknown> & { year: number }): HistoricalFinancialData {
+  const row: HistoricalFinancialData = { year: data.year };
+  for (const field of HISTORICAL_FINANCIAL_FIELDS) row[field] = toNumber(data[field]);
+  return row;
 }
 
 interface MonthlyPrice {
@@ -80,6 +90,28 @@ function technicalAnalysisFrom(prices: MonthlyPrice[], ticker: string): CompanyD
     console.warn(`Erro ao calcular indicadores técnicos para ${ticker}:`, error);
     return undefined;
   }
+}
+
+type BdrConversionInputs = NonNullable<Awaited<ReturnType<typeof BDRDataService.getBdrConversionInputs>>>;
+
+/**
+ * Moeda, paridade e câmbio de cada BDR (`BDRDataService.getBdrConversionInputs`), para Graham, FCD, Gordon e Bazin
+ * converterem o preço justo para reais por recibo, como na página do ativo. BDRs sem paridade ou câmbio ficam de fora.
+ */
+async function loadBdrConversionInputs(tickers: readonly string[]): Promise<Map<string, BdrConversionInputs>> {
+  const result = new Map<string, BdrConversionInputs>();
+  if (tickers.length === 0) return result;
+  try {
+    // Uma busca do câmbio antes do lote: as chamadas por ticker leem o cache do dia.
+    if (!(await BDRDataService.getUsdBrlRate())) return result;
+    const entries = await Promise.all(
+      tickers.map(async (ticker) => [ticker, await BDRDataService.getBdrConversionInputs(ticker)] as const)
+    );
+    for (const [ticker, inputs] of entries) if (inputs) result.set(ticker, inputs);
+  } catch (error) {
+    console.warn('⚠️ [RANKING] Paridade e câmbio dos BDRs indisponíveis:', error);
+  }
+  return result;
 }
 
 /**
@@ -137,6 +169,7 @@ export async function getCompaniesData(assetTypeFilter?: 'b3' | 'bdr' | 'both'):
   );
 
   const liquidity = await getAverageDailyTradedValue(companies.map((company) => company.id));
+  const bdrInputs = await loadBdrConversionInputs(companies.filter((company) => company.assetType === 'BDR').map((company) => company.ticker));
 
   return companies.map((company) => {
     // Último provento: o da empresa, ou o mais recente do histórico.
@@ -163,6 +196,7 @@ export async function getCompaniesData(assetTypeFilter?: 'b3' | 'bdr' | 'both'):
         ...(company.financialData[0] || {}),
         ...(ultimoDividendo !== undefined && ultimoDividendo !== null && { ultimoDividendo }),
         ...(dataUltimoDividendo !== undefined && dataUltimoDividendo !== null && { dataUltimoDividendo }),
+        ...bdrInputs.get(company.ticker),
       },
       historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : undefined,
       technicalAnalysis: technicalAnalysisFrom(company.historicalPrices, company.ticker),
@@ -229,6 +263,8 @@ export async function getCompaniesDataFii(): Promise<CompanyData[]> {
         aluguelM2: fd.aluguelM2,
         patrimonioLiquido: fd.patrimonioLiquido,
         ...(lastDivFromFii !== null && lastDivFromFii > 0 ? { fiiLastDividendValue: fd.lastDividendValue } : {}),
+        // Data da última atualização dos dados do FII: o pilar "Segmento e resiliência" usa, como na página do FII.
+        fiiLastFetchedAt: fd.lastFetchedAt,
       },
     };
   });

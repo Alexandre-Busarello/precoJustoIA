@@ -618,6 +618,232 @@
    ],
    "tasks": "See batches/w3-screening-filters.md",
    "testPlan": "See batches/w3-screening-filters.md"
+  },
+  {
+   "id": "w3-ibov-projections",
+   "wave": 3,
+   "title": "IBOV projections redone with statistics (historical ranges, calibration), AI only for commentary; fix stale updates",
+   "ownedPaths": [
+    "src/app/projecoes-ibov/**",
+    "src/app/api/ibov-projections/**",
+    "src/app/api/cron/calculate-ibov-projections/route.ts",
+    "src/app/api/ben/project-ibov/route.ts",
+    "src/app/actions/ibov-projection.ts",
+    "src/app/admin/ibov-projections/**",
+    "src/components/admin/ibov-projections-manager.tsx",
+    "src/components/dashboard-ibov-banner.tsx",
+    "src/lib/ibov-projection-helpers.ts",
+    "src/lib/ibov-projections/**",
+    "src/lib/__tests__/ibov-projections/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w3-ibov-projections.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w3-ibov-projections.md"
+  },
+  {
+   "id": "w5-data-consistency",
+   "wave": 5,
+   "title": "Same numbers for the same ticker on asset page and ranking; FII/ETF defaults and scoring fixes",
+   "ownedPaths": [
+    "src/lib/rank-builder-service.ts",
+    "src/lib/company-analysis-service.ts",
+    "src/lib/strategies/fii-ranking-strategy.ts",
+    "src/lib/strategies/fii-overall-score.ts",
+    "src/lib/strategies/strategy-factory.ts",
+    "src/lib/__tests__/consistency/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w5-data-consistency.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w5-data-consistency.md"
+  },
+  {
+   "id": "w5-platform-fixes",
+   "wave": 5,
+   "title": "Backtest example duplicates, date-only formatting, API rate limit, sector-analysis gating, login redirect, 404 robots, test glob",
+   "ownedPaths": [
+    "src/app/api/backtest/config/route.ts",
+    "src/lib/format.ts",
+    "src/middleware.ts",
+    "src/lib/rate-limit-cache-service.ts",
+    "src/app/api/sector-analysis/route.ts",
+    "src/app/login/page.tsx",
+    "package.json",
+    "src/lib/__tests__/platform/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w5-platform-fixes.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w5-platform-fixes.md"
+  },
+  {
+   "id": "w5-dividends-bdr-data",
+   "wave": 5,
+   "title": "FII dividend dedupe across sources; BDR fair values via parity and FX without schema change",
+   "ownedPaths": [
+    "src/lib/dividend-service.ts",
+    "src/lib/finance/dividends.ts",
+    "src/lib/bdr-data-service.ts",
+    "src/lib/__tests__/data-quality/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w5-dividends-bdr-data.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w5-dividends-bdr-data.md"
+  },
+  {
+   "id": "w5-mobile-ben-a11y",
+   "wave": 5,
+   "title": "Ben floating button on mobile, touch targets >= 44px, quiz slider name",
+   "ownedPaths": [
+    "src/components/ben-chat-fab.tsx",
+    "src/components/ben-chat-sidebar.tsx",
+    "src/components/ben-intro-card.tsx",
+    "src/components/ui/button.tsx",
+    "src/components/ui/info-hint.tsx",
+    "src/components/ui/data-table.tsx",
+    "src/components/rentability-selector.tsx"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w5-mobile-ben-a11y.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w5-mobile-ben-a11y.md"
+  },
+  {
+   "id": "w6-ben-context",
+   "wave": 6,
+   "title": "Ben page context for every surface, server-side use, Perguntar ao Ben entry points, answer links",
+   "ownedPaths": [
+    "src/lib/ben-context/**",
+    "src/lib/ben-service.ts",
+    "src/lib/ben-tools.ts",
+    "src/lib/ben-interaction-service.ts",
+    "src/app/api/ben/chat/route.ts",
+    "src/app/api/ben/interactions/route.ts",
+    "src/hooks/use-ben-chat.ts",
+    "src/components/ben/ask-ben-button.tsx",
+    "src/lib/__tests__/ben-context/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w6-ben-context.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w6-ben-context.md"
+  },
+  {
+   "id": "w6-ben-ui",
+   "wave": 6,
+   "title": "Ben chat redesign: side panel/bottom sheet, contextual start screen, streaming/tool states, limits, history",
+   "ownedPaths": [
+    "src/components/ben-chat-sidebar.tsx",
+    "src/components/ben/**",
+    "src/components/ben-chat-fab.tsx",
+    "src/components/ben-intro-card.tsx",
+    "src/app/conversas-ben/**"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w6-ben-ui.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w6-ben-ui.md"
+  },
+  {
+   "id": "w7-backtest-flow",
+   "wave": 7,
+   "title": "Quick backtest: one click from asset/ranking/comparador/carteira runs with defaults and lands on the result, with 'Ajustar configuração'; legacy selectors removed",
+   "ownedPaths": [
+    "src/lib/backtest/quick-backtest.ts",
+    "src/lib/__tests__/backtest/**",
+    "src/components/backtest/**",
+    "src/components/add-to-backtest-button.tsx",
+    "src/components/backtest-config-selector.tsx",
+    "src/components/batch-backtest-selector.tsx",
+    "src/components/backtest-page-client.tsx",
+    "src/components/backtest-results.tsx",
+    "src/components/strategic-analysis-client.tsx",
+    "src/components/quick-ranker.tsx",
+    "src/components/ranking-wizard/ranking-results-table.tsx",
+    "src/app/compara-acoes/[...tickers]/page.tsx",
+    "src/components/portfolio-backtest-action.tsx",
+    "src/components/portfolio-detail-page.tsx",
+    "src/app/api/backtest/quick/route.ts"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w7-backtest-flow.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w7-backtest-flow.md"
+  },
+  {
+   "id": "w7-ux-coherence",
+   "wave": 7,
+   "title": "Coherence: honest free-plan copy, one valuation vocabulary (margem de segurança / potencial), margin floor, menu without duplicates, breadcrumbs",
+   "ownedPaths": [
+    "src/components/landing-pricing-section.tsx",
+    "src/app/planos/plan-comparison.tsx",
+    "src/app/planos/page.tsx",
+    "src/components/portfolio-empty-state.tsx",
+    "src/components/portfolio-list-page.tsx",
+    "src/lib/valuation-metrics.ts",
+    "src/lib/__tests__/valuation-metrics*",
+    "src/components/screening/screening-results.tsx",
+    "src/components/screening/screening-metrics.ts",
+    "src/components/screening/screening-metrics.test.ts",
+    "src/components/screening-results-blur.tsx",
+    "src/components/screening-configurator.tsx",
+    "src/components/screening-conversion-page.tsx",
+    "src/components/screening/screening-hub-page.tsx",
+    "src/components/radar-grid.tsx",
+    "src/components/dashboard-radar-section.tsx",
+    "src/components/related-companies.tsx",
+    "src/components/technical-analysis-traffic-light.tsx",
+    "src/lib/navigation.ts",
+    "src/lib/__tests__/navigation*",
+    "src/app/perfil/page.tsx",
+    "src/app/analise-setorial/page.tsx",
+    "src/app/radar-dividendos/page.tsx",
+    "src/app/pl-bolsa/page.tsx",
+    "src/app/comparador/comparador-hub.tsx",
+    "src/app/comparador/page.tsx"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w7-ux-coherence.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w7-ux-coherence.md"
+  },
+  {
+   "id": "w7-backtest-showcase",
+   "wave": 7,
+   "title": "Backtest showcase: 3 rule-based, dated, cached example backtests (BOVA11, DIVO11, example portfolio) on /backtest landing, upgrade card and home; /metodologia#backtest; revalidation cron",
+   "ownedPaths": [
+    "src/lib/backtest-showcase/**",
+    "src/lib/__tests__/backtest-showcase/**",
+    "src/components/backtest-showcase/**",
+    "src/app/api/cron/backtest-showcase/route.ts",
+    "src/app/backtest/backtest-landing.tsx",
+    "src/app/backtest/backtest-upgrade-card.tsx",
+    "src/app/backtest/example-portfolio-card.tsx",
+    "src/app/page.tsx",
+    "src/app/metodologia/page.tsx"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w7-backtest-showcase.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w7-backtest-showcase.md"
+  },
+  {
+   "id": "w7-mobile-polish",
+   "wave": 7,
+   "title": "Mobile polish: Ben button never covers content, carteira table fits at 1440, one upsell per asset page, readable ranking history, ETF actions",
+   "ownedPaths": [
+    "src/components/ben-chat-fab.tsx",
+    "src/components/portfolio-holdings-table.tsx",
+    "src/app/etf/[ticker]/page.tsx",
+    "src/components/compact-score.tsx",
+    "src/components/asset/valuation-table.tsx",
+    "src/components/ai-analysis-dual.tsx",
+    "src/components/market-sentiment-section.tsx",
+    "src/components/technical-analysis-link.tsx",
+    "src/components/ranking-history-section.tsx",
+    "src/lib/ranking-history-label.ts",
+    "src/lib/__tests__/ranking-history-label.test.ts"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w7-mobile-polish.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w7-mobile-polish.md"
+  },
+  {
+   "id": "w8-point-in-time-fundamentals",
+   "wave": 8,
+   "title": "Point-in-time fundamentals history (reconstructed + live snapshots), survivorship, groundwork for strategy backtests — additive schema change, owner approval",
+   "ownedPaths": [
+    "prisma/schema.prisma",
+    "src/lib/point-in-time/**",
+    "src/lib/__tests__/point-in-time/**",
+    "src/app/api/cron/fundamentals-snapshot/**",
+    "src/app/api/admin/fundamentals-backfill/**",
+    "docs/vault/Arquitetura/Histórico de fundamentos.md",
+    "docs/vault/Features/Backtest de estratégia (design).md"
+   ],
+   "tasks": "See docs/melhorias-2026-09/batches/w8-point-in-time-fundamentals.md",
+   "testPlan": "See docs/melhorias-2026-09/batches/w8-point-in-time-fundamentals.md"
   }
  ],
  "deferred": [
@@ -640,6 +866,8 @@
   "Scheduling the /api/cron/macro-indicators job in vercel.json — owner deploy step (endpoint delivered in w1-finance-foundation).",
   "Weekly dividend summary e-mail and monthly \"sua carteira vs CDI\" e-mail — e-mail sending cannot be exercised in this environment; build after agenda/returns ship.",
   "Unifying acao and bdr page implementations into a shared AssetPageLayout (80% duplicated) — P2 refactor after the redesign stabilizes.",
-  "Production verifications for the owner (read-only): curl -I https://precojusto.ai/upgrade and /fundador before/after deploy; SELECT DISTINCT sector, industry to validate the sector dictionary."
+  "Production verifications for the owner (read-only): curl -I https://precojusto.ai/upgrade and /fundador before/after deploy; SELECT DISTINCT sector, industry to validate the sector dictionary.",
+  "Wave 7 audit (reports/auditoria-onda7.md) — owner decisions: free plan gets 1 quick backtest/month (C-01 option) and 'Minha carteira' as a free source in Onde aportar (C-15).",
+  "Wave 7 audit P2 backlog: regenerate home product captures for ranking (light + dark, current UI) (C-14); FII margin/preço-teto in the dashboard radar (C-16); sentence-case score labels 'Muito Bom' (C-17); content reflow when the Ben desktop panel opens below 1600 px (C-18); single suggestions notice on the carteira (C-19); route loading.tsx skeletons for heavy SSR pages (C-21); compact footer inside the logged-in app on mobile (C-22)."
  ]
 }

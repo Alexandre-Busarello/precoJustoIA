@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/user-service'
 import { getUserBenInteractionState, shouldShowProactiveMessage, generateProactiveMessage } from '@/lib/ben-interaction-service'
-import { extractPageContext } from '@/lib/ben-page-context'
+import { contextFromPath } from '@/lib/ben-context/builders'
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,11 +21,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const contextUrl = searchParams.get('contextUrl') || undefined
     
-    // Extrair contexto da página se fornecido
-    let pageContext
-    if (contextUrl) {
-      pageContext = await extractPageContext(contextUrl)
-    }
+    // Contexto mínimo da rota (sem consulta ao banco)
+    const pageContext = contextUrl ? contextFromPath(contextUrl) : undefined
 
     // Obter estado de interação
     const state = await getUserBenInteractionState(user.id)

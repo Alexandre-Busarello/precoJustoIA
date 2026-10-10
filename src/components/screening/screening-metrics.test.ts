@@ -7,8 +7,10 @@ import {
   formatMetricValue,
   metricTone,
   parseDecimal,
-  resultUpside,
+  resultMargin,
   sortResults,
+  stockParamsToQuery,
+  stripPremiumStockParams,
   STOCK_METRIC_ORDER,
   translateMetricName,
   visibleMetricKeys,
@@ -31,9 +33,9 @@ function result(ticker: string, overrides: Partial<ScreeningResult> = {}): Scree
 
 test("translateMetricName cobre as chaves camelCase que a API envia", () => {
   assert.equal(translateMetricName("marketCap"), "Valor de mercado")
-  assert.equal(translateMetricName("grahamUpside"), "Upside Graham")
-  assert.equal(translateMetricName("fcdUpside"), "Upside FCD")
-  assert.equal(translateMetricName("gordonUpside"), "Upside Gordon")
+  assert.equal(translateMetricName("grahamUpside"), "Potencial Graham")
+  assert.equal(translateMetricName("fcdUpside"), "Potencial FCD")
+  assert.equal(translateMetricName("gordonUpside"), "Potencial Gordon")
   assert.equal(translateMetricName("cagrReceitas"), "CAGR receitas 5a")
   assert.equal(translateMetricName("pjFiiScore"), "Score PJ-FII")
   // Fallback nunca devolve camelCase cru.
@@ -57,7 +59,7 @@ test("formatMetricValue respeita a unidade de cada campo", () => {
   assert.equal(formatMetricValue("roic", null), "—")
 })
 
-test("metricTone só colore upside", () => {
+test("metricTone só colore o potencial", () => {
   assert.equal(metricTone("grahamUpside", 10), "positive")
   assert.equal(metricTone("gordonUpside", -3), "negative")
   assert.equal(metricTone("roe", 0.3), "neutral")
@@ -69,9 +71,9 @@ test("visibleMetricKeys segue a ordem e descarta chaves internas", () => {
   assert.deepEqual(visibleMetricKeys(rows, STOCK_METRIC_ORDER), ["pl", "marketCap"])
 })
 
-test("resultUpside usa fração a partir do preço justo", () => {
-  assert.equal(resultUpside({ currentPrice: 75, fairValue: 100 })?.toFixed(4), "0.3333")
-  assert.equal(resultUpside({ currentPrice: 10, fairValue: null }), null)
+test("resultMargin é a margem de segurança (1 − preço ÷ preço justo), em fração", () => {
+  assert.equal(resultMargin({ currentPrice: 75, fairValue: 100 }), 0.25)
+  assert.equal(resultMargin({ currentPrice: 10, fairValue: null }), null)
 })
 
 test("sortResults ordena sem mutar e manda ausentes para o fim", () => {
@@ -82,8 +84,8 @@ test("sortResults ordena sem mutar e manda ausentes para o fim", () => {
   ]
   assert.deepEqual(sortResults(rows, "pl").map((r) => r.ticker), ["C", "A", "B"])
   assert.deepEqual(rows.map((r) => r.ticker), ["A", "B", "C"])
-  const byUpside = [result("X", { fairValue: 11 }), result("Y", { fairValue: 20 }), result("Z")]
-  assert.deepEqual(sortResults(byUpside, "upside").map((r) => r.ticker), ["Y", "X", "Z"])
+  const byMargin = [result("X", { fairValue: 11 }), result("Y", { fairValue: 20 }), result("Z")]
+  assert.deepEqual(sortResults(byMargin, "margin").map((r) => r.ticker), ["Y", "X", "Z"])
   assert.equal(sortResults(rows, "relevance"), rows)
 })
 
@@ -133,4 +135,32 @@ test("parseDecimal trata pontos agrupados de três em três como milhar (placeho
   // Ponto único fora do padrão de milhar continua decimal.
   assert.equal(parseDecimal("1.00"), 1)
   assert.equal(parseDecimal("2.25"), 2.25)
+})
+
+test("stripPremiumStockParams: mantém só os filtros do plano gratuito", () => {
+  const stripped = stripPremiumStockParams({
+    companySize: "small_caps",
+    useTechnicalAnalysis: true,
+    assetTypeFilter: "b3",
+    minLiquidity: 1_000_000,
+    plFilter: { enabled: true, max: 10 },
+    grahamUpsideFilter: { enabled: true, min: 20 },
+    roeFilter: { enabled: true, min: 0.15 },
+    pegFilter: { enabled: true, max: 1 },
+    bazinTargetYield: 0.08,
+    dipWithIntactFundamentals: true,
+    selectedSectors: ["Energia"],
+  })
+  assert.deepEqual(stripped, {
+    companySize: "small_caps",
+    useTechnicalAnalysis: true,
+    assetTypeFilter: "b3",
+    minLiquidity: 1_000_000,
+    plFilter: { enabled: true, max: 10 },
+    grahamUpsideFilter: { enabled: true, min: 20 },
+  })
+  assert.equal(countActiveStockFilters(stripped), 4)
+  // Sem filtro Premium, a query não muda.
+  const free = { companySize: "all" as const, useTechnicalAnalysis: true, assetTypeFilter: "b3" as const, pvpFilter: { enabled: true, max: 1.5 } }
+  assert.equal(stockParamsToQuery(stripPremiumStockParams(free)).toString(), stockParamsToQuery(free).toString())
 })

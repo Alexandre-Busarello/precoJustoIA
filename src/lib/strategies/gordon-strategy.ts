@@ -11,7 +11,7 @@ import {
   toNumber,
   upsidePercent,
 } from './base-strategy';
-import { extraordinaryEvents, removeExtraordinary, sumTTM, toDividendEvents, type DividendEvent } from '../finance/dividends';
+import { extraordinaryEvents, removeExtraordinary, sumTTM, dedupedDividendEvents, type DividendEvent } from '../finance/dividends';
 import { formatNumber, formatPct } from '../format';
 import { gordonValue, MIN_DISCOUNT_GROWTH_SPREAD } from '../finance/valuation';
 import type { SectorClass } from '../finance/sector-classification';
@@ -108,7 +108,7 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
     let d0: number | null = null;
     let d0Source: GordonInputs['d0Source'] = null;
     let excludedExtraordinary = 0;
-    const events = companyData.dividendHistory ? toDividendEvents(companyData.dividendHistory) : [];
+    const events = companyData.dividendHistory ? dedupedDividendEvents(companyData.dividendHistory) : [];
     if (events.length > 0) {
       d0 = dividendsTTM(events);
       excludedExtraordinary = extraordinaryTTM(events);
@@ -229,9 +229,10 @@ export class GordonStrategy extends AbstractStrategy<GordonParams> {
       fairValue === null
         ? 'Não foi possível estimar o preço justo pelos dividendos'
         : `Preço justo de ${formatCurrency(fairValue)} = D1 ${formatCurrency((d0 ?? 0) * (1 + g))} ÷ (k − g)`;
+    const bdrNote = this.bdrConversionNote(companyData);
     const reasoning = `${verdict}. ${parameters}${
       isEligible ? ` Margem de segurança de ${formatPercent(discount)}.` : reasons.length > 0 ? ` Fora do modelo: ${reasons.join('; ')}.` : ''
-    }`;
+    }${bdrNote ? ` ${bdrNote}` : ''}`;
 
     return {
       fairValue,

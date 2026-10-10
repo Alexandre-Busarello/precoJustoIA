@@ -9,7 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { safeWrite } from "@/lib/prisma-wrapper";
 import { Prisma } from "@prisma/client";
-import { toDividendEvents } from "@/lib/finance/dividends";
+import { dedupedDividendEvents } from "@/lib/finance/dividends";
 import { subtractMonthsUTC } from "@/lib/finance/utils";
 import { PROJECTION_HISTORY_MONTHS, todayInBrazil } from "@/app/agenda-proventos/agenda-model";
 
@@ -52,7 +52,7 @@ export class DividendRadarService {
       throw new Error(`Company ${ticker} not found`);
     }
 
-    const projections = buildDividendProjections(toDividendEvents(company.dividendHistory), today);
+    const projections = buildDividendProjections(dedupedDividendEvents(company.dividendHistory), today);
     await this.saveProjections(ticker, projections);
     return projections;
   }

@@ -2,8 +2,10 @@
  * Métricas de valuation usadas em toda a UI. Fonte única para evitar fórmulas divergentes entre telas.
  *
  * - Margem de segurança = 1 − preço / preço justo (fração). PJ 100, preço 75 → 0,25.
- * - Upside = preço justo / preço − 1 (fração). PJ 100, preço 75 → 0,3333.
+ * - Upside = preço justo / preço − 1 (fração). PJ 100, preço 75 → 0,3333. Na UI se chama "Potencial".
  */
+
+import { EMPTY_VALUE, formatDeltaPct } from '@/lib/format'
 
 type Maybe<T> = T | null | undefined
 
@@ -21,6 +23,26 @@ export function marginOfSafety(price: Maybe<number>, fair: Maybe<number>): numbe
 export function upside(price: Maybe<number>, fair: Maybe<number>): number | null {
   if (!isPositive(price) || !isPositive(fair)) return null
   return fair / price - 1
+}
+
+/** Piso de exibição da margem: abaixo de −100% (preço acima do dobro do preço justo) o número vira ruído. */
+export const MARGIN_DISPLAY_FLOOR = -1
+
+/** Teto de exibição do potencial: acima de +1.000% (preço justo 11× o preço) o número deixa de informar. */
+export const UPSIDE_DISPLAY_CEILING = 10
+
+/** Margem de segurança para exibição: `0,106` → `+10,6%`, `−3,07` → `< −100%`, sem valor → `—`. */
+export function formatMarginOfSafety(margin: Maybe<number>): string {
+  if (typeof margin !== 'number' || !Number.isFinite(margin)) return EMPTY_VALUE
+  if (margin < MARGIN_DISPLAY_FLOOR) return '< −100%'
+  return formatDeltaPct(margin)
+}
+
+/** Potencial (upside) para exibição: `0,119` → `+11,9%`, `12` → `> +1.000%`, sem valor → `—`. */
+export function formatUpside(value: Maybe<number>): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return EMPTY_VALUE
+  if (value > UPSIDE_DISPLAY_CEILING) return '> +1.000%'
+  return formatDeltaPct(value)
 }
 
 export type ValuationStatus = 'below' | 'within' | 'above'

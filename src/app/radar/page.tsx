@@ -6,7 +6,7 @@ import { RadarPageContent } from '@/components/radar-page-content'
 
 export const metadata: Metadata = {
   title: 'Radar de oportunidades',
-  description: 'Acompanhe score, estratégias, upside, posição técnica e sentimento dos seus ativos em uma única tabela.',
+  description: 'Acompanhe score, estratégias, margem de segurança, posição técnica e sentimento dos seus ativos em uma única tabela.',
 }
 
 export default async function RadarPage() {

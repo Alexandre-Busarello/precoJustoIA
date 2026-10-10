@@ -64,7 +64,7 @@ export function SessionRefreshProvider({ children }: SessionRefreshProviderProps
         toastShownRef.current = true
         lastToastTimeRef.current = Date.now()
         
-        toast.success('🎉 Parabéns! Sua conta Premium foi ativada!', {
+        toast.success('Sua conta Premium foi ativada', {
           description: 'Agora você tem acesso a todas as análises avançadas.',
           duration: 5000,
         })

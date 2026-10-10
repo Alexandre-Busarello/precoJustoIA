@@ -9,9 +9,12 @@ import { calculateOverallScore, OverallScore, OverallScoreWithBreakdown, Financi
 import { STRATEGY_CONFIG } from '@/lib/strategies/strategy-config';
 import { BAZIN_DEFAULTS, dividendHistoryStart, toDividendHistory } from '@/lib/strategies/bazin-strategy';
 import { LYNCH_DEFAULTS } from '@/lib/strategies/lynch-strategy';
+import { fairValueModelParams, universeForAssetType } from '@/lib/ranking-models';
+import { toHistoricalFinancial } from '@/lib/rank-builder-service';
 import { BANK_PVP_DEFAULTS } from '@/lib/strategies/bank-pvp-strategy';
 import type { CompanyData, HistoricalFinancialData } from '@/lib/strategies/types';
 import { getValuationModel } from '@/components/asset/valuation-models';
+import { isBDRTickerSymbol } from '@/lib/strategies/base-strategy';
 import { isFinancial } from '@/lib/finance/sector-classification';
 import { warmMacroAssumptions } from '@/lib/finance/macro';
 
@@ -25,28 +28,14 @@ export interface CompanyAnalysisData {
   financials: Record<string, unknown>;
   /** Proventos por ação; quando ausente, `executeCompanyAnalysis` carrega os últimos 6 anos completos. */
   dividendHistory?: CompanyData['dividendHistory'];
-  historicalFinancials?: Array<{
-    year: number;
-    roe?: number | null;
-    roic?: number | null;
-    pl?: number | null;
-    pvp?: number | null;
-    dy?: number | null;
-    margemLiquida?: number | null;
-    margemEbitda?: number | null;
-    margemBruta?: number | null;
-    liquidezCorrente?: number | null;
-    liquidezRapida?: number | null;
-    dividaLiquidaPl?: number | null;
-    dividaLiquidaEbitda?: number | null;
-    lpa?: number | null;
-    vpa?: number | null;
-    marketCap?: number | null;
-    earningsYield?: number | null;
-    evEbitda?: number | null;
-    roa?: number | null;
-    passivoAtivos?: number | null;
-  }>;
+  /** Prisma `AssetType` ('STOCK', 'BDR'…); quando ausente e há `companyId`, vem do banco. */
+  assetType?: string;
+  /** Anos anteriores de `FinancialData`; com `companyId`, é sempre montado do banco como no ranking. */
+  historicalFinancials?: HistoricalFinancialData[];
+  /** Demonstrações anuais (DRE, balanço, DFC) usadas pelo FCD; com `companyId`, vêm do banco como no ranking. */
+  incomeStatements?: Record<string, unknown>[];
+  balanceSheets?: Record<string, unknown>[];
+  cashflowStatements?: Record<string, unknown>[];
 }
 
 // Interface para resultado da análise
@@ -74,109 +63,152 @@ export interface AnalysisStrategies {
   bankPvp: StrategyAnalysis | null;
 }
 
-/** Campos de lucro/caixa por ano usados em "lucros consistentes" (8 anos) e que os chamadores não trazem. */
-const PROFIT_FIELDS = ['lucroLiquido', 'receitaTotal', 'ebitda', 'fluxoCaixaOperacional'] as const;
+/** Anos de `FinancialData` lidos por empresa (atual + 7), como em `getCompaniesData` dos rankings. */
+const FINANCIAL_HISTORY_YEARS = 8;
 
-interface ProfitRow {
-  year: number;
-  lucroLiquido: unknown;
-  receitaTotal: unknown;
-  ebitda: unknown;
-  fluxoCaixaOperacional: unknown;
+interface CompanyHistoryRow {
+  assetType: string | null;
+  ultimoDividendo: unknown;
+  dataUltimoDividendo: unknown;
+  financialData: Array<Record<string, unknown> & { year: number }>;
+  incomeStatements: Record<string, unknown>[];
+  balanceSheets: Record<string, unknown>[];
+  cashflowStatements: Record<string, unknown>[];
 }
 
-const PROFIT_SELECT = { year: true, lucroLiquido: true, receitaTotal: true, ebitda: true, fluxoCaixaOperacional: true } as const;
+type DividendRow = Parameters<typeof toDividendHistory>[0][number];
 
-/** O histórico do chamador já traz o lucro de cada ano (nada a buscar para "lucros consistentes"). */
-function hasProfitHistory(companyData: CompanyAnalysisData): boolean {
-  const rows: HistoricalFinancialData[] = companyData.historicalFinancials ?? [];
-  return rows.length > 0 && rows.every((row) => row.lucroLiquido !== undefined);
-}
-
-/** Junta os campos de lucro/caixa por ano (`profitRows`, mais recente primeiro) ao histórico da análise. */
-function mergeProfitHistory(companyData: CompanyAnalysisData, profitRows: readonly ProfitRow[]): CompanyAnalysisData {
-  if (profitRows.length === 0) return companyData;
-  const profitByYear = new Map(profitRows.map((row) => [row.year, row]));
-  const currentYear = toNumber(companyData.financials.year) ?? profitRows[0]?.year;
-  const existing: HistoricalFinancialData[] = companyData.historicalFinancials ?? [];
-  const historicalFinancials: HistoricalFinancialData[] = existing.length > 0
-    ? existing.map((row) => {
-        const profit = profitByYear.get(row.year);
-        const merged: HistoricalFinancialData = { ...row };
-        for (const field of PROFIT_FIELDS) {
-          if (merged[field] === undefined || merged[field] === null) merged[field] = profit ? toNumber(profit[field]) : null;
-        }
-        return merged;
-      })
-    : profitRows
-        .filter((row) => row.year !== currentYear)
-        .map((row) => ({
-          year: row.year,
-          lucroLiquido: toNumber(row.lucroLiquido),
-          receitaTotal: toNumber(row.receitaTotal),
-          ebitda: toNumber(row.ebitda),
-          fluxoCaixaOperacional: toNumber(row.fluxoCaixaOperacional),
-        }));
-
+/** Demonstrações anuais dos últimos 5 anos, como em `getCompaniesData` (o FCD usa a DRE e a DFC mais recentes). */
+function yearlyStatementsQuery() {
+  const startYear = new Date().getFullYear() - 4;
   return {
-    ...companyData,
-    historicalFinancials: (historicalFinancials.length > 0 ? historicalFinancials : companyData.historicalFinancials) as CompanyAnalysisData['historicalFinancials'],
+    where: { period: 'YEARLY' as const, endDate: { gte: new Date(`${startYear}-01-01`) } },
+    orderBy: { endDate: 'desc' as const },
+    take: 7,
+  };
+}
+
+function companyHistorySelect() {
+  const statements = yearlyStatementsQuery();
+  return {
+    assetType: true,
+    ultimoDividendo: true,
+    dataUltimoDividendo: true,
+    financialData: { orderBy: { year: 'desc' as const }, take: FINANCIAL_HISTORY_YEARS },
+    incomeStatements: statements,
+    balanceSheets: statements,
+    cashflowStatements: statements,
   };
 }
 
 /**
- * Completa os dados da análise com o que os modelos de dividendos e de lucros consistentes precisam: proventos dos
- * últimos 6 anos completos (com tipo e data de pagamento) e o lucro de cada ano no histórico. Respeita o que o
- * chamador já trouxe e só consulta o banco para o que falta.
+ * Aplica à análise os mesmos insumos que o ranking monta em `getCompaniesData` (rank-builder-service): histórico de
+ * `FinancialData` com os mesmos campos (`toHistoricalFinancial`, incluindo payout e lucro de cada ano), demonstrações
+ * anuais, tipo do ativo, último provento e proventos dos últimos 6 anos completos. Assim, Graham, FCD, Gordon, Bazin, Barsi e Lynch chegam ao
+ * mesmo preço justo na página do ativo e no ranking. Proventos e demonstrações já trazidos pelo chamador são respeitados.
  */
-async function withDividendAndProfitHistory(companyData: CompanyAnalysisData, companyId: number): Promise<CompanyAnalysisData> {
-  const needsDividends = companyData.dividendHistory === undefined;
-  const needsProfits = !hasProfitHistory(companyData);
-  if (!needsDividends && !needsProfits) return companyData;
+function withRankingInputs(
+  companyData: CompanyAnalysisData,
+  company: CompanyHistoryRow | null,
+  dividendRows: readonly DividendRow[] | null
+): CompanyAnalysisData {
+  const dividendHistory =
+    companyData.dividendHistory ?? (dividendRows ? toDividendHistory(dividendRows) : undefined);
+  if (!company) return dividendHistory ? { ...companyData, dividendHistory } : companyData;
 
-  const [dividendRows, profitRows] = await Promise.all([
-    needsDividends
+  const currentYear = toNumber(companyData.financials.year) ?? company.financialData[0]?.year;
+  const historicalFinancials = company.financialData
+    .filter((row) => row.year !== currentYear)
+    .slice(0, FINANCIAL_HISTORY_YEARS - 1)
+    .map(toHistoricalFinancial);
+
+  // Último provento: o da empresa, ou o mais recente do histórico (mesma regra do ranking).
+  let ultimoDividendo: unknown = company.ultimoDividendo;
+  let dataUltimoDividendo: unknown = company.dataUltimoDividendo;
+  if (!ultimoDividendo && dividendHistory && dividendHistory.length > 0) {
+    ultimoDividendo = toNumber(dividendHistory[0].amount);
+    dataUltimoDividendo = dividendHistory[0].exDate;
+  }
+
+  const statements = (rows: Record<string, unknown>[]) => (rows.length > 0 ? rows : undefined);
+  return {
+    ...companyData,
+    assetType: companyData.assetType ?? company.assetType ?? undefined,
+    incomeStatements: companyData.incomeStatements ?? statements(company.incomeStatements),
+    balanceSheets: companyData.balanceSheets ?? statements(company.balanceSheets),
+    cashflowStatements: companyData.cashflowStatements ?? statements(company.cashflowStatements),
+    financials: {
+      ...companyData.financials,
+      ...(ultimoDividendo !== undefined && ultimoDividendo !== null && { ultimoDividendo }),
+      ...(dataUltimoDividendo !== undefined && dataUltimoDividendo !== null && { dataUltimoDividendo }),
+    },
+    historicalFinancials: historicalFinancials.length > 0 ? historicalFinancials : companyData.historicalFinancials,
+    ...(dividendHistory && { dividendHistory }),
+  };
+}
+
+/**
+ * BDR: moeda dos demonstrativos, paridade e câmbio do dia em `financials` (`BDRDataService.getBdrConversionInputs`),
+ * para Graham, FCD, Gordon e Bazin converterem o preço justo para reais por recibo, como no ranking. Sem paridade ou
+ * câmbio, segue sem eles e os modelos explicam por que não se aplicam.
+ */
+async function withBdrConversionInputs(companyData: CompanyAnalysisData): Promise<CompanyAnalysisData> {
+  if (companyData.assetType !== 'BDR' && !isBDRTickerSymbol(companyData.ticker)) return companyData;
+  try {
+    const { BDRDataService } = await import('@/lib/bdr-data-service');
+    const inputs = await BDRDataService.getBdrConversionInputs(companyData.ticker);
+    return inputs ? { ...companyData, financials: { ...companyData.financials, ...inputs } } : companyData;
+  } catch (error) {
+    console.warn(`⚠️ Paridade e câmbio indisponíveis para ${companyData.ticker}:`, error);
+    return companyData;
+  }
+}
+
+/** Carrega do banco os insumos do ranking para uma empresa e os aplica à análise (ver `withRankingInputs`). */
+async function loadRankingInputs(companyData: CompanyAnalysisData, companyId: number): Promise<CompanyAnalysisData> {
+  const since = dividendHistoryStart();
+  const [company, dividendRows] = await Promise.all([
+    safeQueryWithParams(
+      'company-history-company-analysis',
+      () => prisma.company.findUnique({ where: { id: companyId }, select: companyHistorySelect() }),
+      { companyId, years: FINANCIAL_HISTORY_YEARS, statementsSince: new Date().getFullYear() - 4 }
+    ),
+    companyData.dividendHistory === undefined
       ? safeQueryWithParams(
           'dividend-history-company-analysis',
           () =>
             prisma.dividendHistory.findMany({
-              where: { companyId, exDate: { gte: dividendHistoryStart() } },
+              where: { companyId, exDate: { gte: since } },
               orderBy: { exDate: 'desc' },
               select: { exDate: true, paymentDate: true, amount: true, type: true },
             }),
-          { companyId, since: dividendHistoryStart().toISOString() }
+          { companyId, since: since.toISOString() }
         )
       : Promise.resolve(null),
-    needsProfits
-      ? safeQueryWithParams(
-          'profit-history-company-analysis',
-          () =>
-            prisma.financialData.findMany({
-              where: { companyId },
-              orderBy: { year: 'desc' },
-              take: 8,
-              select: PROFIT_SELECT,
-            }),
-          { companyId }
-        )
-      : Promise.resolve([] as ProfitRow[]),
   ]);
-
-  const merged = mergeProfitHistory(companyData, profitRows);
-  return dividendRows ? { ...merged, dividendHistory: toDividendHistory(dividendRows) } : merged;
+  return withRankingInputs(companyData, company as unknown as CompanyHistoryRow | null, dividendRows);
 }
 
 /**
- * Versão em lote de `withDividendAndProfitHistory`: 2 consultas para todas as empresas em vez de 2 por empresa.
+ * Versão em lote de `loadRankingInputs`: 2 consultas para todas as empresas em vez de 2 por empresa.
  * Empresas sem proventos ficam com lista vazia (não refazem a consulta individualmente).
  */
-async function prefetchDividendAndProfitHistory(
+async function prefetchRankingInputs(
   entries: ReadonlyArray<{ companyId: number; data: CompanyAnalysisData }>
 ): Promise<CompanyAnalysisData[]> {
   const ids = Array.from(new Set(entries.map((entry) => entry.companyId).filter((id) => Number.isFinite(id))));
   if (ids.length === 0) return entries.map((entry) => entry.data);
   const since = dividendHistoryStart();
-  const [dividendRows, profitRows] = await Promise.all([
+  const [companies, dividendRows] = await Promise.all([
+    safeQueryWithParams(
+      'company-history-company-analysis-batch',
+      () =>
+        prisma.company.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, ...companyHistorySelect() },
+        }),
+      { ids: ids.join(','), years: FINANCIAL_HISTORY_YEARS, statementsSince: new Date().getFullYear() - 4 }
+    ),
     safeQueryWithParams(
       'dividend-history-company-analysis-batch',
       () =>
@@ -187,37 +219,19 @@ async function prefetchDividendAndProfitHistory(
         }),
       { ids: ids.join(','), since: since.toISOString() }
     ),
-    safeQueryWithParams(
-      'profit-history-company-analysis-batch',
-      () =>
-        prisma.financialData.findMany({
-          where: { companyId: { in: ids } },
-          orderBy: { year: 'desc' },
-          select: { companyId: true, ...PROFIT_SELECT },
-        }),
-      { ids: ids.join(',') }
-    ),
   ]);
 
-  const dividendsById = new Map<number, typeof dividendRows>();
+  const companiesById = new Map(companies.map((company) => [company.id, company as unknown as CompanyHistoryRow]));
+  const dividendsById = new Map<number, DividendRow[]>();
   for (const row of dividendRows) {
     const list = dividendsById.get(row.companyId) ?? [];
     list.push(row);
     dividendsById.set(row.companyId, list);
   }
-  const profitsById = new Map<number, ProfitRow[]>();
-  for (const row of profitRows) {
-    const list = profitsById.get(row.companyId) ?? [];
-    if (list.length < 8) list.push(row);
-    profitsById.set(row.companyId, list);
-  }
 
-  return entries.map(({ companyId, data }) => {
-    const withProfits = hasProfitHistory(data) ? data : mergeProfitHistory(data, profitsById.get(companyId) ?? []);
-    return data.dividendHistory === undefined
-      ? { ...withProfits, dividendHistory: toDividendHistory(dividendsById.get(companyId) ?? []) }
-      : withProfits;
-  });
+  return entries.map(({ companyId, data }) =>
+    withRankingInputs(data, companiesById.get(companyId) ?? null, dividendsById.get(companyId) ?? [])
+  );
 }
 
 export async function getStatementsData(
@@ -426,6 +440,8 @@ export async function executeCompanyAnalysis(
     companyId?: string;
     industry?: string | null;
     includeBreakdown?: boolean; // Se deve incluir breakdown detalhado
+    /** Os insumos do ranking (histórico, proventos, tipo do ativo) já vieram de `prefetchRankingInputs`. */
+    rankingInputsLoaded?: boolean;
   }
 ): Promise<CompanyAnalysisResult> {
   const { isLoggedIn, isPremium, includeStatements = true, companyId, industry } = options;
@@ -445,27 +461,40 @@ export async function executeCompanyAnalysis(
   if (isPremium || runBankPvp) await warmMacroAssumptions();
 
   let analysisData: CompanyAnalysisData = { ...companyData, industry: industry ?? companyData.industry ?? null };
-  if (companyId && (isPremium || runBazin || runLynch || runBankPvp)) {
+  if (companyId && !options.rankingInputsLoaded && (isLoggedIn || isPremium)) {
     try {
-      analysisData = await withDividendAndProfitHistory(analysisData, parseInt(companyId));
+      analysisData = await loadRankingInputs(analysisData, parseInt(companyId));
     } catch (error) {
-      console.warn(`⚠️ Falha ao carregar proventos e lucros de ${companyData.ticker}, seguindo sem eles:`, error);
+      console.warn(`⚠️ Falha ao carregar histórico e proventos de ${companyData.ticker}, seguindo sem eles:`, error);
     }
   }
+
+  if (isPremium || isLoggedIn) analysisData = await withBdrConversionInputs(analysisData);
+
+  // Modelos de preço justo com os mesmos padrões do ranking (registro em ranking-models.ts) no universo do ativo.
+  const universe = universeForAssetType(analysisData.assetType);
+  const fairValueParams = {
+    graham: fairValueModelParams('graham', universe, STRATEGY_CONFIG.graham),
+    fcd: fairValueModelParams('fcd', universe, STRATEGY_CONFIG.fcd),
+    gordon: fairValueModelParams('gordon', universe, STRATEGY_CONFIG.gordon),
+    barsi: fairValueModelParams('barsi', universe, STRATEGY_CONFIG.barsi),
+    bazin: fairValueModelParams('bazin', universe, BAZIN_DEFAULTS),
+    lynch: fairValueModelParams('lynch', universe, LYNCH_DEFAULTS),
+  };
 
   // Executar análises estratégicas usando StrategyFactory com configuração centralizada
   // Graham: logados OU anônimos com acesso (2 usos por IP)
   const strategies: AnalysisStrategies = {
-    graham: (isLoggedIn || isPremium) ? StrategyFactory.runGrahamAnalysis(analysisData, STRATEGY_CONFIG.graham) : null,
+    graham: (isLoggedIn || isPremium) ? StrategyFactory.runGrahamAnalysis(analysisData, fairValueParams.graham) : null,
     dividendYield: isPremium ? StrategyFactory.runDividendYieldAnalysis(analysisData, STRATEGY_CONFIG.dividendYield) : null,
     lowPE: isPremium ? StrategyFactory.runLowPEAnalysis(analysisData, STRATEGY_CONFIG.lowPE) : null,
     magicFormula: isPremium ? StrategyFactory.runMagicFormulaAnalysis(analysisData, STRATEGY_CONFIG.magicFormula) : null,
-    fcd: isPremium ? StrategyFactory.runFCDAnalysis(analysisData, STRATEGY_CONFIG.fcd) : null,
-    gordon: isPremium ? StrategyFactory.runGordonAnalysis(analysisData, STRATEGY_CONFIG.gordon) : null,
+    fcd: isPremium ? StrategyFactory.runFCDAnalysis(analysisData, fairValueParams.fcd) : null,
+    gordon: isPremium ? StrategyFactory.runGordonAnalysis(analysisData, fairValueParams.gordon) : null,
     fundamentalist: isPremium ? StrategyFactory.runFundamentalistAnalysis(analysisData, STRATEGY_CONFIG.fundamentalist) : null,
-    barsi: isPremium ? await StrategyFactory.runBarsiAnalysis(analysisData, STRATEGY_CONFIG.barsi) : null,
-    bazin: runBazin ? StrategyFactory.runBazinAnalysis(analysisData, BAZIN_DEFAULTS) : null,
-    lynch: runLynch ? StrategyFactory.runLynchAnalysis(analysisData, LYNCH_DEFAULTS) : null,
+    barsi: isPremium ? await StrategyFactory.runBarsiAnalysis(analysisData, fairValueParams.barsi) : null,
+    bazin: runBazin ? StrategyFactory.runBazinAnalysis(analysisData, fairValueParams.bazin) : null,
+    lynch: runLynch ? StrategyFactory.runLynchAnalysis(analysisData, fairValueParams.lynch) : null,
     bankPvp: runBankPvp ? StrategyFactory.runBankPvpAnalysis(analysisData, BANK_PVP_DEFAULTS) : null,
   };
 
@@ -698,32 +727,12 @@ export async function executeMultipleCompanyAnalysis(
   const prepared = companies.map((company) => {
     const currentPrice = toNumber(company.dailyQuotes[0]?.price) || toNumber(company.financialData[0]?.lpa) || 0;
     
-    // Preparar dados históricos financeiros (excluindo o primeiro que é o atual)
-    // IMPORTANTE: Converter todos os Decimal para number para evitar erros de serialização
-    const historicalFinancials = company.historicalFinancials || 
-      (company.financialData.length > 1 ? company.financialData.slice(1).map(data => ({
-        year: data.year as number,
-        roe: toNumber(data.roe),
-        roic: toNumber(data.roic),
-        pl: toNumber(data.pl),
-        pvp: toNumber(data.pvp),
-        dy: toNumber(data.dy),
-        margemLiquida: toNumber(data.margemLiquida),
-        margemEbitda: toNumber(data.margemEbitda),
-        margemBruta: toNumber(data.margemBruta),
-        liquidezCorrente: toNumber(data.liquidezCorrente),
-        liquidezRapida: toNumber(data.liquidezRapida),
-        dividaLiquidaPl: toNumber(data.dividaLiquidaPl),
-        dividaLiquidaEbitda: toNumber(data.dividaLiquidaEbitda),
-        lpa: toNumber(data.lpa),
-        vpa: toNumber(data.vpa),
-        marketCap: toNumber(data.marketCap),
-        earningsYield: toNumber(data.earningsYield),
-        evEbitda: toNumber(data.evEbitda),
-        roa: toNumber(data.roa),
-        passivoAtivos: toNumber(data.passivoAtivos)
-      })) : undefined);
-    
+    // Anos anteriores ao atual, com os mesmos campos do ranking (refeitos do banco quando há sessão).
+    const historicalFinancials = company.historicalFinancials ??
+      (company.financialData.length > 1
+        ? company.financialData.slice(1).map((data) => toHistoricalFinancial(data as Record<string, unknown> & { year: number }))
+        : undefined);
+
     const companyData: CompanyAnalysisData = {
       ticker: company.ticker,
       name: company.name,
@@ -736,13 +745,15 @@ export async function executeMultipleCompanyAnalysis(
     return { companyId: parseInt(company.id), data: companyData };
   });
 
-  // Proventos e lucros de todas as empresas em 2 consultas (os modelos de dividendos e "lucros consistentes" usam).
+  // Histórico, proventos e tipo do ativo de todas as empresas em 2 consultas (os mesmos insumos do ranking).
   let analysisInputs = prepared.map((entry) => entry.data);
+  let rankingInputsLoaded = false;
   if (options.isPremium || options.isLoggedIn) {
     try {
-      analysisInputs = await prefetchDividendAndProfitHistory(prepared);
+      analysisInputs = await prefetchRankingInputs(prepared);
+      rankingInputsLoaded = true;
     } catch (error) {
-      console.warn('⚠️ Falha ao carregar proventos e lucros em lote, seguindo por empresa:', error);
+      console.warn('⚠️ Falha ao carregar histórico e proventos em lote, seguindo por empresa:', error);
     }
   }
 
@@ -752,6 +763,7 @@ export async function executeMultipleCompanyAnalysis(
         ...options,
         companyId: companies[index].id,
         industry: companies[index].industry,
+        rankingInputsLoaded,
       })
     )
   );

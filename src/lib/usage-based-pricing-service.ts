@@ -143,7 +143,9 @@ export async function checkAndRecordUsage(params: {
               year,
             },
           }),
-        { userId, feature, month, year }
+        { userId, feature, month, year },
+        // Contagem de limite precisa ser fresca: com cache (QUERY_CACHE_TTL) o uso recém-gravado não aparecia
+        { skipCache: true }
       )
 
       // Para features com limite por IP: contar uso de contas gratuitas deste IP.
@@ -161,7 +163,8 @@ export async function checkAndRecordUsage(params: {
                 resourceId: { startsWith: freeIpPrefix },
               },
             }),
-          { ipHash, feature }
+          { ipHash, feature },
+          { skipCache: true }
         )
       }
 
@@ -215,7 +218,8 @@ export async function checkAndRecordUsage(params: {
   const existingCount = await safeQueryWithParams(
     'usage-count-anon',
     () => prisma.anonymousFeatureUsage.count({ where: countWhere }),
-    { ipHash, feature }
+    { ipHash, feature },
+    { skipCache: true }
   )
 
   const remaining = Math.max(0, anonLimit - existingCount)

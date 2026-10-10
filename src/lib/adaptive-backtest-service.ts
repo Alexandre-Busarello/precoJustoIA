@@ -1,7 +1,7 @@
 import { BacktestDataValidator, type BacktestDataValidation, type DataAvailability } from './backtest-data-validator';
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/strategies/base-strategy';
-import { netAmount, toDividendEvents } from '@/lib/finance/dividends';
+import { dedupedDividendEvents, netAmount } from '@/lib/finance/dividends';
 import {
   annualizedVolatility,
   cdiLevel,
@@ -435,7 +435,25 @@ export class AdaptiveBacktestService {
    */
   async saveBacktestResult(configId: string, result: BacktestResult | AdaptiveBacktestResult): Promise<void> {
     const { safeWrite } = await import('@/lib/prisma-wrapper');
-    // Criar novo resultado sempre (permitir múltiplos resultados por configuração)
+    // Rodar de novo a mesma configuração com os mesmos dados não acumula linhas idênticas: remove os resultados
+    // anteriores desta configuração com as mesmas métricas (na escala das colunas) e grava o mais recente.
+    // Resultados diferentes (outro período, outros valores, dados novos) continuam no histórico.
+    const round = (value: number, digits: number) => Number(Number(value).toFixed(digits));
+    await safeWrite(
+      'prune-duplicate-backtest-results',
+      () => prisma.backtestResult.deleteMany({
+        where: {
+          backtestId: configId,
+          totalMonths: result.monthlyReturns.length,
+          totalReturn: round(result.totalReturn, 4),
+          annualizedReturn: round(result.annualizedReturn, 4),
+          maxDrawdown: round(result.maxDrawdown, 4),
+          totalInvested: round(result.totalInvested, 2),
+          finalValue: round(result.finalValue, 2),
+        }
+      }),
+      ['backtest_results']
+    );
     await safeWrite(
       'save-backtest-result-adaptive',
       () => prisma.backtestResult.create({
@@ -597,7 +615,7 @@ export class AdaptiveBacktestService {
       );
       pricesData.set(ticker, series.prices);
 
-      const events = toDividendEvents(dividendRows.filter(row => row.company.ticker === ticker));
+      const events = dedupedDividendEvents(dividendRows.filter(row => row.company.ticker === ticker));
       dividendsData.set(
         ticker,
         events.map(event => ({ exDate: event.exDate, amountPerShare: netAmount(event) * series.factorAt(event.exDate) }))

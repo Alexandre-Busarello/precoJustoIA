@@ -4,16 +4,20 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { ChevronDown } from "lucide-react"
 import { CompanyLogo } from "@/components/company-logo"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table"
-import { formatBRL, formatDeltaPct } from "@/lib/format"
+import { formatBRL } from "@/lib/format"
+import { formatMarginOfSafety } from "@/lib/valuation-metrics"
 import { cn } from "@/lib/utils"
 import {
+  dipReason,
   FII_METRIC_ORDER,
   formatMetricValue,
+  metricHint,
   metricTone,
-  resultUpside,
+  resultMargin,
   STOCK_METRIC_ORDER,
   translateMetricName,
   visibleMetricKeys,
@@ -22,7 +26,7 @@ import {
 
 const TONE_CLASS = { positive: "text-positive", negative: "text-negative", neutral: "text-foreground" } as const
 
-function upsideTone(value: number | null) {
+function marginTone(value: number | null) {
   if (value === null || value === 0) return TONE_CLASS.neutral
   return value > 0 ? TONE_CLASS.positive : TONE_CLASS.negative
 }
@@ -31,8 +35,16 @@ function assetHref(result: ScreeningResult, isFii: boolean) {
   return isFii ? `/fii/${result.ticker.toLowerCase()}` : `/acao/${result.ticker.toLowerCase()}`
 }
 
-const UPSIDE_HINT =
-  "Diferença entre o preço justo estimado e o preço atual. É uma estimativa baseada em modelos e não é recomendação de investimento."
+function LowLiquidityBadge() {
+  return (
+    <Badge variant="warning" className="shrink-0">
+      Baixa liquidez
+    </Badge>
+  )
+}
+
+const MARGIN_HINT =
+  "1 − preço ÷ preço justo, pelo modelo indicado abaixo do preço justo. Positiva quando o preço está abaixo do preço justo. É uma estimativa baseada em modelos e não é recomendação de investimento."
 
 interface ScreeningResultsProps {
   results: ScreeningResult[]
@@ -47,6 +59,7 @@ export function ScreeningResults({ results, isFii, compact, loading }: Screening
     () => visibleMetricKeys(results, isFii ? FII_METRIC_ORDER : STOCK_METRIC_ORDER),
     [results, isFii]
   )
+  const showDipReason = useMemo(() => results.some((result) => dipReason(result.key_metrics) !== null), [results])
   const fairValueHint = isFii
     ? "Preço teto pelo dividend yield alvo ou valor patrimonial, conforme o modelo indicado."
     : "Maior estimativa entre os modelos disponíveis (Graham para todos; FCD e Gordon no Premium). É uma estimativa e não é recomendação."
@@ -69,7 +82,10 @@ export function ScreeningResults({ results, isFii, compact, loading }: Screening
         >
           <CompanyLogo ticker={row.ticker} logoUrl={row.logoUrl} size={24} companyName={row.name} />
           <span className="min-w-0">
-            <span className="block font-medium text-foreground">{row.ticker}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="font-medium text-foreground">{row.ticker}</span>
+              {row.lowLiquidity && <LowLiquidityBadge />}
+            </span>
             <span className="block max-w-[180px] truncate text-xs text-muted-foreground">{row.name}</span>
           </span>
         </Link>
@@ -96,20 +112,33 @@ export function ScreeningResults({ results, isFii, compact, loading }: Screening
       ),
     },
     {
-      key: "upside",
-      header: "Upside",
+      key: "marginOfSafety",
+      header: "Margem de segurança",
       align: "right",
       sortable: true,
-      hint: UPSIDE_HINT,
-      sortValue: (row) => resultUpside(row),
+      hint: MARGIN_HINT,
+      sortValue: (row) => resultMargin(row),
       cell: (row) => {
-        const value = resultUpside(row)
-        return <span className={cn("font-medium", upsideTone(value))}>{formatDeltaPct(value)}</span>
+        const value = resultMargin(row)
+        return <span className={cn("font-medium", marginTone(value))}>{formatMarginOfSafety(value)}</span>
       },
     },
+    ...(showDipReason
+      ? [
+          {
+            key: "dipReason",
+            header: "Queda e fundamentos",
+            hint: "Posição do preço vs. a média móvel de 200 pregões e a máxima de 52 semanas, e a variação do lucro e do ROE no último período de 12 meses.",
+            cell: (row: ScreeningResult) => (
+              <span className="whitespace-nowrap text-xs text-muted-foreground">{dipReason(row.key_metrics) ?? "—"}</span>
+            ),
+          } satisfies DataTableColumn<ScreeningResult>,
+        ]
+      : []),
     ...metricKeys.map<DataTableColumn<ScreeningResult>>((key) => ({
       key,
       header: translateMetricName(key),
+      hint: metricHint(key),
       align: "right",
       sortable: true,
       sortValue: (row) => row.key_metrics?.[key] ?? null,
@@ -176,7 +205,8 @@ function CardStat({ label, value, detail, className }: { label: string; value: s
 
 function ResultCard({ result, isFii, metricKeys }: { result: ScreeningResult; isFii: boolean; metricKeys: string[] }) {
   const [open, setOpen] = useState(false)
-  const value = resultUpside(result)
+  const value = resultMargin(result)
+  const reason = dipReason(result.key_metrics)
   const withValues = metricKeys.filter((key) => result.key_metrics?.[key] !== undefined)
   const primary = withValues.slice(0, 4)
   const extra = withValues.slice(4)
@@ -198,14 +228,19 @@ function ResultCard({ result, isFii, metricKeys }: { result: ScreeningResult; is
       <div className="flex min-w-0 items-start gap-3">
         <CompanyLogo ticker={result.ticker} logoUrl={result.logoUrl} size={36} companyName={result.name} />
         <Link href={assetHref(result, isFii)} className="min-w-0 flex-1 hover:text-brand">
-          <p className="font-semibold text-foreground">{result.ticker}</p>
+          <p className="flex flex-wrap items-center gap-1.5">
+            <span className="font-semibold text-foreground">{result.ticker}</span>
+            {result.lowLiquidity && <LowLiquidityBadge />}
+          </p>
           <p className="truncate text-sm text-muted-foreground">{result.name}</p>
         </Link>
         <div className="shrink-0 text-right">
-          <p className="text-xs text-muted-foreground">Upside</p>
-          <p className={cn("text-sm font-semibold tabular-nums", upsideTone(value))}>{formatDeltaPct(value)}</p>
+          <p className="text-xs text-muted-foreground">Margem de segurança</p>
+          <p className={cn("text-sm font-semibold tabular-nums", marginTone(value))}>{formatMarginOfSafety(value)}</p>
         </div>
       </div>
+
+      {reason && <p className="mt-2 text-xs tabular-nums text-muted-foreground">{reason}</p>}
 
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
         <CardStat label="Preço" value={formatBRL(result.currentPrice)} />

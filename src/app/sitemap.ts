@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next'
 import { prisma } from '@/lib/prisma'
+import { getAllPresetSlugs } from '@/lib/screening-presets'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://precojusto.ai'
@@ -62,35 +63,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'daily',
       priority: 0.9,
     },
-    {
-      url: `${baseUrl}/screening-acoes/as-acoes-mais-baratas-segundo-graham`,
+    ...getAllPresetSlugs().map((slug) => ({
+      url: `${baseUrl}/screening-acoes/${slug}`,
       lastModified: new Date(),
-      changeFrequency: 'daily',
+      changeFrequency: 'daily' as const,
       priority: 0.85,
-    },
+    })),
     {
-      url: `${baseUrl}/screening-acoes/top-vacas-leiteiras-dividendos`,
+      url: `${baseUrl}/onde-aportar`,
       lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.85,
-    },
-    {
-      url: `${baseUrl}/screening-acoes/small-caps-crescimento-explosivo`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.85,
-    },
-    {
-      url: `${baseUrl}/screening-acoes/oportunidades-desconto-excessivo`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.85,
-    },
-    {
-      url: `${baseUrl}/screening-acoes/ranking-formula-magica-b3`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.85,
+      changeFrequency: 'weekly',
+      priority: 0.9,
     },
     {
       url: `${baseUrl}/metodologia`,
@@ -118,6 +101,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
     {
       url: `${baseUrl}/pl-bolsa`,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/projecoes-ibov`,
       lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 0.9,

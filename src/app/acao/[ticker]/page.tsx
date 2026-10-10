@@ -14,6 +14,7 @@ import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisLink from '@/components/technical-analysis-link'
 import MarketSentimentSection from '@/components/market-sentiment-section'
+import { buildMarketSentimentView } from '@/lib/market-sentiment-view'
 import { AutoSubscribeHandler } from '@/components/auto-subscribe-handler'
 import { RelatedCompanies } from '@/components/related-companies'
 import { TrackingAssetView } from '@/components/tracking-asset-view'
@@ -314,7 +315,12 @@ export default async function TickerPage({ params }: PageProps) {
     },
   });
 
-  if (company && !company.isActive && company.successor) {
+  // Ticker inexistente: 404 antes de contar visualização, atualizar preço ou gerar projeções de proventos
+  if (!company) {
+    notFound()
+  }
+
+  if (!company.isActive && company.successor) {
     redirect(`/acao/${company.successor.ticker.toLowerCase()}`);
   }
 
@@ -820,8 +826,7 @@ export default async function TickerPage({ params }: PageProps) {
               </div>
               <MarketSentimentSection
                 ticker={ticker}
-                youtubeAnalysis={serializedYoutubeAnalysis}
-                userIsPremium={canViewFullContent}
+                sentiment={buildMarketSentimentView(serializedYoutubeAnalysis, ticker, canViewFullContent)}
               />
             </section>
 
@@ -861,7 +866,7 @@ export default async function TickerPage({ params }: PageProps) {
                         href={companyData.website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-medium text-brand underline-offset-4 hover:underline"
+                        className="inline-flex min-h-11 items-center font-medium text-brand underline-offset-4 hover:underline md:min-h-0"
                       >
                         Site oficial
                       </a>

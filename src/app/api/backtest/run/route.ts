@@ -4,11 +4,13 @@ import { authOptions } from '@/lib/auth';
 import { prisma, safeQueryWithParams, safeTransaction } from '@/lib/prisma-wrapper';
 import { getCurrentUser } from '@/lib/user-service';
 import { BacktestService, type BacktestParams } from '@/lib/backtest-service';
+import { refreshAutoPeriodName } from '@/lib/backtest/quick-backtest';
 
 // Interface para request
 interface RunBacktestRequest {
   configId?: string; // Opcional: usar config salva
   params?: BacktestParams; // Ou parâmetros diretos
+  name?: string; // Nome do formulário (com configId + params)
 }
 
 // POST /api/backtest/run - Executar simulação
@@ -45,6 +47,7 @@ export async function POST(request: NextRequest) {
     
     let params: BacktestParams;
     let configId: string | undefined;
+    let configName: string | undefined;
 
     if (body.configId && body.params) {
       // Configuração existente com parâmetros atualizados - atualizar a config primeiro
@@ -72,6 +75,13 @@ export async function POST(request: NextRequest) {
       };
       configId = body.configId;
 
+      // Nome: o que o usuário digitou vale; sem edição, o nome automático ("PETR4 · 5 anos") acompanha o período
+      const typedName = typeof body.name === 'string' ? body.name.trim().slice(0, 100) : '';
+      configName =
+        typedName && typedName !== existingConfig.name
+          ? typedName
+          : refreshAutoPeriodName(existingConfig.name, params.startDate, params.endDate);
+
       // Atualizar configuração no banco com os novos parâmetros
       console.log('🔄 Atualizando configuração existente com novos parâmetros...');
       await safeTransaction('update-backtest-config', async () => {
@@ -79,6 +89,7 @@ export async function POST(request: NextRequest) {
         await prisma.backtestConfig.update({
           where: { id: body.configId },
           data: {
+            name: configName,
             startDate: params.startDate,
             endDate: params.endDate,
             initialCapital: params.initialCapital,
@@ -97,8 +108,7 @@ export async function POST(request: NextRequest) {
           data: params.assets.map(asset => ({
             backtestId: body.configId!,
             ticker: asset.ticker,
-            targetAllocation: asset.allocation,
-            averageDividendYield: asset.averageDividendYield || null
+            targetAllocation: asset.allocation
           }))
         });
       }, { affectedTables: ['backtest_assets', 'backtest_configs'] });
@@ -123,8 +133,7 @@ export async function POST(request: NextRequest) {
       params = {
         assets: config.assets.map(a => ({
           ticker: a.ticker,
-          allocation: Number(a.targetAllocation),
-          averageDividendYield: (a as any).averageDividendYield ? Number((a as any).averageDividendYield) : undefined
+          allocation: Number(a.targetAllocation)
         })),
         startDate: new Date(config.startDate),
         endDate: new Date(config.endDate),
@@ -228,6 +237,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       result,
       configId: finalConfigId || null,
+      configName: configName ?? null,
       saved: !!finalConfigId
     });
 

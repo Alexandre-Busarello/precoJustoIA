@@ -13,6 +13,8 @@ export interface AssetHeaderAction {
   icon?: LucideIcon
   href?: string
   onClick?: () => void
+  /** Ação em andamento: o botão fica desabilitado e anuncia `aria-busy`. */
+  busy?: boolean
 }
 
 export interface AssetHeaderBadge {
@@ -55,7 +57,8 @@ function ActionButton({ action, compact }: { action: AssetHeaderAction; compact?
       {action.label}
     </>
   )
-  const className = cn(compact && 'shrink-0')
+  // Compacto (linha do mobile): menos padding para as 3 ações caberem em 360–390 px
+  const className = cn(compact && 'px-2.5 has-[>svg]:px-2')
   if (action.href) {
     return (
       <Button variant="outline" size="sm" asChild className={className}>
@@ -64,7 +67,15 @@ function ActionButton({ action, compact }: { action: AssetHeaderAction; compact?
     )
   }
   return (
-    <Button variant="outline" size="sm" type="button" onClick={action.onClick} className={className}>
+    <Button
+      variant="outline"
+      size="sm"
+      type="button"
+      onClick={action.onClick}
+      disabled={action.busy}
+      aria-busy={action.busy}
+      className={className}
+    >
       {content}
     </Button>
   )
@@ -150,7 +161,8 @@ export function AssetHeader({
         </div>
         <Stat
           label="Margem de segurança"
-          value={formatDeltaPct(marginOfSafety)}
+          // Abaixo de −100% o número vira ruído (ex.: −1.196%); mostra só o limite, como na tabela de modelos.
+          value={marginOfSafety !== null && marginOfSafety !== undefined && marginOfSafety < -1 ? '< −100%' : formatDeltaPct(marginOfSafety)}
           tone={marginTone}
           caption={statusCaption ?? undefined}
           locked={fairLocked}
@@ -178,7 +190,7 @@ export function AssetHeader({
       )}
 
       {actions.length > 0 && (
-        <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:hidden">
+        <div className="flex flex-wrap gap-1.5 md:hidden">
           {actions.map((action) => (
             <ActionButton key={action.label} action={action} compact />
           ))}

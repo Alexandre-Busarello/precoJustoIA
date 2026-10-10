@@ -11,6 +11,7 @@
 import { prisma } from '@/lib/prisma';
 import { safeWrite } from '@/lib/prisma-wrapper';
 import type { AssetType } from '@prisma/client';
+import { DUPLICATE_WINDOW_DAYS, isNearDuplicateDividend } from '@/lib/finance/dividends';
 
 import { getQuote, getQuoteSummary, getChart } from './yahooFinance2-service';
 
@@ -602,37 +603,49 @@ export class YahooFinanceComplementService {
         console.log(`📊 [DIVIDENDS] ${dividendsToSave.length} novos dividendos (de ${dividends.length} totais) para companyId ${companyId}`);
       }
       
-      // Batch upsert (50 per batch to avoid connection pool issues)
-      // Upsert baseado em companyId + exDate + amount
-      // Permite múltiplos dividendos na mesma data (ex: JCP e dividendos ordinários)
-      const BATCH_SIZE = 50;
-      for (let i = 0; i < dividendsToSave.length; i += BATCH_SIZE) {
-        const batch = dividendsToSave.slice(i, i + BATCH_SIZE);
-        
-        await Promise.all(
-          batch.map(dividend =>
-            prisma.dividendHistory.upsert({
-              where: {
-                companyId_exDate_amount: {
-                  companyId,
-                  exDate: dividend.date,
-                  amount: dividend.amount
-                }
-              },
-              update: {
-                updatedAt: new Date()
-              },
-              create: {
+      // Só inserções: proventos que já existem (mesma data e valor, ou o mesmo provento gravado por outra fonte com
+      // data-com a até 5 dias; ver `isNearDuplicateDividend`) são pulados. Nenhuma linha é apagada ou sobrescrita.
+      const windowMs = DUPLICATE_WINDOW_DAYS * 86_400_000;
+      const times = dividendsToSave.map(d => d.date.getTime());
+      const existing = await prisma.dividendHistory.findMany({
+        where: {
+          companyId,
+          exDate: { gte: new Date(Math.min(...times) - windowMs), lte: new Date(Math.max(...times) + windowMs) },
+        },
+        select: { exDate: true, paymentDate: true, amount: true, type: true },
+      });
+      const known: Array<{ exDate: Date; paymentDate?: Date | null; amount: number; type?: string | null }> =
+        existing.map(row => ({ ...row, amount: Number(row.amount) }));
+      const toCreate: Array<{ date: Date; amount: number }> = [];
+      for (const dividend of dividendsToSave) {
+        const candidate = { exDate: dividend.date, paymentDate: null, amount: dividend.amount, type: null };
+        const duplicate = known.some(
+          row =>
+            (row.exDate.getTime() === dividend.date.getTime() && row.amount === dividend.amount) ||
+            isNearDuplicateDividend(row, candidate)
+        );
+        if (duplicate) continue;
+        toCreate.push(dividend);
+        known.push(candidate);
+      }
+      if (toCreate.length > 0) {
+        await safeWrite(
+          'yahoo-insert-dividend_history',
+          () =>
+            prisma.dividendHistory.createMany({
+              data: toCreate.map(dividend => ({
                 companyId,
                 exDate: dividend.date,
                 amount: dividend.amount,
-                source: 'yahoo'
-              }
-            })
-          )
+                source: 'yahoo',
+              })),
+              skipDuplicates: true,
+            }),
+          ['dividend_history']
         );
       }
-      
+      dividendsToSave = toCreate;
+
       // Update company with latest dividend
       const latestDividend = dividends[0]; // Already sorted descending
       await safeWrite(

@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/user-service'
 import { PageHeader } from '@/components/page-header'
 import { BacktestPageClient } from '@/components/backtest-page-client'
+import { BacktestShowcaseSection } from '@/components/backtest-showcase/showcase-section'
 import { BacktestLanding } from './backtest-landing'
 import { BacktestUpgradeCard } from './backtest-upgrade-card'
 
@@ -50,12 +51,21 @@ function ToolFallback() {
   )
 }
 
-/** Visitante: landing pública (200, indexável). Logado sem Premium: card de upgrade. Premium: ferramenta. */
-export default async function BacktestPage() {
+/**
+ * Visitante: landing pública (200, indexável). Logado sem Premium: card de upgrade. Premium: ferramenta e, na
+ * ferramenta vazia (sem configuração na URL), a vitrine com "Abrir no backtest".
+ */
+export default async function BacktestPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return <BacktestLanding />
 
   const user = await getCurrentUser()
+  const params = await searchParams
+  const freshTool = !!user?.isPremium && !params.configId && !params.view
 
   return (
     <div className="bg-background">
@@ -73,6 +83,11 @@ export default async function BacktestPage() {
           <BacktestUpgradeCard />
         )}
       </div>
+      {freshTool && (
+        <Suspense fallback={null}>
+          <BacktestShowcaseSection viewer="premium" className="border-t border-b-0" />
+        </Suspense>
+      )}
     </div>
   )
 }

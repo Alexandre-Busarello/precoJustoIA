@@ -8,30 +8,12 @@ import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { SectionHeader } from '@/components/ui/section-header'
+import type { MarketSentimentView } from '@/lib/market-sentiment-view'
 
 interface MarketSentimentSectionProps {
   ticker: string
-  youtubeAnalysis: {
-    score: number
-    summary: string
-    positivePoints: string[] | null
-    negativePoints: string[] | null
-    updatedAt: Date
-  } | null
-  userIsPremium: boolean
-}
-
-function sentimentLabel(score: number) {
-  if (score >= 71) return 'Positivo'
-  if (score >= 51) return 'Neutro'
-  return 'Negativo'
-}
-
-/** Corta no fim de uma palavra, sem quebrar no meio. */
-function preview(text: string, max = 160) {
-  if (text.length <= max) return text
-  const cut = text.slice(0, max)
-  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 0)) || cut}…`
+  /** Já recortado no servidor por plano (ver buildMarketSentimentView). */
+  sentiment: MarketSentimentView | null
 }
 
 function PointList({ title, points, hiddenCount }: { title: string; points: string[]; hiddenCount: number }) {
@@ -55,30 +37,22 @@ function PointList({ title, points, hiddenCount }: { title: string; points: stri
 
 /**
  * "O que o mercado está falando": resumo por IA de vídeos e análises públicas. Bloco neutro,
- * visualmente separado do score: o sentimento não entra no score geral. Não-assinantes veem uma prévia e um único CTA.
+ * visualmente separado do score: o sentimento não entra no score geral. Não-assinantes veem uma prévia
+ * que não revela o tom e uma linha discreta com link (o CTA primário fica no cabeçalho do ativo).
  */
-export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIsPremium }: MarketSentimentSectionProps) {
+export default function MarketSentimentSection({ ticker, sentiment }: MarketSentimentSectionProps) {
   const [showPoints, setShowPoints] = useState(false)
   const { data: session } = useSession()
 
-  if (!youtubeAnalysis) return null
+  if (!sentiment) return null
 
-  const positive = youtubeAnalysis.positivePoints ?? []
-  const negative = youtubeAnalysis.negativePoints ?? []
-  const summary = youtubeAnalysis.summary.toLowerCase()
-  // Análise sem vídeos encontrados: não há o que mostrar
-  const isEmpty =
-    positive.length === 0 &&
-    negative.length === 0 &&
-    (summary.includes('não foram encontrados') || summary.includes('sem vídeos'))
-  if (isEmpty) return null
-
-  const visiblePositive = userIsPremium ? positive : positive.slice(0, 1)
-  const visibleNegative = userIsPremium ? negative : negative.slice(0, 1)
-  const hasPoints = positive.length > 0 || negative.length > 0
+  const userIsPremium = !sentiment.isPreview
+  const hasPoints =
+    sentiment.positivePoints.length + sentiment.negativePoints.length +
+      sentiment.hiddenPositiveCount + sentiment.hiddenNegativeCount > 0
   const pointsId = `sentiment-points-${ticker.toLowerCase()}`
-  const cta = session?.user
-    ? { label: 'Ver análise completa no Premium', href: '/checkout' }
+  const upsellLink = session?.user
+    ? { label: 'Ver planos', href: '/planos' }
     : { label: 'Criar conta grátis', href: '/register' }
 
   return (
@@ -91,8 +65,8 @@ export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIs
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
           <p className="text-muted-foreground">
             Tom predominante:{' '}
-            {userIsPremium ? (
-              <span className="font-medium text-foreground">{sentimentLabel(youtubeAnalysis.score)}</span>
+            {sentiment.toneLabel ? (
+              <span className="font-medium text-foreground">{sentiment.toneLabel}</span>
             ) : (
               <>
                 <span aria-hidden="true" className="select-none font-medium text-foreground blur-sm">
@@ -102,11 +76,11 @@ export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIs
               </>
             )}
           </p>
-          <p className="text-xs text-muted-foreground">Atualizado em {formatDate(youtubeAnalysis.updatedAt)}</p>
+          <p className="text-xs text-muted-foreground">Atualizado em {formatDate(sentiment.updatedAt)}</p>
         </div>
 
         <p className="mt-3 text-sm leading-6 text-foreground">
-          {userIsPremium ? youtubeAnalysis.summary : preview(youtubeAnalysis.summary)}
+          {sentiment.summary}
         </p>
 
         {hasPoints && (
@@ -129,23 +103,26 @@ export default function MarketSentimentSection({ ticker, youtubeAnalysis, userIs
             </Button>
             {showPoints && (
               <div id={pointsId} className="mt-3 grid gap-4 md:grid-cols-2">
-                <PointList title="Pontos positivos" points={visiblePositive} hiddenCount={positive.length - visiblePositive.length} />
-                <PointList title="Pontos de atenção" points={visibleNegative} hiddenCount={negative.length - visibleNegative.length} />
+                <PointList title="Pontos positivos" points={sentiment.positivePoints} hiddenCount={sentiment.hiddenPositiveCount} />
+                <PointList title="Pontos de atenção" points={sentiment.negativePoints} hiddenCount={sentiment.hiddenNegativeCount} />
               </div>
             )}
           </>
         )}
 
         {!userIsPremium && (
-          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Lock className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-              Resumo completo e todos os pontos disponíveis no Premium.
-            </p>
-            <Button asChild size="sm" variant="outline" className="shrink-0">
-              <Link href={cta.href}>{cta.label}</Link>
-            </Button>
-          </div>
+          <p className="mt-4 flex items-start gap-1.5 border-t border-border pt-3 text-sm text-muted-foreground">
+            <Lock className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            <span>
+              Resumo completo e todos os pontos disponíveis no Premium.{' '}
+              <Link
+                href={upsellLink.href}
+                className="whitespace-nowrap py-3 font-medium text-brand underline-offset-4 hover:underline"
+              >
+                {upsellLink.label}
+              </Link>
+            </span>
+          </p>
         )}
       </div>
     </div>

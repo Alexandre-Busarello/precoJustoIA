@@ -2,7 +2,8 @@ import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { ScreeningConversionPage } from '@/components/screening-conversion-page'
-import { getPresetBySlug, getAllPresetSlugs } from '@/lib/screening-presets'
+import { SignalPresetPage } from '@/components/screening/signal-preset-page'
+import { getPresetBySlug, getAllPresetSlugs, isFilterPreset } from '@/lib/screening-presets'
 import { Loader2 } from 'lucide-react'
 
 interface PageProps {
@@ -66,7 +67,7 @@ function ScreeningConversionContent({ slug }: { slug: string }) {
     notFound()
   }
 
-  return <ScreeningConversionPage preset={preset} />
+  return isFilterPreset(preset) ? <ScreeningConversionPage preset={preset} /> : <SignalPresetPage preset={preset} />
 }
 
 export default async function ScreeningConversionPageRoute({ params }: PageProps) {

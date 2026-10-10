@@ -371,11 +371,11 @@ Assista ao(s) vídeo(s) fornecido(s) sobre a empresa ${companyName} (${ticker}) 
 **Sua análise deve incluir:**
 
 1. **Score Geral (0-100)**: Avalie o sentimento geral sobre a empresa baseado no conteúdo dos vídeos:
-   - 0-30: Sentimento muito negativo (problemas graves, recomendação de venda)
+   - 0-30: Sentimento muito negativo (problemas graves, visão muito pessimista dos analistas)
    - 31-50: Sentimento negativo (preocupações, cautela)
    - 51-70: Sentimento neutro ou misto (pontos positivos e negativos equilibrados)
    - 71-85: Sentimento positivo (bons fundamentos, otimismo)
-   - 86-100: Sentimento muito positivo (excelentes perspectivas, forte recomendação)
+   - 86-100: Sentimento muito positivo (excelentes perspectivas, visão muito otimista dos analistas)
 
 2. **Resumo**: Descrição concisa (máximo 280 caracteres) dos pontos-chave discutidos nos vídeos SOBRE ${ticker}
    - Seja direto e objetivo

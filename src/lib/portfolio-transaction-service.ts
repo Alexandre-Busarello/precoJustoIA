@@ -28,7 +28,10 @@ import {
   type ExistingDividendTransaction,
   type PositionTrade,
 } from "@/app/agenda-proventos/agenda-model";
-import { getOrCalculateTechnicalAnalysis } from "./technical-analysis-service";
+import { loadAssetContexts } from "@/lib/allocation/load-context";
+import { runAllocation } from "@/lib/allocation/engine";
+import { DEFAULT_ALLOCATION_OPTIONS, getPreset } from "@/lib/allocation/constants";
+import type { AssetContext } from "@/lib/allocation/types";
 // import { AssetRegistrationService } from './asset-registration-service'; // Not used currently
 
 // Types
@@ -301,6 +304,37 @@ export class PortfolioTransactionService {
       }
     }
 
+    // Compras registradas pelo "Onde aportar" (PENDENTES, criadas pelo usuário): aparecem para confirmar ou descartar,
+    // e o valor reservado por elas não entra de novo nas compras sugeridas abaixo.
+    const pendingOndeAportar = await prisma.portfolioTransaction.findMany({
+      where: {
+        portfolioId,
+        status: "PENDING",
+        isAutoSuggested: false,
+        type: { in: ["CASH_CREDIT", "BUY"] },
+        notes: { startsWith: "Onde aportar" },
+      },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+    });
+    for (const tx of pendingOndeAportar) {
+      suggestions.push({
+        date: tx.date,
+        type: tx.type,
+        ticker: tx.ticker ?? undefined,
+        amount: Number(tx.amount),
+        price: tx.price !== null ? Number(tx.price) : undefined,
+        quantity: tx.quantity !== null ? Number(tx.quantity) : undefined,
+        reason: tx.notes ?? "Onde aportar",
+        cashBalanceBefore: Number(tx.cashBalanceBefore),
+        cashBalanceAfter: Number(tx.cashBalanceAfter),
+        transactionId: tx.id,
+      });
+    }
+    const reservedByOndeAportar = Math.max(
+      0,
+      pendingOndeAportar.reduce((sum, tx) => sum + (tx.type === "BUY" ? Number(tx.amount) : -Number(tx.amount)), 0)
+    );
+
     // Check if there's a monthly contribution already executed/confirmed in current month
     // Only MONTHLY_CONTRIBUTION is considered as monthly contribution (not CASH_CREDIT)
     const currentMonthContribution = existingTransactions.find(
@@ -434,7 +468,8 @@ export class PortfolioTransactionService {
       shouldGenerateBuys: cashBalance >= 100
     });
 
-    const shouldGenerateBuys = cashBalance >= 100; // Always generate buys if cash >= R$ 100
+    const cashForBuys = cashBalance - reservedByOndeAportar;
+    const shouldGenerateBuys = cashForBuys >= 100; // Always generate buys if cash >= R$ 100
 
     if (shouldGenerateBuys) {
       const reason = monthlyContributionDecided 
@@ -450,7 +485,7 @@ export class PortfolioTransactionService {
       
       const buySuggestions = await this.generateBuyTransactionsForCash(
         portfolio,
-        cashBalance,
+        cashForBuys,
         holdings,
         prices
       );
@@ -661,457 +696,88 @@ export class PortfolioTransactionService {
   }
 
   /**
-   * Generate buy transactions for available cash, prioritizing assets furthest from target allocation
+   * Compras para o caixa disponível com o motor do "Onde aportar" no modo "Seguir meus pesos-alvo" (pesos-alvo +
+   * desconto vs. valor estimado + qualidade): só ativos abaixo do alvo, sem passar dele, em quantidades inteiras.
+   * Os dados de valuation vêm do mesmo caminho da página do ativo; sem eles, a prioridade é só a distância até o alvo.
+   * O formato de `SuggestedTransaction` não mudou (as sugestões PENDENTES antigas continuam carregando).
    */
   private static async generateBuyTransactionsForCash(
-    portfolio: any,
+    portfolio: { assets: { ticker: string; targetAllocation: unknown }[] },
     availableCash: number,
     holdings: Map<string, { quantity: number; totalInvested: number }>,
     prices: Map<string, number>
   ): Promise<SuggestedTransaction[]> {
-    console.log(`🔄 [GENERATE_BUY] Starting with R$ ${availableCash.toFixed(2)} available cash`);
-    console.log(`📊 [GENERATE_BUY] Portfolio has ${portfolio.assets?.length || 0} assets configured`);
-    console.log(`📊 [GENERATE_BUY] Holdings: ${holdings.size} tickers, Prices: ${prices.size} tickers`);
-    
-    const suggestions: SuggestedTransaction[] = [];
-    const cashBalance = availableCash;
+    const targets = new Map(portfolio.assets.map((a) => [a.ticker.toUpperCase(), Number(a.targetAllocation)]));
+    const heldTickers = [...holdings.entries()].filter(([, h]) => h.quantity > 0).map(([ticker]) => ticker.toUpperCase());
+    const tickers = [...new Set([...targets.keys(), ...heldTickers])].filter((ticker) => (prices.get(ticker) ?? 0) > 0);
+    if (tickers.length === 0 || availableCash <= 0) return [];
+
+    let contexts = new Map<string, AssetContext>();
+    try {
+      const loaded = await loadAssetContexts(tickers);
+      contexts = new Map(loaded.contexts.map((c) => [c.ticker, c]));
+    } catch (error) {
+      console.error("[GENERATE_BUY] Falha ao carregar valuation; seguindo só pelos pesos-alvo:", error);
+    }
+
+    const assets: AssetContext[] = tickers.map((ticker) => {
+      const price = prices.get(ticker) as number;
+      const quantity = holdings.get(ticker)?.quantity ?? 0;
+      const base: AssetContext = contexts.get(ticker) ?? {
+        ticker,
+        name: ticker,
+        assetType: "stock",
+        sector: null,
+        price,
+        fairValues: {},
+        qualityScore: null,
+        coverage: null,
+        liquidity: null,
+        fundamentals: { intact: null },
+      };
+      // A cotação da carteira prevalece; a margem é recalculada a partir dela (sem a margem pronta do modelo).
+      return {
+        ...base,
+        price,
+        margins: {},
+        holding: quantity > 0 ? { quantity, value: quantity * price } : null,
+        targetWeight: targets.get(ticker) ?? 0,
+      };
+    });
+
+    const result = runAllocation({
+      amount: Math.floor(availableCash * 100) / 100,
+      assets,
+      options: {
+        ...DEFAULT_ALLOCATION_OPTIONS,
+        weights: getPreset("pesos").weights,
+        respectTargets: true,
+        // Os pesos-alvo do usuário já são os limites: sem teto extra por ativo ou concentração.
+        maxPerAssetPct: 1,
+        maxPortfolioPct: 1,
+        strictData: false,
+      },
+      meta: { dataDate: null, macro: { selic: null, ke: null } },
+    });
+
     const today = new Date();
-
-    // Calculate current allocations
-    const portfolioValue = this.calculatePortfolioValue(holdings, prices);
-    console.log(`💰 [GENERATE_BUY] Portfolio value: R$ ${portfolioValue.toFixed(2)}`);
-    
-    const currentAllocations = this.calculateCurrentAllocations(
-      holdings,
-      prices,
-      portfolioValue
-    );
-    
-    console.log(`📊 [GENERATE_BUY] Current allocations:`, Array.from(currentAllocations.entries()).map(([ticker, alloc]) => 
-      `${ticker}: ${(alloc * 100).toFixed(1)}%`
-    ));
-
-    // Calculate deviation from target for each asset (only underallocated assets)
-    const assetsWithDeviation: Array<{
-      ticker: string;
-      targetAlloc: number;
-      currentAlloc: number;
-      deviation: number;
-      price: number;
-    }> = [];
-
-    console.log(`🔍 [GENERATE_BUY] Checking ${portfolio.assets?.length || 0} assets for underallocation...`);
-    
-    for (const asset of portfolio.assets) {
-      const price = prices.get(asset.ticker);
-      if (!price) {
-        console.log(`⚠️ [GENERATE_BUY] No price found for ${asset.ticker}, skipping`);
-        continue;
-      }
-
-      const targetAlloc = Number(asset.targetAllocation);
-      const currentAlloc = currentAllocations.get(asset.ticker) || 0;
-      
-      console.log(`  📊 [GENERATE_BUY] ${asset.ticker}: current=${(currentAlloc * 100).toFixed(1)}%, target=${(targetAlloc * 100).toFixed(1)}%, price=R$ ${price.toFixed(2)}`);
-      
-      // Only consider underallocated assets (we want to buy, not sell)
-      if (currentAlloc < targetAlloc) {
-        const deviation = targetAlloc - currentAlloc;
-        assetsWithDeviation.push({
-          ticker: asset.ticker,
-          targetAlloc,
-          currentAlloc,
-          deviation,
-          price,
-        });
-        console.log(`    ✅ [GENERATE_BUY] ${asset.ticker} is underallocated (deviation: ${(deviation * 100).toFixed(1)}%)`);
-      } else {
-        console.log(`    ⏸️ [GENERATE_BUY] ${asset.ticker} is not underallocated, skipping`);
-      }
-    }
-    
-    console.log(`📊 [GENERATE_BUY] Found ${assetsWithDeviation.length} underallocated assets`);
-
-    // Buscar análises técnicas em paralelo para todos os ativos subalocados
-    console.log(`🔍 [TECHNICAL_ANALYSIS] Fetching technical analysis for ${assetsWithDeviation.length} assets...`);
-    const technicalAnalysisMap = new Map<string, { fairPrice: number | null; isAttractive: boolean; priceVsFairPrice: number | null }>();
-    
-    const technicalAnalysisPromises = assetsWithDeviation.map(async (asset) => {
-      try {
-        const analysis = await getOrCalculateTechnicalAnalysis(asset.ticker, false, true);
-        if (analysis?.aiFairEntryPrice) {
-          const fairPrice = analysis.aiFairEntryPrice;
-          const isAttractive = asset.price <= fairPrice;
-          const priceVsFairPrice = ((asset.price - fairPrice) / fairPrice) * 100;
-          
-          technicalAnalysisMap.set(asset.ticker, {
-            fairPrice,
-            isAttractive,
-            priceVsFairPrice
-          });
-          
-          console.log(`  ✅ [TECHNICAL_ANALYSIS] ${asset.ticker}: price=R$ ${asset.price.toFixed(2)}, fairPrice=R$ ${fairPrice.toFixed(2)}, isAttractive=${isAttractive}, diff=${priceVsFairPrice.toFixed(1)}%`);
-        } else {
-          technicalAnalysisMap.set(asset.ticker, {
-            fairPrice: null,
-            isAttractive: false,
-            priceVsFairPrice: null
-          });
-          console.log(`  ⚠️ [TECHNICAL_ANALYSIS] ${asset.ticker}: No technical analysis available`);
-        }
-      } catch (error) {
-        console.error(`  ❌ [TECHNICAL_ANALYSIS] Error fetching analysis for ${asset.ticker}:`, error);
-        technicalAnalysisMap.set(asset.ticker, {
-          fairPrice: null,
-          isAttractive: false,
-          priceVsFairPrice: null
-        });
-      }
+    let running = availableCash;
+    return result.allocations.map((row) => {
+      const before = running;
+      running -= row.value;
+      return {
+        date: today,
+        type: "BUY" as TransactionType,
+        ticker: row.ticker,
+        amount: row.value,
+        price: row.price,
+        quantity: row.qty,
+        reason: row.reasons.join(" · "),
+        cashBalanceBefore: before,
+        cashBalanceAfter: running,
+        isAttractivePrice: (row.components.discount ?? 0) > 0 || undefined,
+      };
     });
-    
-    await Promise.all(technicalAnalysisPromises);
-    console.log(`✅ [TECHNICAL_ANALYSIS] Completed fetching technical analysis for ${technicalAnalysisMap.size} assets`);
-
-    // Calcular score de oportunidade técnica e combinar com desvio de alocação
-    const assetsWithPriority: Array<{
-      ticker: string;
-      targetAlloc: number;
-      currentAlloc: number;
-      deviation: number;
-      price: number;
-      technicalOpportunityScore: number;
-      finalPriority: number;
-      fairPrice: number | null;
-      isAttractive: boolean;
-      priceVsFairPrice: number | null;
-    }> = [];
-
-    for (const asset of assetsWithDeviation) {
-      const techAnalysis = technicalAnalysisMap.get(asset.ticker);
-      
-      // Calcular score de oportunidade técnica
-      let technicalOpportunityScore = 1.0; // Neutro por padrão
-      if (techAnalysis?.fairPrice !== null && techAnalysis?.fairPrice !== undefined) {
-        if (techAnalysis.isAttractive) {
-          technicalOpportunityScore = 1.5; // Preço abaixo/igual ao justo = alta prioridade
-        } else {
-          technicalOpportunityScore = 0.5; // Preço acima do justo = baixa prioridade
-        }
-      }
-      
-      // Prioridade final = desvio * score de oportunidade técnica
-      const finalPriority = asset.deviation * technicalOpportunityScore;
-      
-      assetsWithPriority.push({
-        ...asset,
-        technicalOpportunityScore,
-        finalPriority,
-        fairPrice: techAnalysis?.fairPrice ?? null,
-        isAttractive: techAnalysis?.isAttractive ?? false,
-        priceVsFairPrice: techAnalysis?.priceVsFairPrice ?? null,
-      });
-    }
-
-    // Ordenar por prioridade final (maior primeiro)
-    assetsWithPriority.sort((a, b) => b.finalPriority - a.finalPriority);
-
-    console.log(
-      `📊 [BUY PRIORITY] Assets sorted by final priority (deviation × technical opportunity):`,
-      assetsWithPriority.map(
-        (a) =>
-          `${a.ticker}: ${(a.currentAlloc * 100).toFixed(1)}% → ${(a.targetAlloc * 100).toFixed(1)}% (deviation: ${(a.deviation * 100).toFixed(1)}%, techScore: ${a.technicalOpportunityScore.toFixed(2)}x, finalPriority: ${a.finalPriority.toFixed(4)})${a.isAttractive ? ' ⭐ ATTRACTIVE' : ''}`
-      )
-    );
-
-    // Calculate total deviation once (outside loop for efficiency)
-    const totalDeviation = assetsWithPriority.reduce(
-      (sum, a) => sum + a.deviation,
-      0
-    );
-    
-    console.log(`💰 [GENERATE_BUY] Total deviation: ${totalDeviation.toFixed(4)}, Available cash: R$ ${availableCash.toFixed(2)}`);
-
-    // Distribute cash prioritizing assets furthest from target
-    // IMPORTANT: Use cashBalance (updated) instead of availableCash to ensure we don't exceed available funds
-    let remainingCash = cashBalance;
-    let totalSuggested = 0;
-    const suggestedTickers = new Set<string>(); // Track which tickers already have suggestions
-    
-    // First pass: Calculate proportional allocations for each asset
-    const assetAllocations: Array<{
-      asset: typeof assetsWithPriority[0];
-      targetAmount: number;
-      maxNeeded: number;
-      priority: number;
-    }> = [];
-    
-    for (const asset of assetsWithPriority) {
-      const allocationWeight = asset.deviation / totalDeviation;
-      const targetAmount = availableCash * allocationWeight; // Use initial availableCash for proportional calculation
-      
-      const currentValue = (holdings.get(asset.ticker)?.quantity || 0) * asset.price;
-      const targetValue = (portfolioValue + availableCash) * asset.targetAlloc;
-      const maxNeeded = Math.max(0, targetValue - currentValue);
-      
-      assetAllocations.push({
-        asset,
-        targetAmount,
-        maxNeeded,
-        priority: asset.finalPriority, // Use final priority (deviation × technical opportunity)
-      });
-    }
-    
-    // Sort by priority (highest final priority first)
-    assetAllocations.sort((a, b) => b.priority - a.priority);
-    
-    console.log(`📊 [GENERATE_BUY] Calculated allocations for ${assetAllocations.length} assets`);
-    
-    // Second pass: Distribute cash ensuring we use as much as possible
-    for (let i = 0; i < assetAllocations.length; i++) {
-      const { asset, targetAmount, maxNeeded } = assetAllocations[i];
-      const isLastAsset = i === assetAllocations.length - 1;
-      
-      if (remainingCash <= 0.01) {
-        console.log(`⏸️ [GENERATE_BUY] No more cash available (R$ ${remainingCash.toFixed(2)}), stopping`);
-        break;
-      }
-
-      // CRITICAL: Only suggest one buy per ticker to avoid duplicates
-      if (suggestedTickers.has(asset.ticker)) {
-        console.log(`⏸️ [GENERATE_BUY] ${asset.ticker}: Already has a buy suggestion, skipping to avoid duplicates`);
-        continue;
-      }
-
-      // Calculate amount to invest
-      // Strategy: Use proportional allocation, prioritizing using all available cash
-      // We'll respect maxNeeded as a guideline, but if there's leftover cash, we'll distribute it
-      let amountToInvest: number;
-      
-      // Calculate how much we can invest without exceeding maxNeeded
-      const maxByNeeded = Math.min(targetAmount, maxNeeded);
-      
-      // For last asset, invest all remaining cash (even if slightly exceeds maxNeeded)
-      // For other assets, use proportional allocation
-      if (isLastAsset) {
-        // Last asset gets ALL remaining cash (even if exceeds maxNeeded slightly)
-        // This ensures we use as much cash as possible
-        amountToInvest = remainingCash;
-        if (amountToInvest > maxNeeded) {
-          console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Last asset - investing all remaining: R$ ${amountToInvest.toFixed(2)} (exceeds maxNeeded: R$ ${maxNeeded.toFixed(2)} by R$ ${(amountToInvest - maxNeeded).toFixed(2)})`);
-        } else {
-          console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Last asset - investing all remaining: R$ ${amountToInvest.toFixed(2)} (maxNeeded: R$ ${maxNeeded.toFixed(2)})`);
-        }
-      } else {
-        // Use proportional allocation, prioritizing using all available cash
-        // Calculate how much cash will be left for remaining assets
-        const remainingAssetsCount = assetAllocations.length - i - 1;
-        
-        if (remainingAssetsCount === 0) {
-          // This is effectively the last asset, invest all remaining cash
-          amountToInvest = remainingCash;
-          console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Effectively last asset - investing all remaining: R$ ${amountToInvest.toFixed(2)}`);
-        } else {
-          // Estimate how much cash each remaining asset will need
-          const avgRemainingPerAsset = remainingCash / (remainingAssetsCount + 1);
-          
-          // If we have plenty of cash relative to maxNeeded, we can exceed it
-          // Otherwise, use proportional allocation but don't be too restrictive
-          if (avgRemainingPerAsset > maxNeeded * 1.2) {
-            // We have plenty of cash, can exceed maxNeeded to use more cash
-            amountToInvest = Math.min(targetAmount * 1.3, remainingCash); // Allow 30% over targetAmount
-            console.log(`  💰 [GENERATE_BUY] ${asset.ticker}: Plenty of cash - investing R$ ${amountToInvest.toFixed(2)} (targetAmount: R$ ${targetAmount.toFixed(2)}, maxNeeded: R$ ${maxNeeded.toFixed(2)})`);
-          } else {
-            // Use proportional allocation, but be more generous
-            amountToInvest = Math.min(targetAmount, remainingCash);
-            // If maxNeeded is very restrictive, still use at least targetAmount
-            if (amountToInvest < targetAmount * 0.8 && remainingCash > targetAmount) {
-              amountToInvest = Math.min(targetAmount, remainingCash);
-            }
-          }
-        }
-      }
-
-      console.log(`  💰 [GENERATE_BUY] ${asset.ticker}: targetAmount=R$ ${targetAmount.toFixed(2)}, maxNeeded=R$ ${maxNeeded.toFixed(2)}, amountToInvest=R$ ${amountToInvest.toFixed(2)}, remainingCash=R$ ${remainingCash.toFixed(2)}`);
-
-      if (amountToInvest > 0.01) {
-        const sharesToBuy = Math.floor(amountToInvest / asset.price);
-
-        if (sharesToBuy > 0) {
-          const actualAmount = sharesToBuy * asset.price;
-          
-          // Double-check: don't exceed remaining cash
-          if (actualAmount > remainingCash) {
-            console.log(`⚠️ [GENERATE_BUY] ${asset.ticker}: actualAmount (R$ ${actualAmount.toFixed(2)}) exceeds remainingCash (R$ ${remainingCash.toFixed(2)}), skipping`);
-            continue;
-          }
-
-          // Construir reason com informações de análise técnica
-          let reason = `Compra de ${sharesToBuy} ações (alocação atual ${(asset.currentAlloc * 100).toFixed(1)}% → alvo ${(asset.targetAlloc * 100).toFixed(1)}%, prioridade por desvio`;
-          if (asset.fairPrice !== null) {
-            reason += ` e oportunidade técnica`;
-            if (asset.isAttractive) {
-              reason += ` - preço atrativo)`;
-            } else {
-              reason += `)`;
-            }
-          } else {
-            reason += `)`;
-          }
-
-          suggestions.push({
-            date: today,
-            type: "BUY",
-            ticker: asset.ticker,
-            amount: actualAmount,
-            price: asset.price,
-            quantity: sharesToBuy,
-            reason,
-            cashBalanceBefore: remainingCash,
-            cashBalanceAfter: remainingCash - actualAmount,
-            fairPrice: asset.fairPrice ?? undefined,
-            isAttractivePrice: asset.isAttractive || undefined,
-            priceVsFairPrice: asset.priceVsFairPrice ?? undefined,
-          });
-
-          suggestedTickers.add(asset.ticker); // Mark this ticker as having a suggestion
-          totalSuggested += actualAmount;
-          remainingCash -= actualAmount;
-          
-          console.log(`  ✅ [GENERATE_BUY] ${asset.ticker}: Added suggestion for R$ ${actualAmount.toFixed(2)} (${sharesToBuy} shares), remaining cash: R$ ${remainingCash.toFixed(2)}`);
-        } else {
-          console.log(`  ⏸️ [GENERATE_BUY] ${asset.ticker}: Not enough to buy even 1 share (amountToInvest: R$ ${amountToInvest.toFixed(2)}, price: R$ ${asset.price.toFixed(2)})`);
-        }
-      }
-    }
-    
-    // If there's still remaining cash after all allocations, distribute it proportionally
-    // This ensures we use as much cash as possible
-    if (remainingCash > 0.01 && assetAllocations.length > 0) {
-      console.log(`💰 [GENERATE_BUY] Distributing remaining cash: R$ ${remainingCash.toFixed(2)}`);
-      
-      // Distribute remaining cash proportionally among ALL assets that have suggestions
-      // Use the same proportional weights based on deviation
-      const assetsWithSuggestions = assetAllocations.filter(({ asset }) => 
-        suggestedTickers.has(asset.ticker)
-      );
-      
-      if (assetsWithSuggestions.length > 0) {
-        // Calculate total deviation for assets with suggestions
-        const totalDeviationForSuggested = assetsWithSuggestions.reduce(
-          (sum, { asset }) => sum + asset.deviation,
-          0
-        );
-        
-        // Distribute remaining cash proportionally
-        for (const { asset } of assetsWithSuggestions) {
-          if (remainingCash <= 0.01) break;
-          
-          const allocationWeight = asset.deviation / totalDeviationForSuggested;
-          const additionalAmount = Math.min(remainingCash * allocationWeight, remainingCash);
-          
-          if (additionalAmount > 0.01) {
-            const sharesToBuy = Math.floor(additionalAmount / asset.price);
-            if (sharesToBuy > 0) {
-              const actualAmount = sharesToBuy * asset.price;
-              
-              // Update existing suggestion
-              const index = suggestions.findIndex(s => s.ticker === asset.ticker);
-              if (index >= 0 && suggestions[index]) {
-                suggestions[index].amount += actualAmount;
-                suggestions[index].quantity = (suggestions[index].quantity || 0) + sharesToBuy;
-                suggestions[index].reason = (suggestions[index].reason || '') + ` + ${sharesToBuy} ações (saldo restante)`;
-                totalSuggested += actualAmount;
-                remainingCash -= actualAmount;
-                console.log(`  🔄 [GENERATE_BUY] ${asset.ticker}: Updated suggestion + R$ ${actualAmount.toFixed(2)} (${sharesToBuy} shares), remaining: R$ ${remainingCash.toFixed(2)}`);
-              }
-            }
-          }
-        }
-      }
-      
-      // If still have remaining cash (due to rounding), give it all to the last asset
-      if (remainingCash > 0.01 && assetAllocations.length > 0) {
-        const lastAllocation = assetAllocations[assetAllocations.length - 1];
-        const { asset } = lastAllocation;
-        
-        const sharesToBuy = Math.floor(remainingCash / asset.price);
-        if (sharesToBuy > 0) {
-          const actualAmount = sharesToBuy * asset.price;
-          const beforeRemaining = remainingCash;
-          remainingCash -= actualAmount;
-          
-          const existingSuggestion = suggestions.find(s => s.ticker === asset.ticker);
-          if (existingSuggestion) {
-            // Update existing suggestion
-            const index = suggestions.findIndex(s => s.ticker === asset.ticker);
-            if (index >= 0 && suggestions[index]) {
-              suggestions[index].amount += actualAmount;
-              suggestions[index].quantity = (suggestions[index].quantity || 0) + sharesToBuy;
-              suggestions[index].reason = (suggestions[index].reason || '') + ` + ${sharesToBuy} ações (saldo final)`;
-              totalSuggested += actualAmount;
-              console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Added final leftover: R$ ${actualAmount.toFixed(2)} (${sharesToBuy} shares), remaining: R$ ${remainingCash.toFixed(2)}`);
-            }
-          } else {
-            // Create new suggestion
-            let reason = `Compra de ${sharesToBuy} ações (saldo final restante)`;
-            if (asset.fairPrice !== null && asset.isAttractive) {
-              reason += ` - preço atrativo`;
-            }
-            
-            suggestions.push({
-              date: today,
-              type: "BUY",
-              ticker: asset.ticker,
-              amount: actualAmount,
-              price: asset.price,
-              quantity: sharesToBuy,
-              reason,
-              cashBalanceBefore: beforeRemaining,
-              cashBalanceAfter: remainingCash,
-              fairPrice: asset.fairPrice ?? undefined,
-              isAttractivePrice: asset.isAttractive || undefined,
-              priceVsFairPrice: asset.priceVsFairPrice ?? undefined,
-            });
-            suggestedTickers.add(asset.ticker);
-            totalSuggested += actualAmount;
-            console.log(`  🎯 [GENERATE_BUY] ${asset.ticker}: Added final leftover cash: R$ ${actualAmount.toFixed(2)} (${sharesToBuy} shares), remaining: R$ ${remainingCash.toFixed(2)}`);
-          }
-        }
-      }
-    }
-    
-    console.log(`💰 [GENERATE_BUY] Total suggested: R$ ${totalSuggested.toFixed(2)} / Available cash: R$ ${availableCash.toFixed(2)}`);
-    if (totalSuggested > availableCash + 0.01) {
-      console.error(`❌ [GENERATE_BUY] ERROR: Total suggested (R$ ${totalSuggested.toFixed(2)}) exceeds available cash (R$ ${availableCash.toFixed(2)})!`);
-    }
-    
-    // Final safety check: ensure no duplicate tickers
-    const tickerCounts = new Map<string, number>();
-    suggestions.forEach(s => {
-      if (s.ticker) {
-        tickerCounts.set(s.ticker, (tickerCounts.get(s.ticker) || 0) + 1);
-      }
-    });
-    
-    const duplicates = Array.from(tickerCounts.entries()).filter(([_, count]) => count > 1);
-    if (duplicates.length > 0) {
-      console.error(`❌ [GENERATE_BUY] ERROR: Found duplicate tickers in suggestions:`, duplicates);
-      // Remove duplicates, keeping only the first occurrence
-      const seenTickers = new Set<string>();
-      const deduplicatedSuggestions = suggestions.filter(s => {
-        if (!s.ticker) return true;
-        if (seenTickers.has(s.ticker)) {
-          console.log(`🧹 [GENERATE_BUY] Removing duplicate suggestion for ${s.ticker}`);
-          return false;
-        }
-        seenTickers.add(s.ticker);
-        return true;
-      });
-      console.log(`🧹 [GENERATE_BUY] Removed ${suggestions.length - deduplicatedSuggestions.length} duplicate suggestions`);
-      return deduplicatedSuggestions;
-    }
-
-    return suggestions;
   }
 
   /**

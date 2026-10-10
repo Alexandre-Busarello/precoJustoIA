@@ -6,8 +6,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/user-service'
 import { processBenMessageStream } from '@/lib/ben-service'
 import { extractImportantInfo, consolidateMemory, shouldRegisterMemory } from '@/lib/ben-memory-service'
-import { extractPageContext } from '@/lib/ben-page-context'
 import { prisma } from '@/lib/prisma'
+import { contextFromPath } from '@/lib/ben-context/builders'
+import { sanitizeBenContext } from '@/lib/ben-context/serializer'
+import type { BenPageContext } from '@/lib/ben-context/types'
 import { checkBenMessageLimit } from '@/lib/ben-message-limit-service'
 import { generateBenCTAMessage } from '@/lib/ben-cta-message'
 
@@ -16,6 +18,33 @@ import { generateBenCTAMessage } from '@/lib/ben-cta-message'
 // Para desenvolvimento local, usamos um fallback
 const waitUntil = (promise: Promise<any>) => {
   promise.catch(err => console.error('Erro em waitUntil:', err))
+}
+
+/**
+ * Contexto da tela para o prompt: o do cliente (validado) ou, sem ele, o da rota. Ativos ganham o nome da empresa.
+ */
+async function resolveServerContext(rawContext: unknown, contextUrl: unknown): Promise<BenPageContext> {
+  const path = typeof contextUrl === 'string' ? contextUrl : '/'
+  const context = sanitizeBenContext(rawContext) ?? contextFromPath(path)
+  if (context.kind === 'asset' && !context.companyName) {
+    try {
+      const company = await prisma.company.findUnique({ where: { ticker: context.ticker }, select: { name: true } })
+      if (company?.name) return { ...context, companyName: company.name }
+    } catch (error) {
+      console.error(`[Ben] Erro ao buscar nome da empresa para ${context.ticker}:`, error)
+    }
+  }
+  return context
+}
+
+/** Limite diário de mensagens do usuário (o "Perguntar ao Ben" confere antes de abrir o chat). */
+export async function GET() {
+  const user = await getCurrentUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  }
+  const { allowed, remaining, limit } = await checkBenMessageLimit(user.id)
+  return NextResponse.json({ allowed, remaining, limit })
 }
 
 export async function POST(request: NextRequest) {
@@ -39,8 +68,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Verificar se a conversa pertence ao usuário (antes de gravar qualquer mensagem, inclusive a de limite)
+    const conversation = await prisma.benConversation.findUnique({
+      where: { id: conversationId },
+      select: { userId: true }
+    })
+
+    if (!conversation) {
+      return NextResponse.json(
+        { error: 'Conversa não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    if (conversation.userId !== user.id) {
+      return NextResponse.json(
+        { error: 'Acesso negado' },
+        { status: 403 }
+      )
+    }
+
     // Verificar limite de mensagens antes de processar
-    console.log(`[Ben Chat API] Verificando limite para user ${user.id} (email: ${user.email}, isPremium: ${user.isPremium})`)
+    console.log(`[Ben Chat API] Verificando limite para user ${user.id} (isPremium: ${user.isPremium})`)
     const limitCheck = await checkBenMessageLimit(user.id)
     console.log(`[Ben Chat API] Resultado da verificação:`, {
       allowed: limitCheck.allowed,
@@ -79,28 +128,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Extrair contexto completo da página (server-side)
-    const pageContext = await extractPageContext(contextUrl || '/', clientPageContext)
-
-    // Verificar se a conversa pertence ao usuário
-    const conversation = await prisma.benConversation.findUnique({
-      where: { id: conversationId },
-      select: { userId: true }
-    })
-
-    if (!conversation) {
-      return NextResponse.json(
-        { error: 'Conversa não encontrada' },
-        { status: 404 }
-      )
-    }
-
-    if (conversation.userId !== user.id) {
-      return NextResponse.json(
-        { error: 'Acesso negado' },
-        { status: 403 }
-      )
-    }
+    // Contexto da tela (dica para o prompt; os números atuais vêm das ferramentas)
+    const pageContext = await resolveServerContext(clientPageContext, contextUrl)
 
     // Criar stream de resposta SSE
     const stream = new ReadableStream({

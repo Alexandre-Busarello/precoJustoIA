@@ -199,7 +199,7 @@ export function RadarPageContent() {
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 pt-4 pb-12">
       <PageHeader
         title="Radar de oportunidades"
-        description="Score, estratégias, upside, posição técnica e sentimento dos seus ativos lado a lado."
+        description="Score, estratégias, margem de segurança, posição técnica e sentimento dos seus ativos lado a lado."
       />
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="gap-6">
@@ -276,7 +276,7 @@ export function RadarPageContent() {
           <SectionHeader
             as="h2"
             title="Maiores pontuações do radar"
-            description="Ordenadas pela nota composta: solidez (30%), upside (25%), estratégias aprovadas (25%) e posição técnica (20%)."
+            description="Ordenadas pela nota composta: solidez (30%), potencial (25%), estratégias aprovadas (25%) e posição técnica (20%)."
           />
 
           {loadingExplore ? (

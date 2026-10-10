@@ -42,6 +42,9 @@ const DISCOVER: NavSection = {
   ],
 }
 
+/** Premissa central do produto: item de topo nos dois menus. */
+const ONDE_APORTAR: NavSection = { label: 'Onde aportar', href: '/onde-aportar' }
+
 const CALCULATORS: NavLink[] = [
   { label: 'Calculadora de dividend yield', href: '/calculadoras/dividend-yield', description: 'Preço-teto e rendimento' },
   { label: 'Calculadora de recuperação', href: '/calculadoras/recuperacao', description: 'Aporte para recuperar uma perda' },
@@ -55,6 +58,7 @@ const MARKETING_TOOLS: NavSection = {
     { label: 'Backtest', href: '/backtest', description: 'Simule carteiras no passado' },
     { label: 'Análise setorial', href: '/analise-setorial', description: 'Múltiplos por setor' },
     { label: 'P/L da bolsa', href: '/pl-bolsa', description: 'Histórico do P/L do Ibovespa' },
+    { label: 'Projeções do Ibovespa', href: '/projecoes-ibov', description: 'Faixas estatísticas do índice' },
     ...CALCULATORS,
   ],
 }
@@ -74,36 +78,46 @@ const APP_TOOLS: NavSection = {
     { label: 'Comparador', href: '/comparador', description: 'Indicadores de ações lado a lado' },
     { label: 'Análise setorial', href: '/analise-setorial', description: 'Múltiplos por setor' },
     { label: 'P/L da bolsa', href: '/pl-bolsa', description: 'Histórico do P/L do Ibovespa' },
-    { label: 'Projeções do Ibovespa', href: '/projecoes-ibov', description: 'Faixas estimadas para o índice' },
+    { label: 'Projeções do Ibovespa', href: '/projecoes-ibov', description: 'Faixas estatísticas do índice' },
     ...CALCULATORS,
   ],
 }
 
+/**
+ * No app, as ferramentas entram em "Descobrir" para o menu ficar em 5 itens de topo com "Onde aportar".
+ * Regra: cada rota aparece uma vez por menu e com o mesmo rótulo nos dois menus (teste em navigation.test.ts).
+ */
+const APP_DISCOVER: NavSection = {
+  label: 'Descobrir',
+  items: [...(DISCOVER.items ?? []), ...(APP_TOOLS.items ?? [])],
+}
+
 export const navigation: { marketing: NavSection[]; app: NavSection[] } = {
-  marketing: [DISCOVER, MARKETING_TOOLS, LEARN, { label: 'Planos', href: '/planos' }],
+  marketing: [ONDE_APORTAR, DISCOVER, MARKETING_TOOLS, LEARN, { label: 'Planos', href: '/planos' }],
   app: [
     { label: 'Início', href: '/dashboard', exact: true },
-    DISCOVER,
+    ONDE_APORTAR,
+    APP_DISCOVER,
     {
       label: 'Carteiras',
       items: [
         { label: 'Minhas carteiras', href: '/carteira', description: 'Posições, aportes e rentabilidade' },
         { label: 'Agenda de proventos', href: '/agenda-proventos', description: 'Datas ex, pagamentos e renda mensal' },
+        // Backtest fica em "Ferramentas" no marketing e em "Carteiras" no app de propósito: o app não tem grupo
+        // "Ferramentas" (elas entram em "Descobrir" para caber em 5 itens de topo), e para quem já tem conta o backtest
+        // é a simulação de uma carteira, ao lado de "Minhas carteiras" (de onde sai o "Simular no backtest").
         { label: 'Backtest', href: '/backtest', description: 'Simule carteiras no passado' },
-        { label: 'Índices teóricos', href: '/indices', description: 'Carteiras teóricas com histórico' },
       ],
     },
     {
       label: 'Alertas',
       items: [
-        { label: 'Meu radar', href: '/radar', description: 'Ativos que você acompanha' },
-        { label: 'Agenda de proventos', href: '/agenda-proventos', description: 'Proventos do radar e da carteira' },
+        { label: 'Meu radar', href: '/radar', description: 'Radar de oportunidades dos ativos que você acompanha' },
         { label: 'Alertas de preço', href: '/dashboard/subscriptions', description: 'Aviso por e-mail por ticker' },
         { label: 'Monitoramentos', href: '/dashboard/monitoramentos-customizados', description: 'Alertas por indicador' },
         { label: 'Notificações', href: '/notificacoes', description: 'Avisos da plataforma' },
       ],
     },
-    APP_TOOLS,
   ],
 }
 
@@ -124,7 +138,14 @@ export interface FooterSection {
 }
 
 export const FOOTER_SECTIONS: FooterSection[] = [
-  { label: 'Descobrir', links: [...(DISCOVER.items ?? []), { label: 'Planos', href: '/planos' }] },
+  {
+    label: 'Descobrir',
+    links: [
+      { label: 'Onde aportar', href: '/onde-aportar' },
+      ...(DISCOVER.items ?? []),
+      { label: 'Planos', href: '/planos' },
+    ],
+  },
   { label: 'Ferramentas', links: MARKETING_TOOLS.items ?? [] },
   {
     label: 'Empresa',
@@ -163,7 +184,7 @@ function sectionMatchLength(pathname: string | null | undefined, section: NavSec
 }
 
 /**
- * Item de topo ativo: o de link mais específico; em empate (mesmo link em dois grupos, ex. /indices), o primeiro.
+ * Item de topo ativo: o de link mais específico; em empate, o primeiro.
  * Garante um único item de topo destacado no header.
  */
 export function getActiveSection(pathname: string | null | undefined, sections: NavSection[]): NavSection | undefined {

@@ -20,7 +20,7 @@ import {
 } from '@/lib/format'
 import { AnonLimitCTA } from '@/components/anon-limit-cta'
 import { PageHeader } from '@/components/page-header'
-import { AddToBacktestButton } from '@/components/add-to-backtest-button'
+import { QuickBacktestButton } from '@/components/backtest/quick-backtest-button'
 import { Button } from '@/components/ui/button'
 import {
   ComparisonTable,
@@ -598,18 +598,12 @@ export default async function CompareStocksPage({ params }: PageProps) {
         footerRow={{
           label: 'Backtest',
           cells: companies.map((c) => (
-            <AddToBacktestButton
+            <QuickBacktestButton
               key={c.ticker}
-              asset={{
-                ticker: c.ticker,
-                companyName: c.name,
-                sector: c.sector || undefined,
-                currentPrice: toNumber(c.dailyQuotes[0]?.price) ?? undefined,
-              }}
-              variant="outline"
-              size="sm"
-              showLabel={false}
-              className="min-w-11 max-md:h-11"
+              request={{ tickers: [c.ticker], source: 'comparador', sourceLabel: c.ticker }}
+              label={`Backtest de ${c.ticker}`}
+              iconOnly
+              className="min-w-11 max-md:size-11"
             />
           )),
         }}

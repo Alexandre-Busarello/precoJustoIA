@@ -10,6 +10,24 @@ import { safeWrite, safeQueryWithParams } from "@/lib/prisma-wrapper";
 import { cache } from "@/lib/cache-service";
 import { DividendRadarService } from "@/lib/dividend-radar-service";
 import { getChart, getQuoteSummary } from './yahooFinance2-service';
+import { DUPLICATE_WINDOW_DAYS, dedupeDividends, isNearDuplicateDividend } from "@/lib/finance/dividends";
+import { roundTo } from "@/lib/finance/utils";
+
+const DAY_MS = 86_400_000;
+
+function isValidDate(value: unknown): value is Date {
+  return value instanceof Date && !Number.isNaN(value.getTime());
+}
+
+/** Meia-noite UTC do dia (UTC) da data: o mesmo valor que o Postgres guarda numa coluna `@db.Date`. */
+function toUTCDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+/** Linha sem tipo e sem data de pagamento (o Yahoo só informa data-com e valor). */
+function isBareDividend(row: { type?: string | null; paymentDate?: Date | null }): boolean {
+  return !row.type && !isValidDate(row.paymentDate);
+}
 
 /**
  * Interface para dividendos extraídos de fontes externas (Yahoo Finance)
@@ -543,9 +561,15 @@ export class DividendService {
   }
 
   /**
-   * Salva múltiplos dividendos no banco de dados
-   * Usa upsert para evitar duplicatas baseado em companyId + exDate + amount
-   * Permite múltiplos dividendos na mesma data (ex: JCP e dividendos ordinários)
+   * Salva proventos de uma fonte externa sem criar duplicatas.
+   *
+   * - Datas normalizadas para o dia UTC (`exDate` é `@db.Date`) e valores arredondados a 6 casas (precisão da coluna):
+   *   a busca pela chave única sempre encontra o registro já gravado.
+   * - Upsert por janela: um provento que já existe com outra data-com (até 5 dias) ou vindo de outra fonte
+   *   (ver `isNearDuplicateDividend`) não é inserido de novo; só completa tipo e data de pagamento que faltarem.
+   * - Linhas do Yahoo sem tipo nem pagamento que repetem um provento mais completo na mesma janela são removidas.
+   * - Inserções com `skipDuplicates`: duas buscas simultâneas do mesmo ativo não disparam erro de chave única.
+   * Permite vários proventos na mesma data com valores diferentes (JCP e dividendo).
    */
   static async saveDividendsToDatabase(
     companyId: number,
@@ -553,333 +577,107 @@ export class DividendService {
   ): Promise<void> {
     if (dividends.length === 0) return;
 
-    // Validação do companyId
-    if (!companyId || typeof companyId !== 'number' || companyId <= 0) {
+    if (!companyId || typeof companyId !== "number" || companyId <= 0) {
       console.error(`❌ [DB] CompanyId inválido: ${companyId}. Pulando salvamento de dividendos.`);
       return;
     }
 
-    try {
-      // Log detalhado antes de iniciar
-      console.log(
-        `🔍 [DB] Iniciando salvamento de ${dividends.length} dividendos para companyId ${companyId}. ` +
-        `Primeiros 3 dividendos: ${dividends.slice(0, 3).map(d => 
-          `${d.date.toISOString().split('T')[0]}=R$${d.amount.toFixed(4)}`
-        ).join(', ')}`
-      );
+    const incoming = dedupeDividends(
+      dividends
+        .filter(
+          (d) =>
+            d.date instanceof Date &&
+            !Number.isNaN(d.date.getTime()) &&
+            typeof d.amount === "number" &&
+            Number.isFinite(d.amount) &&
+            d.amount > 0
+        )
+        .map((d) => ({
+          exDate: toUTCDay(d.date),
+          paymentDate: isValidDate(d.paymentDate) ? toUTCDay(d.paymentDate) : null,
+          amount: roundTo(d.amount, 6),
+          type: d.type || null,
+          source: d.source || "yahoo",
+        }))
+        .filter((d) => d.amount > 0)
+    );
+    if (incoming.length === 0) return;
 
-      // Verificar que a company existe antes de tentar salvar
-      const companyExists = await prisma.company.findUnique({
-        where: { id: companyId },
-        select: { id: true, ticker: true }
-      });
-
-      if (!companyExists) {
-        console.error(
-          `❌ [DB] Company com ID ${companyId} não encontrada no banco. ` +
-          `Isso pode indicar um companyId incorreto ou problema de sincronização. ` +
-          `Pulando salvamento de ${dividends.length} dividendos.`
-        );
-        
-        // Tentar encontrar a empresa por outros meios para diagnóstico
-        const allCompanies = await prisma.company.findMany({
-          where: { id: { gte: companyId - 5, lte: companyId + 5 } },
-          select: { id: true, ticker: true },
-          take: 10
-        });
-        console.error(
-          `🔍 [DB] Empresas próximas ao ID ${companyId}:`,
-          allCompanies.map(c => `${c.id}:${c.ticker}`).join(', ')
-        );
-        
-        return; // Retornar silenciosamente ao invés de lançar erro
-      }
-
-      console.log(
-        `✅ [DB] Company confirmada: ID ${companyExists.id}, ticker ${companyExists.ticker}`
-      );
-
-      // Usar upsert para cada dividendo baseado em companyId + exDate + amount
-      // Isso permite ter JCP e dividendos ordinários na mesma data (com amounts diferentes)
-      // Processar em paralelo mas sem transação para evitar locks
-      const results = await Promise.allSettled(
-        dividends.map((dividend, index) => {
-          // Validar dados antes de tentar upsert
-          if (!dividend.date || !(dividend.date instanceof Date) || isNaN(dividend.date.getTime())) {
-            throw new Error(`Dividendo ${index + 1}: data inválida`);
-          }
-          if (!dividend.amount || typeof dividend.amount !== 'number' || dividend.amount <= 0) {
-            throw new Error(`Dividendo ${index + 1}: amount inválido (${dividend.amount})`);
-          }
-          
-          // Log detalhado para o primeiro dividendo (onde o erro costuma ocorrer)
-          if (index === 0) {
-            console.log(
-              `🔍 [DB] Processando primeiro dividendo: ` +
-              `date=${dividend.date.toISOString()}, ` +
-              `amount=${dividend.amount}, ` +
-              `amountType=${typeof dividend.amount}, ` +
-              `amountIsNaN=${isNaN(dividend.amount)}, ` +
-              `companyId=${companyId}, ` +
-              `ticker=${companyExists.ticker}`
-            );
-          }
-          
-          // Normalizar a data para remover horas (exDate é @db.Date, apenas data)
-          // Isso evita problemas de comparação quando dividend.date tem hora
-          const normalizedDate = new Date(dividend.date);
-          normalizedDate.setHours(0, 0, 0, 0);
-          
-          // Normalizar paymentDate também se existir
-          const normalizedPaymentDate = dividend.paymentDate 
-            ? (() => {
-                const pd = new Date(dividend.paymentDate);
-                pd.setHours(0, 0, 0, 0);
-                return pd;
-              })()
-            : null;
-
-          // Verificar se o registro já existe antes de fazer upsert
-          // Isso evita o erro P2025 que pode ocorrer quando o Prisma tenta fazer update
-          // de um registro que não existe ou quando há problemas com foreign keys
-          return safeWrite(
-            "upsert-dividend_history",
-            async () => {
-              // Primeiro verificar se já existe usando a data normalizada
-              const existing = await prisma.dividendHistory.findUnique({
-                where: {
-                  companyId_exDate_amount: {
-                    companyId: companyId,
-                    exDate: normalizedDate,
-                    amount: dividend.amount,
-                  },
-                },
-              });
-
-              if (existing) {
-                // Se existe, fazer update
-                return prisma.dividendHistory.update({
-                  where: {
-                    companyId_exDate_amount: {
-                      companyId: companyId,
-                      exDate: normalizedDate,
-                      amount: dividend.amount,
-                    },
-                  },
-                  data: {
-                    paymentDate: normalizedPaymentDate,
-                    type: dividend.type || null,
-                    source: dividend.source || "yahoo",
-                    updatedAt: new Date(),
-                  },
-                });
-              } else {
-                // Se não existe, fazer create
-                // Verificar novamente que a company existe antes de criar
-                const companyCheck = await prisma.company.findUnique({
-                  where: { id: companyId },
-                  select: { id: true },
-                });
-
-                if (!companyCheck) {
-                  throw new Error(
-                    `Company ${companyId} não encontrada ao tentar criar dividendo`
-                  );
-                }
-
-                return prisma.dividendHistory.create({
-                  data: {
-                    companyId: companyId,
-                    exDate: normalizedDate,
-                    amount: dividend.amount,
-                    paymentDate: normalizedPaymentDate,
-                    type: dividend.type || null,
-                    source: dividend.source || "yahoo",
-                  },
-                });
-              }
-            },
-            ["dividend_history"]
-          );
-        })
-      );
-
-      // Verificar se houve erros nos resultados
-      const errors = results.filter((r) => r.status === 'rejected');
-      const successes = results.filter((r) => r.status === 'fulfilled');
-
-      if (errors.length > 0) {
-        console.warn(
-          `⚠️ [DB] ${errors.length} de ${dividends.length} dividendos falharam ao salvar para companyId ${companyId} (ticker: ${companyExists.ticker})`
-        );
-        
-        // Log detalhado dos erros
-        errors.forEach((errorResult, index) => {
-          if (errorResult.status === 'rejected') {
-            const reason = errorResult.reason;
-            const dividend = dividends[index];
-            
-            // Tratamento específico para erro P2025
-            if (reason?.code === 'P2025') {
-              console.error(
-                `  ❌ [DB] Erro P2025 (Record not found) no dividendo ${index + 1}/${dividends.length}: ` +
-                `date=${dividend.date.toISOString().split('T')[0]}, ` +
-                `dateFull=${dividend.date.toISOString()}, ` +
-                `amount=${dividend.amount}, ` +
-                `amountType=${typeof dividend.amount}, ` +
-                `amountIsNaN=${isNaN(dividend.amount)}, ` +
-                `companyId=${companyId}, ` +
-                `ticker=${companyExists.ticker}`
-              );
-              console.error(
-                `  🔍 [DB] Detalhes completos do erro P2025:`,
-                JSON.stringify({
-                  code: reason.code,
-                  meta: reason.meta,
-                  message: reason.message,
-                  dividendData: {
-                    date: dividend.date.toISOString(),
-                    amount: dividend.amount,
-                    amountType: typeof dividend.amount,
-                    paymentDate: dividend.paymentDate?.toISOString() || null,
-                    type: dividend.type || null,
-                    source: dividend.source || null,
-                  },
-                  companyId: companyId,
-                  ticker: companyExists.ticker,
-                  stack: reason.stack?.split('\n').slice(0, 10)
-                }, null, 2)
-              );
-              
-              // Tentar verificar se a empresa ainda existe quando o erro ocorreu
-              // E também verificar se já existe um dividendo com esses valores
-              Promise.all([
-                prisma.company.findUnique({
-                  where: { id: companyId },
-                  select: { id: true, ticker: true }
-                }),
-                prisma.dividendHistory.findFirst({
-                  where: {
-                    companyId: companyId,
-                    exDate: dividend.date,
-                    amount: dividend.amount
-                  }
-                })
-              ]).then(([companyCheck, existingDividend]) => {
-                if (!companyCheck) {
-                  console.error(
-                    `  ⚠️ [DB] VERIFICAÇÃO: Company ${companyId} NÃO existe mais no banco!`
-                  );
-                } else {
-                  console.log(
-                    `  ✅ [DB] VERIFICAÇÃO: Company ${companyId} ainda existe (ticker: ${companyCheck.ticker})`
-                  );
-                }
-                if (existingDividend) {
-                  console.log(
-                    `  ℹ️ [DB] VERIFICAÇÃO: Já existe um dividendo com esses valores (ID: ${existingDividend.id})`
-                  );
-                } else {
-                  console.log(
-                    `  ℹ️ [DB] VERIFICAÇÃO: Nenhum dividendo existente encontrado com esses valores`
-                  );
-                }
-              }).catch(err => {
-                console.error(`  ❌ [DB] Erro ao verificar company/dividend:`, err);
-              });
-              
-              // Tentar criar/atualizar o dividendo novamente como fallback
-              // Primeiro verificar se já existe para evitar erro de unique constraint
-              if (index === 0) {
-                console.log(
-                  `  🔄 [DB] Tentando fallback para primeiro dividendo...`
-                );
-                prisma.dividendHistory.findFirst({
-                  where: {
-                    companyId: companyId,
-                    exDate: dividend.date,
-                    amount: dividend.amount
-                  }
-                }).then((existing) => {
-                  if (existing) {
-                    // Se já existe, apenas atualizar
-                    console.log(`  ℹ️ [DB] Dividendo já existe (ID: ${existing.id}), atualizando...`);
-                    return prisma.dividendHistory.update({
-                      where: { id: existing.id },
-                      data: {
-                        paymentDate: dividend.paymentDate || null,
-                        type: dividend.type || null,
-                        source: dividend.source || "yahoo",
-                        updatedAt: new Date(),
-                      }
-                    });
-                  } else {
-                    // Se não existe, criar
-                    console.log(`  🔄 [DB] Criando dividendo diretamente...`);
-                    return prisma.dividendHistory.create({
-                      data: {
-                        companyId: companyId,
-                        exDate: dividend.date,
-                        amount: dividend.amount,
-                        paymentDate: dividend.paymentDate || null,
-                        type: dividend.type || null,
-                        source: dividend.source || "yahoo",
-                      }
-                    });
-                  }
-                }).then(() => {
-                  console.log(`  ✅ [DB] Dividendo processado com sucesso via fallback`);
-                }).catch((fallbackError: any) => {
-                  console.error(
-                    `  ❌ [DB] Fallback também falhou:`,
-                    fallbackError.code,
-                    fallbackError.message
-                  );
-                  // Se ainda falhar, pode ser race condition - logar mas não quebrar
-                  if (fallbackError.code === 'P2002') {
-                    console.log(`  ℹ️ [DB] Erro P2002 no fallback - provavelmente race condition, registro já existe`);
-                  }
-                });
-              }
-            } else {
-              console.error(
-                `  ❌ [DB] Erro ao salvar dividendo ${index + 1}/${dividends.length}: ` +
-                `date=${dividend.date.toISOString().split('T')[0]}, ` +
-                `amount=${dividend.amount}. ` +
-                `Código: ${reason?.code || 'UNKNOWN'}, ` +
-                `Mensagem: ${reason?.message || reason || 'Erro desconhecido'}`
-              );
-            }
-          }
-        });
-      }
-
-      if (successes.length > 0) {
-        console.log(
-          `✅ [DB] Processados ${successes.length} de ${dividends.length} dividendos ` +
-          `para companyId ${companyId} (ticker: ${companyExists.ticker})`
-        );
-      }
-      
-    } catch (error: any) {
-      // Tratamento específico para erro P2025 (Record not found - foreign key constraint)
-      if (error.code === 'P2025' || error.message?.includes('P2025')) {
-        console.error(
-          `❌ [DB] Erro P2025 ao salvar dividendos para companyId ${companyId}: ` +
-          `Company ou relacionamento não encontrado. ` +
-          `Mensagem: ${error.message || 'Record not found'}`
-        );
-        // Não lançar erro para não quebrar o fluxo - pode ser uma race condition
-        return;
-      }
-
-      // Para outros erros, logar e lançar
-      console.error(
-        `❌ [DB] Erro inesperado ao salvar dividendos para companyId ${companyId}:`,
-        error
-      );
-      throw error;
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { id: true, ticker: true },
+    });
+    if (!company) {
+      console.error(`❌ [DB] Company com ID ${companyId} não encontrada. Pulando ${incoming.length} dividendos.`);
+      return;
     }
+
+    const times = incoming.map((d) => d.exDate.getTime());
+    const windowMs = DUPLICATE_WINDOW_DAYS * DAY_MS;
+    const existing = await prisma.dividendHistory.findMany({
+      where: {
+        companyId,
+        exDate: {
+          gte: new Date(Math.min(...times) - windowMs),
+          lte: new Date(Math.max(...times) + windowMs),
+        },
+      },
+      select: { id: true, exDate: true, paymentDate: true, amount: true, type: true, source: true },
+    });
+    const rows = existing.map((row) => ({ ...row, amount: Number(row.amount) }));
+
+    const toCreate: Array<(typeof incoming)[number]> = [];
+    const updates = new Map<number, { paymentDate?: Date; type?: string }>();
+    let skipped = 0;
+
+    for (const dividend of incoming) {
+      const exact = rows.find(
+        (row) => row.exDate.getTime() === dividend.exDate.getTime() && row.amount === dividend.amount
+      );
+      const match = exact ?? rows.find((row) => isNearDuplicateDividend(row, dividend));
+      if (!match) {
+        toCreate.push(dividend);
+        continue;
+      }
+      // Fonte mais completa chegando depois de uma linha "crua": grava a completa e a crua sai na limpeza abaixo.
+      if (!exact && isBareDividend(match) && !isBareDividend(dividend)) {
+        toCreate.push(dividend);
+        continue;
+      }
+      const patch = { ...updates.get(match.id) };
+      if (!match.paymentDate && dividend.paymentDate) patch.paymentDate = dividend.paymentDate;
+      if (!match.type && dividend.type) patch.type = dividend.type;
+      if (Object.keys(patch).length > 0) updates.set(match.id, patch);
+      else skipped++;
+    }
+
+    if (toCreate.length > 0) {
+      await safeWrite(
+        "upsert-dividend_history",
+        () =>
+          prisma.dividendHistory.createMany({
+            data: toCreate.map((d) => ({ companyId, ...d })),
+            skipDuplicates: true,
+          }),
+        ["dividend_history"]
+      );
+    }
+
+    for (const [id, data] of updates) {
+      await safeWrite(
+        "update-dividend_history",
+        () => prisma.dividendHistory.update({ where: { id }, data }),
+        ["dividend_history"]
+      );
+    }
+
+    // Sem limpeza destrutiva: duplicatas entre fontes ficam no banco e são escondidas na leitura (dedupeDividends).
+    // Apagar linhas do Yahoo por heurística poderia remover um provento extraordinário legítimo.
+
+    console.log(
+      `✅ [DB] ${company.ticker}: ${toCreate.length} novos, ${updates.size} completados, ` +
+        `${skipped} já existentes`
+    );
   }
 
   /**
@@ -1084,21 +882,24 @@ export class DividendService {
   }
 
   /**
-   * Busca dividendos de um ativo em um período específico
+   * Proventos de um ativo com data-com no período, mais recentes primeiro, sem as duplicatas entre fontes
+   * (ver `dedupeDividends`). A consulta pega 5 dias além das bordas para que a linha mais completa de um provento repetido
+   * vença mesmo quando a outra cópia cai fora do período.
    */
   static async getDividendsInPeriod(
     ticker: string,
     startDate: Date,
     endDate: Date
   ): Promise<DividendInfo[]> {
+    const margin = DUPLICATE_WINDOW_DAYS * DAY_MS;
     const company = await prisma.company.findUnique({
       where: { ticker },
       include: {
         dividendHistory: {
           where: {
             exDate: {
-              gte: startDate,
-              lte: endDate,
+              gte: new Date(startDate.getTime() - margin),
+              lte: new Date(endDate.getTime() + margin),
             },
           },
           orderBy: {
@@ -1112,19 +913,21 @@ export class DividendService {
       return [];
     }
 
-    return company.dividendHistory.map((div) => ({
-      ticker,
-      date: div.exDate,
-      amount: Number(div.amount),
-      exDate: div.exDate,
-      paymentDate: div.paymentDate || undefined,
-      type: div.type || undefined,
-    }));
+    return dedupeDividends(company.dividendHistory)
+      .filter((div) => div.exDate >= startDate && div.exDate <= endDate)
+      .map((div) => ({
+        ticker,
+        date: div.exDate,
+        amount: Number(div.amount),
+        exDate: div.exDate,
+        paymentDate: div.paymentDate || undefined,
+        type: div.type || undefined,
+      }));
   }
 
   /**
-   * Histórico de proventos de vários ativos desde `since` (data ex), com nome da empresa, em uma consulta.
-   * Usado pela agenda de proventos e pelo yield on cost da carteira.
+   * Histórico de proventos de vários ativos desde `since` (data ex), com nome da empresa, em uma consulta, sem as
+   * duplicatas entre fontes (ver `dedupeDividends`). Usado pela agenda de proventos e pelo yield on cost da carteira.
    */
   static async getDividendHistoryByTickers(
     tickers: string[],
@@ -1148,7 +951,7 @@ export class DividendService {
         logoUrl: true,
         assetType: true,
         dividendHistory: {
-          where: { exDate: { gte: since } },
+          where: { exDate: { gte: new Date(since.getTime() - DUPLICATE_WINDOW_DAYS * DAY_MS) } },
           orderBy: { exDate: "asc" },
           select: { exDate: true, paymentDate: true, amount: true, type: true },
         },
@@ -1159,12 +962,14 @@ export class DividendService {
       name: company.name,
       logoUrl: company.logoUrl,
       assetType: company.assetType,
-      dividends: company.dividendHistory.map((div) => ({
-        exDate: div.exDate,
-        paymentDate: div.paymentDate,
-        amount: Number(div.amount),
-        type: div.type,
-      })),
+      dividends: dedupeDividends(company.dividendHistory)
+        .filter((div) => div.exDate >= since)
+        .map((div) => ({
+          exDate: div.exDate,
+          paymentDate: div.paymentDate,
+          amount: Number(div.amount),
+          type: div.type,
+        })),
     }));
   }
 
@@ -1201,7 +1006,7 @@ export class DividendService {
   }
 
   /**
-   * Obtém o último dividendo pago por um ativo
+   * Obtém o último dividendo de um ativo (data-com mais recente), sem duplicatas entre fontes
    */
   static async getLatestDividend(ticker: string): Promise<DividendInfo | null> {
     const company = await safeQueryWithParams(
@@ -1212,11 +1017,12 @@ export class DividendService {
           select: {
             ultimoDividendo: true,
             dataUltimoDividendo: true,
+            // Algumas linhas a mais para descartar a cópia "crua" de outra fonte (ver `dedupeDividends`).
             dividendHistory: {
               orderBy: {
                 exDate: "desc",
               },
-              take: 1,
+              take: 6,
             },
           },
         }),
@@ -1231,7 +1037,7 @@ export class DividendService {
       return null;
     }
 
-    const latestDiv = company.dividendHistory[0];
+    const latestDiv = dedupeDividends(company.dividendHistory)[0];
 
     return {
       ticker,

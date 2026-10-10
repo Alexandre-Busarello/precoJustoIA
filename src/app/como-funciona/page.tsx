@@ -69,7 +69,7 @@ export default function ComoFuncionaPage() {
                   width={1200}
                   height={750}
                   sizes="(min-width: 1024px) 600px, 100vw"
-                  className="h-auto w-full"
+                  className="h-auto w-full dark:brightness-[0.85]"
                   priority={index === 0}
                 />
               </figure>

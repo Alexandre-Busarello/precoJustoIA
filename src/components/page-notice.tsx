@@ -49,7 +49,7 @@ export function InlineNotice({ notice, className }: { notice: PageNoticeContent;
           {notice.description && <div className="text-muted-foreground">{notice.description}</div>}
         </div>
         {notice.action && (
-          <Button asChild variant="outline" size="sm" className="w-fit shrink-0">
+          <Button asChild variant="outline" size="sm" className="min-h-11 w-fit shrink-0 md:min-h-0">
             {notice.action.external ? (
               <a href={notice.action.href} target="_blank" rel="noopener noreferrer">
                 {notice.action.label}

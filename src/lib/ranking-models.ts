@@ -208,9 +208,11 @@ export const RANKING_MODELS: RankingModel[] = [
   {
     key: 'magicFormula',
     label: 'Fórmula Mágica',
-    plan: 'premium',
+    // A API devolve 3 resultados no plano gratuito (as páginas de marketing dependem disso) e a lista completa no Premium.
+    plan: 'free',
     assetType: 'stock',
-    description: 'Método de Joel Greenblatt: combina retorno sobre o capital (ROIC) e earnings yield.',
+    description: 'Método de Joel Greenblatt: combina retorno sobre o capital (ROIC) e earnings yield. 3 resultados no plano gratuito.',
+    planLimitedResults: true,
     fields: [
       COMPANY_SIZE,
       TECHNICAL,
@@ -589,6 +591,61 @@ export function canUseRankingModel(model: RankingModel, isPremium: boolean): boo
 /** Modelo que pode rodar sem clique: liberado para o plano e sem IA. */
 export function canAutoRunRankingModel(model: RankingModel, isPremium: boolean): boolean {
   return canUseRankingModel(model, isPremium) && !model.isAi
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Parâmetros padrão compartilhados com a página do ativo
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Modelos com preço justo (ou preço-teto) próprio: a página do ativo usa os mesmos padrões do ranking. */
+export const FAIR_VALUE_MODEL_KEYS = ['graham', 'fcd', 'gordon', 'barsi', 'bazin', 'lynch'] as const
+export type FairValueModelKey = (typeof FAIR_VALUE_MODEL_KEYS)[number]
+
+/** Parâmetros que só filtram ou ordenam a lista do ranking; não mudam o cálculo de um ativo. */
+const LIST_ONLY_PARAMS = new Set(['companySize', 'useTechnicalAnalysis', 'limit', 'assetTypeFilter', 'includeBDRs', 'minLiquidity'])
+
+/** Universo de ranking cujos padrões valem para um ativo (Prisma `AssetType`): BDRs usam os de BDR. */
+export function universeForAssetType(assetType: string | null | undefined): RankingUniverse {
+  const type = (assetType ?? '').toUpperCase()
+  if (type === 'BDR') return 'bdr'
+  if (type === 'FII') return 'fii'
+  if (type === 'ETF') return 'etf'
+  return 'b3'
+}
+
+/**
+ * Parâmetros de cálculo de um modelo de preço justo: os de `base` (configuração da estratégia) cobertos pelos padrões
+ * do registro no universo do ativo. É o que a página do ativo e o enriquecimento do ranking usam, então o preço justo
+ * padrão de um ticker é o mesmo nos dois lugares.
+ */
+export function fairValueModelParams<T extends object>(key: FairValueModelKey, universe: RankingUniverse, base: T): T {
+  const model = getRankingModel(key)
+  const params: Record<string, unknown> = { ...(base as Record<string, unknown>) }
+  if (!model) return params as T
+  for (const [param, value] of Object.entries(model.defaults(universe))) {
+    if (!LIST_ONLY_PARAMS.has(param)) params[param] = value
+  }
+  return params as T
+}
+
+/** Campo do painel cujo valor enviado difere do padrão do registro no universo informado. */
+export interface ChangedRankingParam {
+  field: RankingParamField
+  value: unknown
+}
+
+function sameParamValue(a: unknown, b: unknown): boolean {
+  if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 1e-9
+  return a === b
+}
+
+/** Parâmetros editáveis (campos do painel) com valor diferente do padrão do modelo no universo. */
+export function changedRankingParams(model: RankingModel, universe: RankingUniverse, params: RankingParams): ChangedRankingParam[] {
+  const defaults = model.defaults(universe)
+  return model.fields
+    .filter((field) => !LIST_ONLY_PARAMS.has(field.key))
+    .filter((field) => params[field.key] !== undefined && !sameParamValue(params[field.key], defaults[field.key]))
+    .map((field) => ({ field, value: params[field.key] }))
 }
 
 /** Rótulo de um modelo salvo no histórico, inclusive os que saíram do registro. */

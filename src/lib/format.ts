@@ -126,11 +126,12 @@ function toDate(value: Maybe<DateInput>): Date | null {
 }
 
 const dateParts = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', timeZone: TIME_ZONE })
+const utcDateParts = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const timeFormat = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TIME_ZONE })
 const relativeFormat = new Intl.RelativeTimeFormat(LOCALE, { numeric: 'auto' })
 
-function shortDate(d: Date): string {
-  const parts = dateParts.formatToParts(d)
+function shortDate(d: Date, dateOnly = false): string {
+  const parts = (dateOnly ? utcDateParts : dateParts).formatToParts(d)
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ''
   return `${get('day')} ${get('month')} ${get('year')}`
 }
@@ -155,17 +156,35 @@ function relativeDate(d: Date, now: Date): string {
 export type DateStyle = 'short' | 'datetime' | 'relative'
 
 /**
- * Datas no fuso de Brasília.
+ * Meia-noite UTC exata: é como chegam as datas sem horário (colunas `@db.Date`, `'2026-08-17'`). Formatadas no fuso
+ * de Brasília elas voltariam um dia (21h do dia anterior).
+ */
+export function isMidnightUtc(d: Date): boolean {
+  return d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0
+}
+
+export interface FormatDateOptions {
+  style?: DateStyle
+  now?: DateInput
+  /**
+   * Data sem horário (data-com, pagamento, data do balanço): formata o dia civil em UTC. Sem a opção, `short` detecta
+   * sozinho os valores em meia-noite UTC; `false` força o fuso de Brasília.
+   */
+  dateOnly?: boolean
+}
+
+/**
+ * Datas no fuso de Brasília; datas sem horário (meia-noite UTC ou `dateOnly: true`) mantêm o dia civil.
  * - `short` (padrão): `29 set. 2026`
  * - `datetime`: `29 set. 2026, 13:00`
  * - `relative`: `há 5 dias`, `ontem`, `em 2 horas`, `agora` (`now` opcional para testes)
  */
-export function formatDate(value: Maybe<DateInput>, { style = 'short', now }: { style?: DateStyle; now?: DateInput } = {}): string {
+export function formatDate(value: Maybe<DateInput>, { style = 'short', now, dateOnly }: FormatDateOptions = {}): string {
   const d = toDate(value)
   if (!d) return EMPTY_VALUE
   if (style === 'relative') return relativeDate(d, toDate(now) ?? new Date())
-  if (style === 'datetime') return `${shortDate(d)}, ${timeFormat.format(d)}`
-  return shortDate(d)
+  if (style === 'datetime') return dateOnly ? shortDate(d, true) : `${shortDate(d)}, ${timeFormat.format(d)}`
+  return shortDate(d, dateOnly ?? isMidnightUtc(d))
 }
 
 /** `formatNullable(null, formatBRL)` → `—`; caso contrário aplica `fn`. */

@@ -23,7 +23,6 @@ import { getOrCalculateDailyTechnicalAnalysis } from '@/lib/technical-analysis-s
 import { checkAndRecordUsage } from '@/lib/usage-based-pricing-service'
 import { RateLimitMiddleware } from '@/lib/rate-limit-middleware'
 import { formatBRL, formatBRLCompact, formatDate, formatDeltaPct, formatNumber, formatPct } from '@/lib/format'
-import { cn } from '@/lib/utils'
 
 interface PageProps {
   params: { ticker: string }
@@ -136,10 +135,11 @@ interface HeaderAction {
   icon: LucideIcon
 }
 
-function HeaderActionButton({ action, compact }: { action: HeaderAction; compact?: boolean }) {
+function HeaderActionButton({ action }: { action: HeaderAction }) {
   const Icon = action.icon
   return (
-    <Button variant="outline" size="sm" asChild className={cn('min-h-11 md:min-h-0', compact && 'shrink-0')}>
+    // Mobile: padding menor para 2 ações por linha a 390 px (a linha quebra, nada fica cortado)
+    <Button variant="outline" size="sm" asChild className="min-h-11 max-md:px-2.5 max-md:has-[>svg]:px-2 md:min-h-0">
       <Link href={action.href}>
         <Icon className="size-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
         {action.label}
@@ -338,7 +338,7 @@ export default async function EtfPage({ params }: PageProps) {
   ]
 
   const lockedCta = isLoggedIn
-    ? { label: 'Assinar o Premium', href: '/checkout' }
+    ? { label: 'Assinar o Premium', href: '/planos' }
     : { label: 'Criar conta grátis', href: '/register' }
 
   const holdingRows = visibleHoldings.map((h) => {
@@ -430,9 +430,9 @@ export default async function EtfPage({ params }: PageProps) {
               )}
             </div>
 
-            <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:hidden">
+            <div className="flex flex-wrap gap-1.5 md:hidden">
               {actions.map((action) => (
-                <HeaderActionButton key={action.label} action={action} compact />
+                <HeaderActionButton key={action.label} action={action} />
               ))}
             </div>
           </section>

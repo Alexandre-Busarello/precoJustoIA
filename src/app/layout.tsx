@@ -14,6 +14,7 @@ import { TrackingProvider } from "@/components/tracking-provider";
 import { OnboardingProvider } from "@/components/onboarding-provider";
 import { ExitIntentProvider } from "@/components/exit-intent-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import { THEME_COLOR } from "@/lib/theme";
 import { AppToaster } from "@/components/app-toaster";
 import { ShellProvider } from "@/components/shell-context";
 import { SiteFooter } from "@/components/footer";
@@ -101,8 +102,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0e0f12' },
+    { media: '(prefers-color-scheme: light)', color: THEME_COLOR.light },
+    { media: '(prefers-color-scheme: dark)', color: THEME_COLOR.dark },
   ],
 };
 

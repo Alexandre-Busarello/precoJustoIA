@@ -50,11 +50,11 @@ export function ThemeToggle({ variant = 'icon', className }: ThemeToggleProps) {
               aria-checked={selected}
               onClick={() => setTheme(value)}
               className={cn(
-                'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none md:min-h-8',
+                'inline-flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none md:min-h-8',
                 selected && 'bg-card text-foreground ring-1 ring-border'
               )}
             >
-              <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
+              <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
               {label}
             </button>
           )

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { BookOpen, ChevronDown, Loader2, Lock, SlidersHorizontal } from "lucide-react"
 import { usePremiumStatus } from "@/hooks/use-premium-status"
 import { useTracking } from "@/hooks/use-tracking"
@@ -13,10 +12,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { InfoHint } from "@/components/ui/info-hint"
 import { Label } from "@/components/ui/label"
 import { SectionHeader } from "@/components/ui/section-header"
+import { AskBenButton } from "@/components/ben/ask-ben-button"
+import { buildRankingContext } from "@/lib/ben-context/builders"
+import { askBenQuestions } from "@/lib/ben-context/questions"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
-import { BatchBacktestSelector } from "@/components/batch-backtest-selector"
+import { QuickBacktestButton } from "@/components/backtest/quick-backtest-button"
 import { EtfRanker } from "@/components/etf-ranker"
 import { RankingParamsPanel } from "@/components/ranking-wizard/ranking-params-panel"
 import { RankingResultsTable } from "@/components/ranking-wizard/ranking-results-table"
@@ -129,7 +131,6 @@ export function QuickRanker({
   onRankingGenerated,
   onSelectionChange,
 }: QuickRankerProps) {
-  const router = useRouter()
   const { trackEvent } = useTracking()
   const { trackEngagement } = useEngagementPixel()
   const { isPremium: premiumFlag, isLoading: premiumLoading } = usePremiumStatus()
@@ -146,7 +147,6 @@ export function QuickRanker({
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<SavedInfo | null>(null)
   const [paramsOpen, setParamsOpen] = useState(false)
-  const [showBatchBacktest, setShowBatchBacktest] = useState(false)
   const requestSeq = useRef(0)
   const initialRunDone = useRef(false)
 
@@ -361,17 +361,11 @@ export function QuickRanker({
       : "Calculando o ranking…"
     : outcome
       ? `${shownCount} ${resultNoun(headerModel, outcomeUniverse, shownCount)}${
-          totalCount > shownCount ? ` de ${totalCount} encontrados` : ""
+          totalCount > shownCount
+            ? ` de ${totalCount} ${resultNoun(headerModel, outcomeUniverse, totalCount).startsWith("aç") ? "encontradas" : "encontrados"}`
+            : ""
         }`
       : undefined
-
-  const openBatchBacktest = () => {
-    if (!isLoggedIn) {
-      router.push("/login?callbackUrl=%2Franking")
-      return
-    }
-    setShowBatchBacktest(true)
-  }
 
   return (
     <div className="space-y-6">
@@ -472,7 +466,7 @@ export function QuickRanker({
         )}
 
         {showParams && model && (
-          <Collapsible open={paramsOpen} onOpenChange={setParamsOpen} className="rounded-lg border border-border bg-card">
+          <Collapsible open={paramsOpen} onOpenChange={setParamsOpen} data-ben-fab-avoid className="rounded-lg border border-border bg-card">
             <CollapsibleTrigger className="min-h-11 gap-3 rounded-lg px-4 py-2 text-left hover:no-underline focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none">
               <span className="flex min-w-0 items-center gap-2">
                 <SlidersHorizontal className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
@@ -505,10 +499,31 @@ export function QuickRanker({
           title={headerLabel}
           description={countLabel}
           actions={
-            canBacktest && !loading ? (
-              <Button variant="outline" size="sm" onClick={openBatchBacktest}>
-                Backtest do ranking
-              </Button>
+            (showingOutcome && shownCount > 0) || (canBacktest && !loading) ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {showingOutcome && outcome && shownCount > 0 && (
+                  <AskBenButton
+                    question={askBenQuestions.results()}
+                    context={buildRankingContext({
+                      model: headerLabel,
+                      universe: RANKING_UNIVERSES.find((option) => option.value === outcomeUniverse)?.label,
+                      params: outcome.kind === "stocks" && resultModel ? summarizeParams(resultModel, outcome.response.params ?? {}) : undefined,
+                      tickers: outcome.kind === "etf" ? outcome.rows.map((row) => row.ticker) : rows.map((row) => row.ticker),
+                      resultCount: totalCount,
+                    })}
+                  />
+                )}
+                {canBacktest && !loading && (
+                  <QuickBacktestButton
+                    // Remonta ao trocar de resultado: o top N volta ao padrão
+                    key={rows.map((row) => row.ticker).join(",")}
+                    request={{ tickers: [], source: "ranking", sourceLabel: headerLabel }}
+                    topOf={rows.map((row) => row.ticker)}
+                    label="Backtest do ranking"
+                    customizable
+                  />
+                )}
+              </div>
             ) : undefined
           }
         />
@@ -607,14 +622,6 @@ export function QuickRanker({
         </>
       )}
 
-      {outcome?.kind === "stocks" && (
-        <BatchBacktestSelector
-          isOpen={showBatchBacktest}
-          onClose={() => setShowBatchBacktest(false)}
-          rankingResults={outcome.response.results}
-          onConfigSelected={() => setShowBatchBacktest(false)}
-        />
-      )}
     </div>
   )
 }

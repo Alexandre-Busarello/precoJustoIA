@@ -7,6 +7,14 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { analyzeEtfWithAi } from './etf-ai-analysis';
+import {
+  concentrationPenalty,
+  costScore,
+  effectiveReturn1y,
+  logNormalize,
+  returnScore,
+  toNullableNumber,
+} from './etf-scoring-core';
 
 const prisma = new PrismaClient();
 
@@ -31,13 +39,6 @@ export interface EtfForScoring {
   }>;
 }
 
-// Se return1y não está disponível, anualizamos return6m como proxy
-function effectiveReturn1y(etf: EtfForScoring): number | null {
-  if (etf.return1y !== null) return etf.return1y;
-  if (etf.return6m !== null) return (1 + etf.return6m) ** 2 - 1;
-  return null;
-}
-
 export interface ScoreDimensions {
   custo: number;
   retorno: number;
@@ -49,62 +50,7 @@ export interface ScoreDimensions {
   total: number;
 }
 
-// ── Helpers de normalização ────────────────────────────────────────────────
-
-function linearNormalize(value: number, min: number, max: number): number {
-  if (max === min) return 100;
-  return Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
-}
-
-function logNormalize(value: number, allValues: number[]): number {
-  const positives = allValues.filter((v) => v > 0);
-  if (positives.length === 0) return 50;
-  const logVal = Math.log1p(value);
-  const logMin = Math.log1p(Math.min(...positives));
-  const logMax = Math.log1p(Math.max(...positives));
-  return linearNormalize(logVal, logMin, logMax);
-}
-
-// ── Dimensão 1: Custo ──────────────────────────────────────────────────────
-
-function calcCusto(netExpenseRatio: number | null): number {
-  if (netExpenseRatio === null || netExpenseRatio === 0) return 100;
-  const MIN_RATE = 0.001; // 0.10%
-  const MAX_RATE = 0.015; // 1.50%
-  // Quanto menor a taxa, maior o score → inverso
-  return linearNormalize(MAX_RATE - netExpenseRatio, MAX_RATE - MIN_RATE, 0) * -1 + 100;
-  // Simplificado: 100 para taxa=0.001, 0 para taxa=0.015
-}
-
-function calcCustoSimple(netExpenseRatio: number | null): number {
-  if (netExpenseRatio === null || netExpenseRatio === 0) return 100;
-  const MIN_RATE = 0.001;
-  const MAX_RATE = 0.015;
-  if (netExpenseRatio <= MIN_RATE) return 100;
-  if (netExpenseRatio >= MAX_RATE) return 0;
-  return ((MAX_RATE - netExpenseRatio) / (MAX_RATE - MIN_RATE)) * 100;
-}
-
-// ── Dimensão 2: Retorno ────────────────────────────────────────────────────
-
-function calcRetorno(return1y: number, group: number[]): number {
-  if (group.length <= 1) return 75; // neutro se único no grupo
-  const min = Math.min(...group);
-  const max = Math.max(...group);
-  return linearNormalize(return1y, min, max);
-}
-
-// ── Dimensão 3: Liquidez ───────────────────────────────────────────────────
-
-function calcLiquidez(volume: number, allVolumes: number[]): number {
-  return logNormalize(volume, allVolumes);
-}
-
-// ── Dimensão 4: Solidez ────────────────────────────────────────────────────
-
-function calcSolidez(netAssets: number, allAssets: number[]): number {
-  return logNormalize(netAssets, allAssets);
-}
+// Dimensões custo, retorno e a penalidade de concentração ficam em etf-scoring-core (puras e testadas).
 
 // ── Dimensão 5: Qualidade da Carteira ─────────────────────────────────────
 
@@ -145,18 +91,6 @@ async function calcQualidadeCarteira(
   return weightedSum / totalWeight;
 }
 
-// ── Penalidade de Concentração ─────────────────────────────────────────────
-
-function calcConcentracaoPenalty(holdingsConcentrationTop5: number | null): number {
-  if (holdingsConcentrationTop5 === null) return 0;
-  const THRESHOLD = 0.65;  // acima de 65% já penaliza
-  const MAX_EXCESS = 0.35; // 65%+35% = 100% → penalidade máxima de 20 pts
-  const MAX_PENALTY = 20;
-  if (holdingsConcentrationTop5 <= THRESHOLD) return 0;
-  const excess = holdingsConcentrationTop5 - THRESHOLD;
-  return Math.min(MAX_PENALTY, (excess / MAX_EXCESS) * MAX_PENALTY);
-}
-
 // ── Score Principal ────────────────────────────────────────────────────────
 
 export async function calculateEtfScore(
@@ -165,7 +99,8 @@ export async function calculateEtfScore(
   volumeMap: Map<number, number> // companyId → volume
 ): Promise<{ score: number | null; dimensions: ScoreDimensions | null }> {
   const retorno1y = effectiveReturn1y(etf);
-  if (retorno1y === null || etf.netExpenseRatio === null) {
+  const custo = costScore(etf.netExpenseRatio);
+  if (retorno1y === null || custo === null) {
     return { score: null, dimensions: null };
   }
 
@@ -180,22 +115,19 @@ export async function calculateEtfScore(
     .filter((v) => v > 0);
 
   const allAssets = allEtfs
-    .map((e) => Number(e.netAssets ?? 0))
+    .map((e) => e.netAssets ?? 0)
     .filter((a) => a > 0);
 
   const volume = volumeMap.get(etf.companyId) ?? 0;
 
-  const custo = calcCustoSimple(etf.netExpenseRatio);
-  const retorno = calcRetorno(retorno1y, benchmarkGroup);
-  const liquidez = volume > 0 ? calcLiquidez(volume, allVolumes) : 0;
-  const solidez = etf.netAssets ? calcSolidez(Number(etf.netAssets), allAssets) : 0;
+  const retorno = returnScore(retorno1y, benchmarkGroup);
+  const liquidez = volume > 0 ? logNormalize(volume, allVolumes) : 0;
+  const solidez = etf.netAssets !== null && etf.netAssets > 0 ? logNormalize(etf.netAssets, allAssets) : 0;
   const qualidadeCarteira = await calcQualidadeCarteira(etf.holdings);
   // IA pode isentar a penalidade quando a concentração é estrutural (fundo-de-fundos)
   const concentracaoPenalty = etf.aiConcentracaoPenaltyOverride
     ? 0
-    : calcConcentracaoPenalty(
-        etf.holdingsConcentrationTop5 ? Number(etf.holdingsConcentrationTop5) : null
-      );
+    : concentrationPenalty(etf.holdingsConcentrationTop5);
 
   // Dimensão IA: usa o score armazenado (calculado separadamente). Fallback 50 (neutro) se ainda não analisado.
   const analiseIA = etf.aiAnalysisScore !== null && etf.aiAnalysisScore !== undefined
@@ -255,16 +187,16 @@ export async function recalculateAllEtfScores(): Promise<void> {
   const toEtfForScoring = (e: typeof etfs[number], includeHoldings = true): EtfForScoring => ({
     id: e.id,
     companyId: e.companyId,
-    netExpenseRatio: e.netExpenseRatio ? Number(e.netExpenseRatio) : null,
-    return1y: e.return1y ? Number(e.return1y) : null,
-    return6m: e.return6m ? Number(e.return6m) : null,
-    return3y: e.return3y ? Number(e.return3y) : null,
-    return5y: e.return5y ? Number(e.return5y) : null,
-    netAssets: e.netAssets ? Number(e.netAssets) : null,
+    netExpenseRatio: toNullableNumber(e.netExpenseRatio),
+    return1y: toNullableNumber(e.return1y),
+    return6m: toNullableNumber(e.return6m),
+    return3y: toNullableNumber(e.return3y),
+    return5y: toNullableNumber(e.return5y),
+    netAssets: toNullableNumber(e.netAssets),
     benchmarkIndex: e.benchmarkIndex,
     category: e.category,
-    volatility12m: e.volatility12m ? Number(e.volatility12m) : null,
-    holdingsConcentrationTop5: e.holdingsConcentrationTop5 ? Number(e.holdingsConcentrationTop5) : null,
+    volatility12m: toNullableNumber(e.volatility12m),
+    holdingsConcentrationTop5: toNullableNumber(e.holdingsConcentrationTop5),
     aiAnalysisScore: e.aiAnalysisScore,
     aiConcentracaoPenaltyOverride: e.aiConcentracaoPenaltyOverride ?? null,
     holdings: includeHoldings
@@ -410,16 +342,14 @@ export async function refreshEtfAiAnalyses(options: { forceAll?: boolean } = {})
       name: etf.company.name,
       benchmarkIndex: etf.benchmarkIndex,
       category: etf.category,
-      netExpenseRatio: etf.netExpenseRatio ? Number(etf.netExpenseRatio) : null,
-      netAssets: etf.netAssets ? Number(etf.netAssets) : null,
-      return6m: etf.return6m ? Number(etf.return6m) : null,
-      return1y: etf.return1y ? Number(etf.return1y) : null,
-      return3y: etf.return3y ? Number(etf.return3y) : null,
-      return5y: etf.return5y ? Number(etf.return5y) : null,
-      volatility12m: etf.volatility12m ? Number(etf.volatility12m) : null,
-      holdingsConcentrationTop5: etf.holdingsConcentrationTop5
-        ? Number(etf.holdingsConcentrationTop5)
-        : null,
+      netExpenseRatio: toNullableNumber(etf.netExpenseRatio),
+      netAssets: toNullableNumber(etf.netAssets),
+      return6m: toNullableNumber(etf.return6m),
+      return1y: toNullableNumber(etf.return1y),
+      return3y: toNullableNumber(etf.return3y),
+      return5y: toNullableNumber(etf.return5y),
+      volatility12m: toNullableNumber(etf.volatility12m),
+      holdingsConcentrationTop5: toNullableNumber(etf.holdingsConcentrationTop5),
       topHoldings: etf.holdings.map((h) => ({
         ticker: h.ticker,
         name: h.name,

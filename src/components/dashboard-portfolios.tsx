@@ -48,7 +48,7 @@ const COLUMNS: DataTableColumn<PortfolioRow>[] = [
     cell: (row) => (
       <Link
         href={`/carteira/${row.id}`}
-        className="block max-w-44 truncate py-1 font-medium text-foreground underline-offset-4 hover:underline"
+        className="block max-w-44 truncate py-1 font-medium pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:items-center pointer-coarse:py-0 text-foreground underline-offset-4 hover:underline"
         onClick={(e) => e.stopPropagation()}
       >
         {row.name}

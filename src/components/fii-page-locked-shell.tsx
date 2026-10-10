@@ -28,7 +28,7 @@ const PREVIEW_PILLARS = [
  */
 export function FiiPageLockedShell({ isLoggedIn, showCta = true }: { isLoggedIn: boolean; showCta?: boolean }) {
   const cta = isLoggedIn
-    ? { href: "/checkout", label: "Assinar o Premium", text: "A análise completa deste FII faz parte do Premium." }
+    ? { href: "/planos", label: "Assinar o Premium", text: "A análise completa deste FII faz parte do Premium." }
     : { href: "/register", label: "Criar conta grátis", text: "Crie sua conta e teste o Premium por 1 dia para ver a análise completa." };
 
   return (

@@ -62,8 +62,12 @@ export function PortfolioTransactionFormSuggested({
         </DialogHeader>
         {suggestion.reason && (
           <div className="rounded-md border border-border bg-surface p-3 text-sm">
-            <p className="font-medium text-foreground">Motivo da sugestão</p>
-            <p className="mt-0.5 text-muted-foreground">{suggestion.reason}</p>
+            <p className="font-medium text-foreground">Por quê</p>
+            <ul className="mt-0.5 space-y-0.5 text-muted-foreground">
+              {suggestion.reason.split(' · ').map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
           </div>
         )}
         <div className="flex-1 overflow-y-auto px-1">

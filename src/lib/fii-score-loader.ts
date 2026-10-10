@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/strategies/base-strategy";
+import { dedupeDividends } from "@/lib/finance/dividends";
 import {
   calculateFiiOverallScore,
   type FiiOverallScore,
@@ -43,7 +44,7 @@ export const getCachedFiiOverallScore = cache(
         patrimonioLiquido: fd.patrimonioLiquido,
         lastFetchedAt: fd.lastFetchedAt,
       },
-      company.dividendHistory.map((d) => ({
+      dedupeDividends(company.dividendHistory).map((d) => ({
         amount: d.amount,
         exDate: d.exDate,
       }))

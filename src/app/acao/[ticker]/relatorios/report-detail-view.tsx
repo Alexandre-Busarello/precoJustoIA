@@ -87,7 +87,7 @@ export function ReportDetailView({ report, company, assetHref, isPremium, isLogg
   const content = isPremium ? report.content : partialContent(report.content, PREVIEW_LENGTH)
   const truncated = content.length < report.content.length
   const cta = isLoggedIn
-    ? { label: 'Desbloquear relatório completo', href: '/checkout' }
+    ? { label: 'Desbloquear relatório completo', href: '/planos' }
     : { label: 'Desbloquear com 1 dia grátis', href: '/register' }
 
   return (

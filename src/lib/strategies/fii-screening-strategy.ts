@@ -10,6 +10,17 @@ import {
   computeFiiListingValuation,
   fiiListingFairValueModelLabel,
 } from '@/lib/fii-listing-valuation';
+import { dividendYield12m } from './screening-strategy';
+
+/**
+ * DY 12m do FII com proventos reais: rendimentos com data-com nos últimos 12 meses ÷ preço. Sem rendimento no
+ * histórico carregado, usa o DY de 12 meses do cadastro do fundo (`FiiData.dividendYield`).
+ */
+export function fiiDividendYield12m(c: CompanyData): number | null {
+  const fromHistory = dividendYield12m(c);
+  if (fromHistory !== null && fromHistory > 0) return fromHistory;
+  return toNumber(c.financials.dy);
+}
 
 function matchesTipo(f: CompanyData['financials'], tipo: FiiScreeningParams['tipoFii']): boolean {
   if (!tipo || tipo === 'both') return true;
@@ -22,7 +33,7 @@ export class FiiScreeningStrategy extends AbstractStrategy<FiiScreeningParams> {
   readonly name = 'fiiScreening';
 
   generateRational(params: FiiScreeningParams): string {
-    return `Screening de FIIs com filtros: DY mín. ${params.minDY != null ? formatPercent(params.minDY) : '—'}, P/VP máx. ${
+    return `Screening de FIIs com filtros: DY 12m mín. ${params.minDY != null ? formatPercent(params.minDY) : '—'}, P/VP máx. ${
       params.maxPVP ?? '—'
     }, liquidez mín., imóveis, vacância e segmento.`;
   }
@@ -34,7 +45,7 @@ export class FiiScreeningStrategy extends AbstractStrategy<FiiScreeningParams> {
   private passesFilters(c: CompanyData, p: FiiScreeningParams): boolean {
     const f = c.financials;
     if (!matchesTipo(f, p.tipoFii || 'both')) return false;
-    const dy = toNumber(f.dy);
+    const dy = fiiDividendYield12m(c);
     const pvp = toNumber(f.pvp);
     const liq = toNumber(f.fiiLiquidez);
     const qtd = toNumber(f.fiiQtdImoveis);
@@ -89,7 +100,7 @@ export class FiiScreeningStrategy extends AbstractStrategy<FiiScreeningParams> {
       criteria: [],
       key_metrics: {
         pjFiiScore: scoreRes?.score ?? null,
-        dy: toNumber(companyData.financials.dy),
+        dy: fiiDividendYield12m(companyData),
         pvp: toNumber(companyData.financials.pvp),
         liquidez: toNumber(companyData.financials.fiiLiquidez),
         vacancia: toNumber(companyData.financials.fiiVacanciaMedia),

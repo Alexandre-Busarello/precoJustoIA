@@ -16,7 +16,7 @@ if (typeof window === 'undefined') {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const redisModule = require('redis')
     createClient = redisModule.createClient
-  } catch (error: any) {
+  } catch {
     console.warn('Redis não disponível para rate limiting, usando apenas cache em memória')
   }
 }
@@ -62,6 +62,15 @@ const RATE_LIMIT_DEFAULT_TTL = 86400 // 24 horas em segundos
 const RATE_LIMIT_CONNECTION_TIMEOUT = 3000 // 3 segundos
 const RATE_LIMIT_COMMAND_TIMEOUT = 2000 // 2 segundos
 const RATE_LIMIT_LAZY_CONNECT = true
+
+// Limite de chaves em memória antes de varrer as expiradas (contadores por IP e janela)
+const RATE_LIMIT_MEMORY_MAX_KEYS = 10_000
+
+function pruneExpiredMemoryEntries(now: number): void {
+  for (const [key, item] of rateLimitMemoryCache) {
+    if (item.ttl && now - item.timestamp >= item.ttl * 1000) rateLimitMemoryCache.delete(key)
+  }
+}
 
 /**
  * Funções auxiliares de Fail-Fast
@@ -165,10 +174,10 @@ export class RateLimitCacheService {
       try {
         await rateLimitRedisClient.connect()
         return
-      } catch (error) {
+      } catch {
         try {
           await rateLimitRedisClient.disconnect()
-        } catch (e) {
+        } catch {
           // Ignora erros ao desconectar
         }
         rateLimitRedisClient = null
@@ -178,7 +187,9 @@ export class RateLimitCacheService {
     const redisUrl = process.env.REDIS_RATE_LIMIT_URL
 
     if (!redisUrl) {
+      // Sem URL não há o que conectar: desliga o Redis nesta instância (evita repetir o aviso a cada requisição)
       console.warn('⚠️ REDIS_RATE_LIMIT_URL não configurada, usando apenas cache em memória para rate limiting')
+      rateLimitRedisDisabled = true
       return
     }
     
@@ -302,6 +313,42 @@ export class RateLimitCacheService {
   }
 
   /**
+   * Incrementa um contador e devolve o valor atual (janela fixa: o TTL começa no primeiro incremento).
+   * Usa INCR no Redis (atômico entre instâncias); sem Redis, conta em memória por instância.
+   */
+  async increment(key: string, options: RateLimitCacheOptions = {}): Promise<number> {
+    const fullKey = this.buildKey(key, options.prefix)
+    const ttl = options.ttl || RATE_LIMIT_DEFAULT_TTL
+
+    try {
+      if (!rateLimitRedisDisabled) {
+        await this.ensureRedisConnection()
+
+        if (rateLimitRedisConnected && rateLimitRedisClient) {
+          const count = Number(await rateLimitRedisClient.incr(fullKey))
+          if (count === 1) await rateLimitRedisClient.expire(fullKey, ttl)
+          return count
+        }
+      }
+    } catch (error) {
+      console.warn(`⚠️ Erro ao incrementar no Rate Limit Redis (${fullKey}):`, error)
+      handleRateLimitRedisError(error)
+    }
+
+    const now = Date.now()
+    const memoryItem = rateLimitMemoryCache.get(fullKey)
+    const alive = memoryItem && (!memoryItem.ttl || now - memoryItem.timestamp < memoryItem.ttl * 1000)
+    const count = alive ? Number(memoryItem.data) + 1 : 1
+    rateLimitMemoryCache.set(fullKey, {
+      data: count,
+      timestamp: alive ? memoryItem.timestamp : now,
+      ttl
+    })
+    if (rateLimitMemoryCache.size > RATE_LIMIT_MEMORY_MAX_KEYS) pruneExpiredMemoryEntries(now)
+    return count
+  }
+
+  /**
    * Remover valor do cache
    */
   async delete(key: string, options: RateLimitCacheOptions = {}): Promise<void> {
@@ -395,20 +442,27 @@ export const rateLimitCache = {
    */
   delete: (key: string, options?: RateLimitCacheOptions) => 
     rateLimitCacheService.delete(key, options),
+
+  /**
+   * Incrementar contador (janela fixa) e devolver o valor atual
+   */
+  increment: (key: string, options?: RateLimitCacheOptions) =>
+    rateLimitCacheService.increment(key, options),
 }
 
-// Cleanup na saída do processo
-if (typeof window === 'undefined') {
-  process.on('SIGINT', async () => {
-    console.log('🛑 Encerrando RateLimitCacheService...')
-    await rateLimitCacheService.disconnect()
-    process.exit(0)
-  })
+// Cleanup na saída do processo. O Edge runtime não tem `process.on`, e o módulo pode ser avaliado mais de uma vez
+// (middleware e rotas, HMR): registra os handlers só uma vez por processo.
+const SHUTDOWN_FLAG = '__rateLimitCacheShutdownRegistered'
+const processRef = typeof process !== 'undefined' ? process : undefined
+const globalFlags = globalThis as typeof globalThis & { [SHUTDOWN_FLAG]?: boolean }
 
-  process.on('SIGTERM', async () => {
+if (typeof window === 'undefined' && typeof processRef?.on === 'function' && !globalFlags[SHUTDOWN_FLAG]) {
+  globalFlags[SHUTDOWN_FLAG] = true
+  const shutdown = async () => {
     console.log('🛑 Encerrando RateLimitCacheService...')
     await rateLimitCacheService.disconnect()
-    process.exit(0)
-  })
+    processRef.exit(0)
+  }
+  processRef.on('SIGINT', shutdown)
+  processRef.on('SIGTERM', shutdown)
 }
-

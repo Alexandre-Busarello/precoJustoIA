@@ -31,7 +31,7 @@ export function ReportsListView({
   aside,
 }: ReportsListViewProps) {
   const cta = isLoggedIn
-    ? { label: 'Desbloquear relatórios completos', href: '/checkout' }
+    ? { label: 'Desbloquear relatórios completos', href: '/planos' }
     : { label: 'Desbloquear com 1 dia grátis', href: '/register' }
 
   return (

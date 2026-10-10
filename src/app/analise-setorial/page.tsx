@@ -106,7 +106,6 @@ export default async function AnaliseSetorialPage() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto max-w-6xl space-y-6 px-4 py-6 sm:py-8">
         <PageHeader
-          breadcrumb={[{ label: 'Ferramentas', href: '/ranking' }, { label: 'Análise setorial' }]}
           title="Análise setorial"
           description="Empresas de maior score em cada setor da B3, para comparar empresas parecidas lado a lado."
         />

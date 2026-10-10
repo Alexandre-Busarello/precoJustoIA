@@ -15,8 +15,12 @@ Plano de melhoria de UX/UI, mobile, correções financeiras e novas features do 
 | 0 | `w0-foundation` (design tokens, dark mode plumbing, primitivos, formatação pt-BR, header/footer/nav mobile, política de interrupções) | **Concluída** — `6ad9d41` (fundação, aprovada pelo testador no 3º ciclo) + `b5aca7c` (integração) |
 | 1 | `w1-asset-stock`, `w1-asset-indicators-ai`, `w1-asset-fii-etf-bdr`, `w1-technical-radars`, `w1-home-pricing-checkout`, `w1-dashboard-alerts`, `w1-account-ben-onboarding`, `w1-portfolio`, `w1-ranking`, `w1-backtest`, `w1-screening`, `w1-comparador`, `w1-finance-foundation` | **Concluída** (30/09) — 13 lotes aprovados pelo testador (`395302f`…`7ff4c71`) + integração `7134d14` |
 | 2 | `w2-valuation-core`, `w2-rankings-new-models`, `w2-score-compliance-fii`, `w2-returns`, `w2-dividends-agenda`, `w2-alerts`, `w2-platform-seo-pwa`, `w2-ui-market-tools`, `w2-ui-institutional-auth` | **Concluída** (05/10) — 8 lotes aprovados + `w2-rankings-new-models` como `wip` (`986090d`, bloqueante resolvido em `1e188da`); correções do coordenador `3743315`, `9680fb4`; integração `74f4774` (tsc e eslint limpos) |
-| 3 | `w3-onde-aportar` (premissa central: onde aportar, incl. modo premium "Todo o mercado") + `w3-screening-filters` (em paralelo, arquivos disjuntos) | Pendente |
-| 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` (libera o toggle de tema) | Pendente |
+| 3 | `w3-onde-aportar`, `w3-screening-filters`, `w3-ibov-projections` | **Concluída** (08/10) — `407e805` (Onde aportar, 2 ciclos), `1c9af1d` (screening, 1 ciclo), `61481fa` (IBOV estatístico, 1 ciclo) + integração `8a8f442` (tsc/eslint limpos, 326 testes). Tokens dos agentes: 878k + 496k + 412k + integração |
+| 4 | `w3-cleanup-deps-ci` + `w3-dark-mode-final-qa` | **Concluída** (09/10) — `ad4cc22` (código morto, deps, CI `.github/workflows/quality.yml`), `85eeb53` (compliance), `e0c3907` (**dark mode liberado**, padrão = sistema, seletor no header/menu/perfil) + integração `57fc0f1` (tsc/eslint/check-ui/check-compliance limpos, 343 testes; prompts de IA reescritos sem "recomendação") |
+| 5 | `w5-data-consistency`, `w5-platform-fixes`, `w5-dividends-bdr-data`, `w5-mobile-ben-a11y` | **Concluída** (09/10) — `0c8c9ca`+`3836ac7` (mesmos números página × ranking), `44aa012`+`86ffed8` (plataforma; rate limit em modo log), `4782de7`+`f15d22f` (dedupe de proventos sem apagar dados; BDR por paridade/câmbio), `6e7d08c` (Ben no mobile, toques 44 px) + integração `0940f2c` (384 testes; BDRs com preço justo convertido) |
+| 6 | `w6-ben-context` → `w6-ben-ui` | **Concluída** (10/10) — `87a519a`+`d683517` (contexto de cada tela, "Perguntar ao Ben", links nas respostas), `d926413` (painel lateral/folha, sugestões por tela, streaming, limites, histórico) + integração `10df504` (foco após parar, layout do aviso, conversa excluída; 405 testes) |
+| 7 | `w7-backtest-flow` ‖ `w7-ux-coherence` ‖ `w7-mobile-polish` → `w7-backtest-showcase` (backtest rápido que pousa no resultado, vocabulário e copy do plano coerentes, Ben sem cobrir conteúdo, vitrine de backtests datada) | **Planejada** (09/10) — auditoria em [`reports/auditoria-onda7.md`](reports/auditoria-onda7.md); decisões pendentes do dono: 1 backtest rápido/mês no grátis (C-01) e "Minha carteira" grátis no Onde aportar (C-15) |
+| 8 | `w8-point-in-time-fundamentals` (histórico de fundamentos "como eram conhecidos em cada data", reconstruído + fotografias diárias daqui para frente; base para backtest de estratégias) — **mudança de schema aditiva, exige aprovação do dono antes do deploy** | Pendente |
 
 Lotes da mesma onda não compartilham arquivos (verificado), então rodam em paralelo na mesma working tree.
 
@@ -65,6 +69,44 @@ Depois da onda 2: logo em SVG (`127bb16`, fonte Ubuntu do logo original, ícones
 - Mobile: `Button size="sm"` 40 px e abas do `rentability-selector` 38 px; botão do Ben cobre a fila de abas do índice a 390 px; tabela de valuation rola 16 px a 1440 com o status "Dentro da faixa estimada".
 - Seed local: `free@local.test` tem 7 dias de trial (decisão do dono é 1 dia) — ajustar o script.
 - `scripts/local/screenshots.ts` ignora `--help` e grava em `<cwd>/shots` dentro do repo.
+
+## Fechamento (10/10) — o que fazer no deploy
+- Branch `melhorias/ux-ui-mobile`: 29 commits locais à frente do GitHub (ondas 3–6), aguardando push. Schema do Prisma **não mudou** em nenhuma onda. `next build` de produção validado contra o banco local em 10/10 (passou).
+- Variáveis/infra: `API_RATE_LIMIT_MODE` (padrão `log`; `enforce` depois de olhar os logs). Agendar no agendador externo: `/api/cron/aporte-mensal`, `/api/cron/macro-indicators`, `/api/cron/calculate-ibov-projections` (opcional, 1×/dia após 18h30).
+- Depois do deploy: testar login/rotas protegidas (middleware em `src/`), `/upgrade` → `/checkout`, `/fundador` 410, o seletor de tema e o painel do Ben no celular.
+- Gasto das ondas 3–6 (tokens dos agentes): onda 3 1,92 mi · onda 4 1,00 mi · onda 5 2,06 mi · onda 6 1,41 mi · **total ≈ 6,39 mi**. Planilha por lote em `token-ledger.tsv` no scratch da sessão.
+
+## Pendências ao fim da onda 6
+- `src/components/ui/section-header.tsx` mudou (ações quebram linha; afeta todos os usos) — conferir telas com cabeçalho de seção.
+- Conversas vazias (pergunta interrompida antes da resposta) ficam no banco, só escondidas na UI — limpeza no servidor.
+
+## Pendências ao fim da onda 5 (09/10)
+- **Produção:** rate limit da API em modo `log` por padrão — depois de olhar os logs, ligar com `API_RATE_LIMIT_MODE=enforce` na Vercel.
+- BDR: Gordon e Bazin recebem a nota "Convertido por paridade X e câmbio Y" mesmo com fator 1 (proventos da B3 já vêm em reais por recibo) — ajustar o texto nesses dois. FCD de BDR fica "não aplicável". `BDR_PARITY` precisa de revisão quando houver desdobramento/grupamento; BDRs com balanço em CNY/TWD seguem "não aplicável".
+- AAPL34 no banco local soma ~R$ 0,54 de proventos em 12 meses (esperado ~R$ 0,26) — conferir duplicatas na produção.
+- /bdr/aapl34 no mobile: botão do Ben em repouso cobre a coluna "Critérios" da tabela de valuation (marcar com `data-ben-fab-avoid`).
+- Lynch no ranking ainda exibe o preço justo de outro modelo; o aviso "parâmetros do ranking" aparece mesmo para filtros que não mudam o preço justo.
+- `/register` não redireciona quem já está logado.
+
+## Pendências ao fim da onda 4 (09/10)
+- Capturas do produto (`public/images/product/*`, `how-it-works/*`) só existem em versão clara — fazer versões escuras.
+- Análise técnica: o rótulo "Preço Justo de Entrada" (metas por regra) sugere ponto de entrada — revisar a copy.
+- `src/app/admin/**` ainda tem gradientes e classes antigas (fora do escopo do dark mode).
+- `src/lib/security-middleware.ts` mantido porque `examples/` importa; apagar `examples/` e o middleware.
+- `package.json` engines `>=20`, mas `yarn test` precisa de Node ≥ 21 (glob) — subir para `>=22` após checar o runtime da Vercel.
+
+## Pendências ao fim da onda 3 (09/10)
+
+**Decisões do dono:**
+- Sugestões automáticas de compra com o caixa da carteira ficaram mais rigorosas (podem deixar caixa parado): afrouxar critérios ou aplicar o resto no ativo mais longe do peso-alvo?
+- Agendar crons no agendador externo: `/api/cron/aporte-mensal` (e-mail "Seu aporte do mês"), `/api/cron/calculate-ibov-projections` (opcional; só comentário de IA e snapshot diário, 1×/dia após 18h30 BRT) e `/api/cron/macro-indicators` (Selic/CDI reais na página do IBOV).
+- Validar o modo "Todo o mercado" com advogado/CNPI antes de divulgar com força.
+
+**Técnicas:**
+- Onde aportar: compras pendentes do Onde aportar não entram no cálculo das sugestões automáticas (podem estourar o peso-alvo); descartar uma compra registrada deixa o "Aporte registrado" órfão; visitantes disparam o cálculo pesado do mercado inteiro (resultado mascarado); checkboxes ETF/BDR do filtro de mercado nunca retornam resultado.
+- `/api/rank-builder`: com `sortBy` (rota de preset) o usuário não Premium recebe todos os filtros — dá para contornar a restrição pela API (→ `w5-platform-fixes`).
+- Dashboard: aviso do IBOV e card do Ben empilhados; no mobile empurram o bloco "Onde aportar" para baixo da dobra (→ `w6-ben-ui`).
+- `src/components/oportunidades-dropdown.tsx` é código morto (→ `w3-cleanup-deps-ci`).
 
 ## Ajustes pedidos pelo dono depois da onda 2 (05/10, já no branch)
 

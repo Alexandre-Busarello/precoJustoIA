@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils";
 import { RecoveryCalculatorSheet } from "@/components/recovery-calculator-sheet";
 import { AssetCell, assetHref } from "@/components/asset/asset-cell";
 import { moneyToneClass, returnToneClass } from "@/components/portfolio-page-shell";
+import { AskBenButton } from "@/components/ben/ask-ben-button";
+import { buildPortfolioContext } from "@/lib/ben-context/builders";
+import { askBenQuestions } from "@/lib/ben-context/questions";
+import type { BenPortfolioContext } from "@/lib/ben-context/types";
 
 interface Holding {
   ticker: string;
@@ -71,11 +75,42 @@ function StatusBadge({ holding }: { holding: Holding }) {
   return <Badge variant={status === "ok" ? "neutral" : "warning"}>{STATUS_LABEL[status]}</Badge>;
 }
 
-function ReturnCell({ fraction, amount }: { fraction: number; amount: number }) {
+/** Retorno do preço (1ª linha) e retorno com dividendos (2ª linha). */
+function ReturnCell({ holding }: { holding: Holding }) {
   return (
     <div className="flex flex-col items-end leading-tight">
-      <span className={cn("font-medium", returnToneClass(fraction))}>{formatDeltaPct(fraction)}</span>
-      <span className={cn("text-xs", moneyToneClass(amount))}>{formatBRL(amount)}</span>
+      <span className={cn("font-medium", returnToneClass(holding.returnPercentage))}>
+        {formatDeltaPct(holding.returnPercentage)}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        c/ div.{" "}
+        <span className={returnToneClass(holding.returnWithDividendsPercentage)}>
+          {formatDeltaPct(holding.returnWithDividendsPercentage)}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/** Valor atual (1ª linha) e resultado em reais (2ª linha); o resultado com dividendos fica no title. */
+function ValueCell({ holding }: { holding: Holding }) {
+  return (
+    <div
+      className="flex flex-col items-end leading-tight"
+      title={`Resultado: ${formatBRL(holding.return)} · com dividendos: ${formatBRL(holding.returnWithDividends)}`}
+    >
+      <span className="font-medium">{formatBRL(holding.currentValue)}</span>
+      <span className={cn("text-xs", moneyToneClass(holding.return))}>{formatBRL(holding.return)}</span>
+    </div>
+  );
+}
+
+/** Preço atual (1ª linha) e preço médio (2ª linha). */
+function PriceCell({ holding }: { holding: Holding }) {
+  return (
+    <div className="flex flex-col items-end leading-tight">
+      <span>{formatBRL(holding.currentPrice)}</span>
+      <span className="text-xs text-muted-foreground">Médio {formatBRL(holding.averagePrice)}</span>
     </div>
   );
 }
@@ -99,7 +134,15 @@ function DetailItem({ label, children, className }: { label: string; children: R
 }
 
 /** Card de uma posição (mobile): o essencial visível, o restante num expansível. */
-function HoldingCard({ holding, onRecovery }: { holding: Holding; onRecovery: (h: Holding) => void }) {
+function HoldingCard({
+  holding,
+  onRecovery,
+  benContext,
+}: {
+  holding: Holding;
+  onRecovery: (h: Holding) => void;
+  benContext: BenPortfolioContext;
+}) {
   const [open, setOpen] = useState(false);
   const detailsId = `holding-details-${holding.ticker}`;
 
@@ -178,6 +221,11 @@ function HoldingCard({ holding, onRecovery }: { holding: Holding; onRecovery: (h
               Simular aporte
             </Button>
           )}
+          <AskBenButton
+            question={askBenQuestions.holding(holding.ticker)}
+            context={{ ...benContext, focus: holding.ticker }}
+            className="mt-3 w-full"
+          />
         </div>
       )}
     </li>
@@ -285,12 +333,25 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
     return byStatus !== 0 ? byStatus : b.currentValue - a.currentValue;
   });
 
+  const benContext = buildPortfolioContext({
+    id: portfolioId,
+    holdings: holdings.map((h) => ({ ticker: h.ticker, weight: h.actualAllocation, value: h.currentValue })),
+  });
+
   const columns: DataTableColumn<Holding>[] = [
     {
       key: "ticker",
       header: "Ativo",
       sortable: true,
-      cell: (h) => <AssetCell href={assetHref(h.ticker, h.assetType)} ticker={h.ticker} name={h.companyName} logoUrl={h.logoUrl} />,
+      cell: (h) => (
+        <AssetCell
+          href={assetHref(h.ticker, h.assetType)}
+          ticker={h.ticker}
+          name={h.companyName}
+          logoUrl={h.logoUrl}
+          className="sm:max-w-40"
+        />
+      ),
     },
     {
       key: "quantity",
@@ -299,29 +360,29 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
       sortable: true,
       cell: (h) => formatNumber(h.quantity, { digits: 0 }),
     },
-    { key: "averagePrice", header: "Preço médio", align: "right", sortable: true, cell: (h) => formatBRL(h.averagePrice) },
-    { key: "currentPrice", header: "Preço atual", align: "right", sortable: true, cell: (h) => formatBRL(h.currentPrice) },
+    {
+      key: "currentPrice",
+      header: "Preço",
+      align: "right",
+      sortable: true,
+      hint: "Preço atual; na 2ª linha, o seu preço médio.",
+      cell: (h) => <PriceCell holding={h} />,
+    },
     {
       key: "currentValue",
       header: "Valor atual",
       align: "right",
       sortable: true,
-      cell: (h) => <span className="font-medium">{formatBRL(h.currentValue)}</span>,
+      hint: "Valor da posição hoje; na 2ª linha, o resultado em reais (sem dividendos).",
+      cell: (h) => <ValueCell holding={h} />,
     },
     {
       key: "returnPercentage",
       header: "Retorno",
       align: "right",
       sortable: true,
-      cell: (h) => <ReturnCell fraction={h.returnPercentage} amount={h.return} />,
-    },
-    {
-      key: "returnWithDividendsPercentage",
-      header: "Retorno c/ div.",
-      align: "right",
-      sortable: true,
-      hint: "Inclui os dividendos recebidos do ativo.",
-      cell: (h) => <ReturnCell fraction={h.returnWithDividendsPercentage} amount={h.returnWithDividends} />,
+      hint: "Variação do preço sobre o seu preço médio; na 2ª linha, incluindo os dividendos recebidos.",
+      cell: (h) => <ReturnCell holding={h} />,
     },
     {
       key: "yieldOnCost",
@@ -347,15 +408,28 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
     },
     {
       key: "recovery",
-      header: <span className="sr-only">Simulação</span>,
+      header: <span className="sr-only">Atalhos</span>,
       align: "right",
-      cell: (h) =>
-        h.returnPercentage < 0 ? (
-          <Button variant="ghost" size="sm" onClick={() => setRecoverySheetHolding(h)}>
-            <Calculator strokeWidth={1.75} aria-hidden="true" />
-            Simular aporte
-          </Button>
-        ) : null,
+      cell: (h) => (
+        <div className="flex items-center justify-end gap-1">
+          {h.returnPercentage < 0 && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setRecoverySheetHolding(h)}
+              aria-label={`Simular aporte em ${h.ticker}`}
+              title="Simular aporte"
+            >
+              <Calculator className="text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+            </Button>
+          )}
+          <AskBenButton
+            variant="icon"
+            question={askBenQuestions.holding(h.ticker)}
+            context={{ ...benContext, focus: h.ticker }}
+          />
+        </div>
+      ),
     },
   ];
 
@@ -390,7 +464,12 @@ export function PortfolioHoldingsTable({ portfolioId }: PortfolioHoldingsTablePr
         <>
           <ul className="space-y-3 sm:hidden" data-testid="holdings-cards">
             {sortedHoldings.map((holding) => (
-              <HoldingCard key={holding.ticker} holding={holding} onRecovery={setRecoverySheetHolding} />
+              <HoldingCard
+                key={holding.ticker}
+                holding={holding}
+                onRecovery={setRecoverySheetHolding}
+                benContext={benContext}
+              />
             ))}
           </ul>
           <DataTable

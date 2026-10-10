@@ -5,12 +5,21 @@ import * as SliderPrimitive from "@radix-ui/react-slider"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Slider (Radix). O papel `slider` fica no polegar, e não na raiz: `aria-label`, `aria-labelledby` e
+ * `aria-describedby` passados ao componente são repassados a cada polegar, para que ele tenha nome
+ * acessível e anuncie a mensagem de erro. Com mais de um polegar, o rótulo ganha a posição ("1 de 2").
+ * Em telas de toque, a raiz e o polegar ganham área de toque de 44 px sem mudar o visual.
+ */
 function Slider({
   className,
   defaultValue,
   value,
   min = 0,
   max = 100,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
   const _values = React.useMemo(
@@ -31,7 +40,7 @@ function Slider({
       min={min}
       max={max}
       className={cn(
-        "relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
+        "relative flex w-full touch-none data-[orientation=horizontal]:pointer-coarse:min-h-11 items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
         className
       )}
       {...props}
@@ -53,7 +62,12 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
-          className="border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+          aria-label={
+            ariaLabel && _values.length > 1 ? `${ariaLabel} (${index + 1} de ${_values.length})` : ariaLabel
+          }
+          aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
+          className="relative pointer-coarse:after:absolute pointer-coarse:after:-inset-[15px] pointer-coarse:after:rounded-full border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
     </SliderPrimitive.Root>

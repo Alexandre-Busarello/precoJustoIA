@@ -35,18 +35,19 @@ const FREE_FEATURES = [
   '3 análises completas de empresas por mês',
   '3 rankings por mês (Graham, top 10)',
   '3 comparações e 3 screenings por mês',
-  '1 backtest por mês',
+  '1 backtest rápido por mês',
   '1 carteira com acompanhamento',
+  'Onde aportar com a sua carteira',
 ]
 
 export const PREMIUM_FEATURES = [
   `Todos os ${STOCK_VALUATION_MODELS_COUNT} modelos de valuation de ações`,
   'Análises, rankings e comparações ilimitados',
-  'Screening e backtest ilimitados',
+  'Screening e backtest ilimitados, com ajustes',
   'Síntese dos modelos com IA e relatórios',
   'Análise técnica',
-  'Radar de oportunidades e de dividendos',
-  'Carteiras com acompanhamento',
+  'Onde aportar com radar e todo o mercado',
+  'Carteiras sem limite',
   'Suporte prioritário',
 ]
 

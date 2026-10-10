@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { formatBRL, formatDeltaPct, formatNumber, formatPct } from '@/lib/format'
 import { normalizeTechnicalLabel, technicalRangeText } from '@/lib/radar-service'
 import { cn } from '@/lib/utils'
+import { formatMarginOfSafety, marginOfSafety } from '@/lib/valuation-metrics'
 
 export type RadarAssetKind = 'STOCK' | 'FII' | 'BDR' | 'ETF'
 
@@ -37,7 +38,7 @@ export interface RadarAssetData {
     all: any
   }
   valuation: {
-    /** Upside em pontos percentuais (12,5 = 12,5%). */
+    /** Potencial (upside) em pontos percentuais (12,5 = 12,5%); a UI mostra a margem de segurança. */
     upside: number | null
     status: 'green' | 'yellow' | 'red'
     label: string
@@ -108,13 +109,26 @@ function sentimentValue(asset: RadarAssetData): string {
   return !label || label === 'N/A' ? '—' : label
 }
 
-function UpsideCell({ asset }: { asset: RadarAssetData }) {
+/**
+ * Ações e BDRs: margem de segurança (1 − preço ÷ preço justo), a mesma métrica do cabeçalho do ativo, recalculada a
+ * partir do potencial que a API devolve em pontos percentuais. ETFs: distância até a referência técnica, em fração.
+ */
+function valuationFraction(asset: RadarAssetData, etfMode: boolean): number | null {
+  const upside = asset.valuation.upside
+  if (typeof upside !== 'number' || !Number.isFinite(upside)) return null
+  if (etfMode || asset.assetType === 'ETF') return upside / 100
+  return marginOfSafety(asset.currentPrice, asset.currentPrice * (1 + upside / 100))
+}
+
+function ValuationCell({ asset, etfMode }: { asset: RadarAssetData; etfMode: boolean }) {
   if (asset.assetType === 'FII') {
     const detail = asset.valuation.detail
     return <span className="text-sm tabular-nums text-foreground">{detail && detail !== 'N/A' ? detail : '—'}</span>
   }
-  const upside = asset.valuation.upside
-  const fraction = typeof upside === 'number' ? upside / 100 : null
+  const fraction = valuationFraction(asset, etfMode)
+  // ETF fora do modo ETF: não há preço justo; o número é a distância até a referência técnica e vem rotulado assim
+  const etfOutsideMode = !etfMode && asset.assetType === 'ETF'
+  if (etfOutsideMode && fraction === null) return <span className="text-sm text-muted-foreground">—</span>
   const shown = fraction === null ? 0 : Math.sign(fraction) * Math.sign(Math.round(Math.abs(fraction) * 1000))
   return (
     <span
@@ -123,7 +137,10 @@ function UpsideCell({ asset }: { asset: RadarAssetData }) {
         shown > 0 ? 'text-positive' : shown < 0 ? 'text-negative' : 'text-foreground'
       )}
     >
-      {formatDeltaPct(fraction)}
+      {etfMode || etfOutsideMode ? formatDeltaPct(fraction) : formatMarginOfSafety(fraction)}
+      {etfOutsideMode && (
+        <span className="block text-xs font-normal text-muted-foreground">vs. referência técnica</span>
+      )}
     </span>
   )
 }
@@ -172,6 +189,7 @@ export function RadarGrid({
   etfMode = false,
 }: RadarGridProps) {
   const hasFii = data.some((a) => a.assetType === 'FII')
+  const hasEtf = !etfMode && data.some((a) => a.assetType === 'ETF')
   const strategyNames = RADAR_STRATEGY_LABELS.map((s) => s.label).join(', ')
 
   const columns: DataTableColumn<RadarAssetData>[] = [
@@ -226,18 +244,19 @@ export function RadarGrid({
         ),
     },
     {
-      key: 'upside',
+      key: 'valuation',
       className: 'whitespace-nowrap',
-      header: hasFii ? 'Upside · P/VP e DY' : 'Upside',
+      header: etfMode ? 'Vs. referência técnica' : hasFii ? 'Margem de segurança · P/VP e DY' : 'Margem de segurança',
       align: 'right',
       sortable: true,
-      sortValue: (asset) => (asset.assetType === 'FII' ? null : asset.valuation.upside),
+      sortValue: (asset) =>
+        asset.assetType === 'FII' || (!etfMode && asset.assetType === 'ETF') ? null : valuationFraction(asset, etfMode),
       hint: etfMode
-        ? 'Distância entre o preço atual e a entrada técnica estimada.'
-        : `Potencial até o maior preço justo entre Graham, FCD e Gordon. É uma estimativa de modelo, não recomendação.${
+        ? 'Distância entre o preço atual e a referência técnica estimada. É uma estimativa, não recomendação.'
+        : `1 − preço ÷ preço justo, pelo maior preço justo entre Graham, FCD e Gordon. É uma estimativa de modelo, não recomendação.${
             hasFii ? ' Para FIIs, mostra P/VP e dividend yield.' : ''
-          }`,
-      cell: (asset) => <UpsideCell asset={asset} />,
+          }${hasEtf ? ' ETFs não têm preço justo: mostram a distância até a referência técnica.' : ''}`,
+      cell: (asset) => <ValuationCell asset={asset} etfMode={etfMode} />,
     },
     {
       key: 'technical',
@@ -297,7 +316,7 @@ export function RadarGrid({
       stickyFirstColumn
       loading={loading}
       loadingRows={4}
-      caption="Radar de oportunidades"
+      caption="Ativos do radar"
       empty={{
         title: 'Nenhum ativo no radar',
         description: 'Adicione tickers ao seu radar ou veja a aba Explorar.',

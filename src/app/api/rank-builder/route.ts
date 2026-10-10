@@ -25,9 +25,29 @@ import {
 } from "@/lib/strategies";
 import { STRATEGY_CONFIG } from "@/lib/strategies/strategy-config";
 import { getCompaniesData, getCompaniesDataFii } from "@/lib/rank-builder-service";
-import { applyLiquidityRules, getRankingModel, isRankingUniverse } from "@/lib/ranking-models";
+import {
+  FAIR_VALUE_MODEL_KEYS,
+  applyLiquidityRules,
+  changedRankingParams,
+  fairValueModelParams,
+  getRankingModel,
+  isRankingUniverse,
+  universeForAssetType,
+  type FairValueModelKey,
+  type RankingParamField,
+  type RankingUniverse,
+} from "@/lib/ranking-models";
 import { warmMacroAssumptions } from "@/lib/finance/macro";
-import { formatBRLCompact } from "@/lib/format";
+import { formatBRLCompact, formatMultiple, formatNumber, formatPct } from "@/lib/format";
+import { cache } from "@/lib/cache-service";
+import { findPresetForScreeningParams } from "@/lib/screening-presets";
+import {
+  PREMIUM_SCREENING_METRICS,
+  ScreeningStrategy,
+  type ExtendedScreeningParams,
+  type ScreeningCompanyData,
+  type ScreeningPriceSignals,
+} from "@/lib/strategies/screening-strategy";
 
 const FII_RANK_BUILDER_MODELS = new Set([
   "fiiScreening",
@@ -102,22 +122,123 @@ interface RankBuilderRequest {
   preview?: boolean;
 }
 
-/** `minLiquidity` válido: número finito ≥ 0, `null` (incluir ilíquidos) ou `undefined` (limite padrão). */
 /**
- * Completa parâmetros ausentes (`undefined`) dos modelos de ações com os padrões do registro, como o painel faz.
- * Ex.: dividendYield sem `minYield` usava `undefined` e não retornava nada. `null` explícito é preservado.
+ * Completa parâmetros ausentes (`undefined`) dos modelos de ações e de FIIs com os padrões do registro, como o painel
+ * faz. Ex.: dividendYield sem `minYield` usava `undefined` e não retornava nada; fiiDividendYield sem `maxPvp` caía em
+ * 1,3 em vez de 1,1. `null` explícito é preservado.
  * Screening fica de fora: seus filtros são opcionais por definição e o plano gratuito já recebe params restritos.
  */
 function withRegistryDefaults(model: string, params: ModelParams): ModelParams {
   const registryModel = getRankingModel(model);
-  if (!registryModel || registryModel.assetType !== "stock" || model === "screening") return params;
+  if (!registryModel || model === "screening") return params;
+  if (registryModel.assetType !== "stock" && registryModel.assetType !== "fii") return params;
   const raw = (params as { assetTypeFilter?: unknown }).assetTypeFilter;
-  const universe = isRankingUniverse(raw) ? raw : "b3";
+  const universe = registryModel.assetType === "fii" ? "fii" : isRankingUniverse(raw) ? raw : "b3";
   const filled: Record<string, unknown> = { ...(params as Record<string, unknown>) };
   for (const [key, value] of Object.entries(registryModel.defaults(universe))) {
     if (filled[key] === undefined) filled[key] = value;
   }
   return filled as ModelParams;
+}
+
+/** Valor de um parâmetro do painel no formato da UI (frações como percentual). */
+function formatParamValue(field: RankingParamField, value: unknown): string {
+  if (field.kind === "switch") return value ? "ligado" : "desligado";
+  if (field.kind === "select") return field.options.find((option) => option.value === value)?.label ?? String(value);
+  const n = typeof value === "number" ? value : Number(value);
+  if (field.unit === "pct") return formatPct(n);
+  if (field.unit === "multiple") return formatMultiple(n);
+  if (field.unit === "brl") return formatBRLCompact(n);
+  return formatNumber(n);
+}
+
+/**
+ * Nota da linha quando os parâmetros do ranking diferem dos padrões do modelo no universo do ativo: a página do ativo
+ * usa os padrões, então o preço justo pode ser diferente. `null` quando são os padrões.
+ */
+function rankingParamsNote(model: string, assetType: string | null | undefined, params: ModelParams): string | null {
+  if (!isFairValueModel(model)) return null;
+  const registryModel = getRankingModel(model);
+  if (!registryModel) return null;
+  const assetUniverse = universeForAssetType(assetType);
+  const changed = changedRankingParams(registryModel, assetUniverse, params as Record<string, unknown>);
+  if (changed.length === 0) return null;
+  // Ranking misto (B3 + BDRs) com os padrões do próprio ranking: ninguém mexeu nos parâmetros, só o universo difere.
+  const raw = (params as { assetTypeFilter?: unknown }).assetTypeFilter;
+  const requestUniverse: RankingUniverse = isRankingUniverse(raw) ? raw : "b3";
+  if (
+    requestUniverse !== assetUniverse &&
+    assetUniverse === "bdr" &&
+    changedRankingParams(registryModel, requestUniverse, params as Record<string, unknown>).length === 0
+  ) {
+    return "Ranking calculado com os padrões do modelo para ações da B3. A página deste BDR usa os padrões de BDR, então o preço justo pode ser diferente.";
+  }
+  const list = changed.map(({ field, value }) => `${field.label} ${formatParamValue(field, value)}`).join("; ");
+  return `Parâmetros do ranking: ${list}. A página do ativo usa os padrões do modelo, então o preço justo pode ser diferente.`;
+}
+
+function isFairValueModel(model: string): model is FairValueModelKey {
+  return (FAIR_VALUE_MODEL_KEYS as readonly string[]).includes(model);
+}
+
+/** Dia corrente em São Paulo (YYYY-MM-DD): o cache dos sinais de preço vira junto com o pregão. */
+function tradingDayKey(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+}
+
+const PRICE_SIGNALS_TTL_SECONDS = 6 * 60 * 60;
+
+interface PriceSignalRow {
+  ticker: string;
+  sma_days: number;
+  sma200: number | null;
+  last_close: number | null;
+  high52w: number | null;
+}
+
+/**
+ * Sinais de preço de todas as ações e BDRs (MM200 e queda desde a máxima de 52 semanas), numa única consulta agregada
+ * sobre os preços diários, com cache por pregão. Mesmas definições de `priceVsSma` e `drawdownFrom52wHigh`
+ * (src/lib/finance/signals.ts): MM200 exige 200 fechamentos; a máxima considera os 364 dias até o último fechamento.
+ */
+async function loadPriceSignals(): Promise<Record<string, ScreeningPriceSignals>> {
+  return cache.wrap(
+    `screening:price-signals:v1:${tradingDayKey()}`,
+    async () => {
+      // ~14 meses corridos cobrem 200 pregões e as 52 semanas com folga para feriados.
+      const since = new Date(Date.now() - 430 * 86_400_000);
+      const rows = await prisma.$queryRaw<PriceSignalRow[]>`
+        SELECT ticker,
+               COUNT(*) FILTER (WHERE rn <= 200)::int AS sma_days,
+               (AVG(close) FILTER (WHERE rn <= 200))::float8 AS sma200,
+               (MAX(close) FILTER (WHERE rn = 1))::float8 AS last_close,
+               (MAX(close) FILTER (WHERE date >= last_date - 364))::float8 AS high52w
+        FROM (
+          SELECT c.ticker, hp.date, hp.close,
+                 ROW_NUMBER() OVER (PARTITION BY hp.company_id ORDER BY hp.date DESC) AS rn,
+                 MAX(hp.date) OVER (PARTITION BY hp.company_id) AS last_date
+          FROM historical_prices hp
+          JOIN companies c ON c.id = hp.company_id
+          WHERE hp.interval = '1d'
+            AND hp.date >= ${since}
+            AND hp.close > 0
+            AND c.asset_type IN ('STOCK', 'BDR')
+        ) recent
+        GROUP BY ticker
+      `;
+      const signals: Record<string, ScreeningPriceSignals> = {};
+      for (const row of rows) {
+        const last = row.last_close;
+        const hasSma = row.sma_days >= 200 && row.sma200 !== null && row.sma200 > 0;
+        signals[row.ticker] = {
+          pctAboveSma200: hasSma && last !== null ? last / (row.sma200 as number) - 1 : null,
+          drawdown52w: last !== null && row.high52w !== null && row.high52w > 0 ? last / row.high52w - 1 : null,
+        };
+      }
+      return signals;
+    },
+    { ttl: PRICE_SIGNALS_TTL_SECONDS }
+  );
 }
 
 function parseMinLiquidity(value: unknown): number | null | undefined {
@@ -170,21 +291,35 @@ interface ModelValuation {
 }
 
 /**
- * Preços justos de Graham (todos) e de FCD e Gordon (Premium) para a empresa. Grava o upside de cada um em
- * `keyMetrics` (grahamUpside, fcdUpside, gordonUpside) e devolve os que têm preço justo.
+ * Preços justos de Graham (todos) e de FCD e Gordon (Premium) para a empresa, com os mesmos parâmetros da página do
+ * ativo (padrões do registro no universo do ativo). Grava o upside de cada um em `keyMetrics` (grahamUpside,
+ * fcdUpside, gordonUpside) e devolve os que têm preço justo.
  */
 function modelValuations(
   company: CompanyData,
   userIsPremium: boolean,
   keyMetrics: Record<string, number | null>
 ): ModelValuation[] {
+  const universe = universeForAssetType(company.assetType);
   const runs: Array<{ model: string; key: string; run: () => { upside: number | null; fairValue: number | null } }> = [
-    { model: "Graham", key: "grahamUpside", run: () => StrategyFactory.runGrahamAnalysis(company, STRATEGY_CONFIG.graham) },
+    {
+      model: "Graham",
+      key: "grahamUpside",
+      run: () => StrategyFactory.runGrahamAnalysis(company, fairValueModelParams("graham", universe, STRATEGY_CONFIG.graham)),
+    },
   ];
   if (userIsPremium) {
     runs.push(
-      { model: "FCD", key: "fcdUpside", run: () => StrategyFactory.runFCDAnalysis(company, STRATEGY_CONFIG.fcd) },
-      { model: "Gordon", key: "gordonUpside", run: () => StrategyFactory.runGordonAnalysis(company, STRATEGY_CONFIG.gordon) }
+      {
+        model: "FCD",
+        key: "fcdUpside",
+        run: () => StrategyFactory.runFCDAnalysis(company, fairValueModelParams("fcd", universe, STRATEGY_CONFIG.fcd)),
+      },
+      {
+        model: "Gordon",
+        key: "gordonUpside",
+        run: () => StrategyFactory.runGordonAnalysis(company, fairValueModelParams("gordon", universe, STRATEGY_CONFIG.gordon)),
+      }
     );
   }
 
@@ -270,18 +405,19 @@ export async function POST(request: NextRequest) {
       if (!isPremium) {
         const screeningParams = params as ScreeningParams;
 
-        // Verificar se é uma rota de marketing (preset) - identificada pela presença de sortBy
-        // Rotas de marketing têm sortBy definido e devem permitir todos os filtros necessários
-        const isMarketingRoute = !!screeningParams.sortBy;
+        // Rota de marketing (preset): só quando os parâmetros reproduzem um preset conhecido. Um `sortBy` avulso
+        // não libera os filtros Premium; nesse caso vale a mesma lista do modo ferramenta.
+        const preset = findPresetForScreeningParams(screeningParams);
 
-        if (isMarketingRoute) {
-          // Rotas de marketing: permitir todos os filtros necessários para funcionar corretamente
+        if (preset) {
+          // Os filtros vêm do preset no servidor (o que o cliente mandar além disso é descartado)
           // Backend sempre aplica limite de 3 para não-Premium (não confiar no frontend)
           body.params = {
-            ...screeningParams,
+            ...preset.params,
+            includeBDRs: screeningParams.includeBDRs,
             limit: 3,
             useTechnicalAnalysis: false, // Desabilitar análise técnica para não-Premium
-          };
+          } as ScreeningParams;
         } else {
           // Modo ferramenta normal: limitar apenas aos parâmetros de Valuation
           const restrictedParams: ScreeningParams = {
@@ -374,6 +510,8 @@ export async function POST(request: NextRequest) {
     );
 
     let results: RankBuilderResult[] = [];
+    /** Screening com o filtro de queda: empresas que ficaram de fora só por falta de dados. */
+    let screeningInsufficientData: number | null = null;
 
     // Usar body.params se foi modificado (para screening não-Premium), senão usar params original
     const executionParams = withRegistryDefaults(model, (body.params || params) as ModelParams);
@@ -441,26 +579,34 @@ export async function POST(request: NextRequest) {
         );
         break;
       case "screening": {
-        const screeningParams = executionParams as ScreeningParams;
+        const screeningParams = executionParams as ExtendedScreeningParams;
 
         // Verificar status Premium do usuário (pode ser null se deslogado)
         const screeningUser = session?.user?.id ? await getCurrentUser() : null;
         const screeningIsPremium = screeningUser?.isPremium || false;
 
-        // Calcular total ANTES de aplicar limite (para mostrar blur nas rotas de marketing)
-        const totalCount = StrategyFactory.runScreeningRanking(companies, {
-          ...screeningParams,
-          limit: undefined,
-        }).length;
+        // "Queda com fundamentos intactos" precisa dos sinais de preço diários (consulta em lote, cache por pregão).
+        let screeningCompanies: ScreeningCompanyData[] = companies;
+        if (screeningParams.dipWithIntactFundamentals) {
+          const priceSignals = await loadPriceSignals();
+          screeningCompanies = companies.map((company) => ({ ...company, priceSignals: priceSignals[company.ticker] ?? null }));
+        }
+
+        // Uma passada só: o total real (antes do limite) e as empresas sem dados para o filtro de queda.
+        const screened = new ScreeningStrategy().screen(screeningCompanies, screeningParams);
+        screeningInsufficientData = screeningParams.dipWithIntactFundamentals ? screened.insufficientData : null;
 
         // Backend SEMPRE aplica o limite correto baseado no status Premium (não confiar no frontend):
-        // Premium sem limite (usa o padrão da estratégia); não-Premium (incluindo deslogados) sempre 3.
-        results = StrategyFactory.runScreeningRanking(companies, {
-          ...screeningParams,
-          limit: screeningIsPremium ? undefined : 3,
-        });
+        // Premium sem limite; não-Premium (incluindo deslogados) sempre 3, sem as métricas dos modelos Premium.
+        results = screeningIsPremium
+          ? screened.results
+          : screened.results.slice(0, 3).map((result) => {
+              const keyMetrics = { ...(result.key_metrics || {}) };
+              for (const key of PREMIUM_SCREENING_METRICS) delete keyMetrics[key];
+              return { ...result, key_metrics: keyMetrics };
+            });
 
-        (results as any).__screeningTotalCount = totalCount;
+        (results as any).__screeningTotalCount = screened.results.length;
         break;
       }
       case "barsi":
@@ -545,6 +691,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Parâmetros diferentes dos padrões do modelo: a linha explica por que o preço justo difere da página do ativo.
+    results = results.map((result) => {
+      const note = rankingParamsNote(model, companiesByTicker.get(result.ticker)?.assetType, executionParams);
+      return note ? { ...result, rational: `${result.rational}\n\n${note}` } : result;
+    });
+
     // Liquidez em cada linha: volume médio diário (R$/dia) e aviso para ativos abaixo do limite mantidos no ranking.
     results = results.map((result) => {
       const company = companiesByTicker.get(result.ticker);
@@ -605,6 +757,7 @@ export async function POST(request: NextRequest) {
       rational,
       results,
       count: totalCount, // Total real de empresas encontradas (antes do limite)
+      ...(screeningInsufficientData !== null && { insufficientData: screeningInsufficientData }),
     });
   } catch (error) {
     console.error("Erro na API rank-builder:", error);

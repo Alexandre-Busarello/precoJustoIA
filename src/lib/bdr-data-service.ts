@@ -6,6 +6,8 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { cache } from "@/lib/cache-service";
+import { bdrParity, getUsdBrlSnapshot, setUsdBrlSnapshot } from "@/lib/strategies/base-strategy";
 
 // Lista dos principais BDRs da B3
 export const MAIN_BDRS = [
@@ -373,6 +375,45 @@ export class BDRDataService {
    */
   static addSuffixForYahoo(ticker: string): string {
     return ticker.endsWith(".SA") ? ticker : `${ticker}.SA`;
+  }
+
+  /**
+   * Câmbio USD/BRL do dia (Yahoo `BRL=X`), em cache por dia. Também registra o valor para os modelos de preço justo
+   * (`setUsdBrlSnapshot`), que convertem BDRs sem consultar a rede. `null` se o Yahoo não responder.
+   */
+  static async getUsdBrlRate(asOf: Date = new Date()): Promise<number | null> {
+    const day = asOf.toISOString().slice(0, 10);
+    const cacheKey = `bdr:usd-brl:${day}`;
+    try {
+      const cached = await cache.get<number>(cacheKey);
+      if (typeof cached === "number" && cached > 0) {
+        setUsdBrlSnapshot(cached, asOf);
+        return cached;
+      }
+      const quote = await getQuote("BRL=X");
+      const rate = Number(quote?.regularMarketPrice);
+      if (!Number.isFinite(rate) || rate <= 0) return getUsdBrlSnapshot(asOf);
+      await cache.set(cacheKey, rate, { ttl: 86_400 });
+      setUsdBrlSnapshot(rate, asOf);
+      return rate;
+    } catch (error) {
+      console.warn("⚠️ [BDR] Câmbio USD/BRL indisponível:", error instanceof Error ? error.message : error);
+      return getUsdBrlSnapshot(asOf);
+    }
+  }
+
+  /**
+   * Moeda, paridade e câmbio para converter os fundamentos de um BDR para reais por recibo, no formato que os modelos
+   * leem em `financials` (`financialCurrency`, `bdrRatio`, `usdBrl`). Sem mudar o schema: a paridade vem de
+   * `BDR_PARITY` (BDRs com demonstrativos em dólar) e o câmbio de `getUsdBrlRate`. `null` sem paridade conhecida ou câmbio.
+   */
+  static async getBdrConversionInputs(
+    ticker: string
+  ): Promise<{ financialCurrency: "USD"; bdrRatio: number; usdBrl: number } | null> {
+    const bdrRatio = bdrParity(this.cleanTickerForDB(ticker).toUpperCase());
+    if (!bdrRatio) return null;
+    const usdBrl = await this.getUsdBrlRate();
+    return usdBrl ? { financialCurrency: "USD", bdrRatio, usdBrl } : null;
   }
 
   /**

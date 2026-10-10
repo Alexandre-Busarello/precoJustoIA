@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { usePremiumStatus } from '@/hooks/use-premium-status'
 import { useToast } from '@/hooks/use-toast'
 import { formatPct } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 export type StrategySource = 'FIXED_RATE' | 'PORTFOLIO' | 'RANKING' | 'MANUAL_TICKERS'
 
@@ -48,6 +49,9 @@ const PREMIUM_TABS: Array<{ value: Exclude<StrategySource, 'FIXED_RATE'>; label:
     description: 'Digite tickers (ex.: PETR4, VALE3) e estime a rentabilidade com dados de dividendos e crescimento.',
   },
 ]
+
+/** Abas com alvo de toque de 44 px em telas de toque. */
+const TAB_TRIGGER_CLASS = 'pointer-coarse:min-h-11'
 
 const FLOOR_NOTE = 'Piso de simulação: 5% a.a. (hipótese, não garantia).'
 
@@ -195,17 +199,19 @@ export function RentabilitySelector({
         <Tabs value={value} onValueChange={(v) => onStrategyChange(v as StrategySource)}>
           <TooltipProvider>
             <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
-              <TabsTrigger value="FIXED_RATE">Taxa manual</TabsTrigger>
+              <TabsTrigger value="FIXED_RATE" className={TAB_TRIGGER_CLASS}>
+                Taxa manual
+              </TabsTrigger>
               {PREMIUM_TABS.map((tab) =>
                 isPremium ? (
-                  <TabsTrigger key={tab.value} value={tab.value}>
+                  <TabsTrigger key={tab.value} value={tab.value} className={TAB_TRIGGER_CLASS}>
                     {tab.label}
                   </TabsTrigger>
                 ) : (
                   <Tooltip key={tab.value}>
                     <TooltipTrigger asChild>
                       <div className="w-full">
-                        <TabsTrigger value={tab.value} disabled className="w-full">
+                        <TabsTrigger value={tab.value} disabled className={cn(TAB_TRIGGER_CLASS, 'w-full')}>
                           <Lock className="size-4" strokeWidth={1.75} aria-hidden />
                           {tab.label}
                         </TabsTrigger>

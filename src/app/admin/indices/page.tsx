@@ -498,7 +498,7 @@ export default function AdminIndicesPage() {
                   <Label className="text-base font-semibold">Gerar Configuração com IA</Label>
                 </div>
                 <Textarea
-                  placeholder="Ex: Índice de empresas de valor com ROE acima de 15%, top 15 empresas ordenadas por upside, liquidez mínima de R$ 2 milhões..."
+                  placeholder="Ex: Índice de empresas de valor com ROE acima de 15%, top 15 empresas ordenadas por potencial, liquidez mínima de R$ 2 milhões..."
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   rows={3}
@@ -662,7 +662,7 @@ export default function AdminIndicesPage() {
                                 <th className="text-left p-2">Nome</th>
                                 <th className="text-left p-2">Setor</th>
                                 <th className="text-right p-2">Preço</th>
-                                <th className="text-right p-2">Upside</th>
+                                <th className="text-right p-2">Potencial</th>
                                 <th className="text-right p-2">Score</th>
                               </tr>
                             </thead>

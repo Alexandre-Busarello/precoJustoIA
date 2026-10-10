@@ -153,7 +153,7 @@ export function SpecialOfferCheckout() {
           <h1 className="text-xl font-semibold text-foreground">Oferta especial indisponível</h1>
           <p className="mt-2 text-sm text-muted-foreground">Esta condição não está mais ativa. Veja os planos disponíveis.</p>
           <Button className="mt-4" asChild>
-            <Link href="/checkout">Ver planos</Link>
+            <Link href="/planos">Ver planos</Link>
           </Button>
         </div>
       </div>

@@ -130,7 +130,7 @@ export default async function EntendendoScorePage({
   // Não-assinantes: explicação da metodologia e um único CTA, sem o detalhamento
   if (!userIsPremium) {
     const cta = isLoggedIn
-      ? { label: "Assinar Premium", href: "/checkout" }
+      ? { label: "Assinar Premium", href: "/planos" }
       : { label: "Desbloquear com 1 dia grátis", href: "/register" };
 
     return (

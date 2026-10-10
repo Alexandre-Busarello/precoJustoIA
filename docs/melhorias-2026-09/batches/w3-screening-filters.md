@@ -40,3 +40,9 @@ Owner decision (2026-09-29): add four filters to the screening so it uses the sa
 - /screening-acoes: default shows only liquid stocks; toggle "Incluir baixa liquidez" → count increases and badges appear; Bazin ≥ 20% → column values consistent with /acao/<ticker> Bazin card for 2 tickers; PEG ≤ 1 → cyclicals show "—" and are excluded; DY 12m matches the sum of the last 12 months of dividends of one seeded ticker (verify by hand from the local DB); "Queda com fundamentos intactos" preset URL returns 200 and lists only assets matching both conditions, with the "why" line.
 - /screening-fiis: liquidity + DY 12m.
 - Screenshots mobile + desktop, light + dark, anon + premium; plan gating unchanged.
+
+## Carry-over from wave 2 and the owner adjustments (added before launching wave 3)
+- Peter Lynch is now a relative PEG indicator without a price target (fairValue null) and it is NOT applicable to banks/insurers, cyclical commodities, loss-making companies or non-positive growth — show "—" and exclude when the PEG filter is on.
+- Bazin excludes extraordinary dividends by default; Barsi's perennial sectors use sector + industry classification (petroleum is out). Reuse the strategies; do not re-implement.
+- `src/app/api/rank-builder/route.ts` now requires Premium for dividendYield and lowPE and accepts a `preview` flag (do not save history when true) — keep both behaviors intact when touching the screening path.
+- Run every test with `timeout 300`; unit tests must not import Prisma/DB modules.

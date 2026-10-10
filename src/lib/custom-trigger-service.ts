@@ -16,7 +16,7 @@ import {
   averageFullYears,
   removeExtraordinary,
   sumTTM,
-  toDividendEvents,
+  dedupedDividendEvents,
   type DividendEvent,
 } from './finance/dividends';
 import { marginOfSafety } from './valuation-metrics';
@@ -690,7 +690,7 @@ export async function evaluateTrigger(
   const context: TriggerContext = {
     price,
     indicators: { ...indicators, ...overrides.indicators },
-    dividends: overrides.dividends ?? toDividendEvents(dividendRows),
+    dividends: overrides.dividends ?? dedupedDividendEvents(dividendRows),
     fairValues: overrides.fairValues ?? fairValuesFromSnapshot(snapshot?.snapshotData),
     asOf: overrides.asOf,
   };

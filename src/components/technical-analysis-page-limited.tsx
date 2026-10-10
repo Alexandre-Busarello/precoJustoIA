@@ -35,7 +35,7 @@ const PREVIEW_INDICATORS = [
  */
 export default function TechnicalAnalysisPageLimited({ ticker, analysisPath, isLoggedIn }: TechnicalAnalysisPageLimitedProps) {
   const cta = isLoggedIn
-    ? { href: '/checkout', label: 'Assinar o Premium', text: 'A análise técnica completa faz parte do Premium.' }
+    ? { href: '/planos', label: 'Assinar o Premium', text: 'A análise técnica completa faz parte do Premium.' }
     : {
         href: `/register?callbackUrl=${encodeURIComponent(analysisPath)}`,
         label: 'Criar conta grátis',

@@ -27,7 +27,7 @@ MACHINE LIMITS (the owner's PC has 15 GB RAM and freezes when full — this is c
   flock -w 3600 ${S}/heavy.lock npx eslint <files>
   flock -w 3600 ${S}/heavy.lock timeout 300 npx tsx --test <files>   (always with timeout; unit tests must not import Prisma/DB/network modules)
   flock -w 3600 ${S}/heavy.lock npx tsx scripts/local/screenshots.ts ...
-- Waiting for a background command: never use `until ! pgrep -f "<pattern>"` (the loop matches its own command line and never exits). Wait on the PID (`while kill -0 $PID 2>/dev/null; do sleep 5; done`) or use a bracket pattern like `pgrep -f "[s]creenshots.ts"`; always bound waits with a timeout.
+- Waiting for a background command: never use 'until ! pgrep -f "<pattern>"' (the loop matches its own command line and never exits). Wait on the PID ('while kill -0 $PID 2>/dev/null; do sleep 5; done') or use a bracket pattern like 'pgrep -f "[s]creenshots.ts"'; always bound waits with a timeout.
 - Never start another dev server, never run next build, never open extra browsers outside the screenshot script. The dev server on http://localhost:3100 (local Docker DB) is managed by a watchdog that may restart it for memory — if a request fails with connection refused, wait 30 s and retry.
 - Screenshots: pass only the routes you need (--routes) and only the viewports/auth you need; write to ${S}/shots/<your-batch-id>/... Keep outputs out of the repo.
 - DISK: the repo is on a large external disk, but ${S} lives on / (~13 GB free). Screenshots: deviceScaleFactor 1, only the routes/viewports you need, prefer viewport-height captures; after reviewing, DELETE raw captures you no longer need and keep at most a few evidence images per batch. If \`df -h /\` shows less than 2 GB free, delete old dirs under ${S}/shots first (never delete anything outside ${S}). Never write large files inside the repo.
@@ -139,6 +139,9 @@ await Promise.all(Array.from({ length: Math.min(CONC, batches.length) }, async (
     try { results[k] = await runBatch(batches[k]) } catch (e) { results[k] = { id: batches[k].id, status: 'error', error: String(e) } }
   }
 }))
+
+// skipIntegration: rodar um lote por vez e deixar a integração para o fim da onda.
+if (args.skipIntegration) return { wave: args.wave, results }
 
 phase('Integração')
 const integ = await agent(`${CTX}

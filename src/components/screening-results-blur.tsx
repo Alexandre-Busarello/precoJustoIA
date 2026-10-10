@@ -158,7 +158,7 @@ export function ScreeningResultsBlur({ results, totalCount, isPremium, highlight
   } else {
     cta = {
       text: "Assinar Premium",
-      href: "/checkout",
+      href: "/planos",
       description: "Assine o Premium para ver a lista completa e usar todos os filtros do screening.",
     }
   }

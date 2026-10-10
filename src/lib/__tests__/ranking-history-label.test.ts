@@ -140,3 +140,13 @@ test('não agrupa dias diferentes (horário de Brasília), modelos diferentes ne
     ]
   )
 })
+
+test('com mais itens além da janela buscada, a última linha vira mínimo ("×N+")', () => {
+  const same = (id: string, hour: number) =>
+    entry({ id, createdAt: `2026-10-09T${String(hour).padStart(2, '0')}:00:00.000Z`, params: { a: 1 } })
+  const window = [same('1', 18), same('2', 17), same('3', 16)]
+  const capped = collapseRankingHistory(window, { hasMore: true })
+  assert.deepEqual(capped.map((row) => [row.id, row.repeatCount, row.repeatCountIsMinimum]), [['1', 3, true]])
+  const complete = collapseRankingHistory(window)
+  assert.equal(complete[0].repeatCountIsMinimum, undefined)
+})

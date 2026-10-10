@@ -14,6 +14,7 @@ import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisSection from '@/components/technical-analysis-section'
 import MarketSentimentSection from '@/components/market-sentiment-section'
+import { buildMarketSentimentView } from '@/lib/market-sentiment-view'
 import { TrackingAssetView } from '@/components/tracking-asset-view'
 import { AnonLimitCTA } from '@/components/anon-limit-cta'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -515,8 +516,7 @@ export default async function FiiPage({ params }: PageProps) {
 
             <MarketSentimentSection
               ticker={ticker}
-              youtubeAnalysis={serializedYoutubeAnalysis}
-              userIsPremium={canViewFullContent}
+              sentiment={buildMarketSentimentView(serializedYoutubeAnalysis, ticker, canViewFullContent)}
             />
 
             <TechnicalAnalysisSection

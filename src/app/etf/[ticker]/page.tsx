@@ -338,7 +338,7 @@ export default async function EtfPage({ params }: PageProps) {
   ]
 
   const lockedCta = isLoggedIn
-    ? { label: 'Assinar o Premium', href: '/checkout' }
+    ? { label: 'Assinar o Premium', href: '/planos' }
     : { label: 'Criar conta grátis', href: '/register' }
 
   const holdingRows = visibleHoldings.map((h) => {

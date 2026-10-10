@@ -105,7 +105,8 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
   const hasActiveFilters = !!startDate || !!endDate || selectedModel !== 'all'
   const activeFilterCount = [startDate, endDate, selectedModel !== 'all' ? selectedModel : ''].filter(Boolean).length
   // Execuções repetidas (mesmos parâmetros, mesmo dia) viram uma linha com "×N"
-  const rows = collapseRankingHistory(history)
+  // Só 50 itens são buscados: se há mais, a contagem da última linha é um mínimo ("×50+"), não um total
+  const rows = collapseRankingHistory(history, { hasMore: totalCount > history.length })
   const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE))
   const page = Math.min(currentPage, totalPages)
   const startIndex = (page - 1) * ITEMS_PER_PAGE
@@ -281,7 +282,10 @@ export function RankingHistorySection({ onLoadRanking, refreshTrigger }: Ranking
                         {item.repeatCount > 1 && (
                           <Badge variant="neutral" className="tabular-nums">
                             ×{item.repeatCount}
-                            <span className="sr-only"> execuções iguais neste dia</span>
+                            {item.repeatCountIsMinimum ? '+' : ''}
+                            <span className="sr-only">
+                              {item.repeatCountIsMinimum ? ' ou mais execuções iguais neste dia' : ' execuções iguais neste dia'}
+                            </span>
                           </Badge>
                         )}
                       </span>

@@ -195,6 +195,20 @@ export function quickConfigName(input: {
   return `${subject} · ${period}`
 }
 
+/**
+ * Nome automático com período no fim ("PETR4 · 5 anos") acompanha o período depois de "Ajustar configuração":
+ * 10 anos vira "PETR4 · 10 anos"; período quebrado vira "PETR4 · 30 meses". Nomes sem esse sufixo ficam como estão.
+ */
+export function refreshAutoPeriodName(name: string, startDate: Date, endDate: Date): string {
+  const match = /^(.+) · \d+ (?:anos?|meses|mês)$/.exec(name)
+  if (!match) return name
+  const months =
+    (endDate.getUTCFullYear() - startDate.getUTCFullYear()) * 12 + (endDate.getUTCMonth() - startDate.getUTCMonth())
+  if (!Number.isFinite(months) || months <= 0) return name
+  const period = months % 12 === 0 ? yearsLabel(months / 12) : `${months} ${months === 1 ? 'mês' : 'meses'}`
+  return `${match[1]} · ${period}`
+}
+
 /** Rótulo da origem na faixa do resultado ("Simulação rápida de …"). */
 export function quickSourceLabel(source: QuickBacktestSource, tickers: string[], sourceLabel?: string): string {
   const label = cleanSourceLabel(sourceLabel)

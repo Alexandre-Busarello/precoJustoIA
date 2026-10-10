@@ -14,6 +14,7 @@ import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisLink from '@/components/technical-analysis-link'
 import MarketSentimentSection from '@/components/market-sentiment-section'
+import { buildMarketSentimentView } from '@/lib/market-sentiment-view'
 import { AutoSubscribeHandler } from '@/components/auto-subscribe-handler'
 import { RelatedCompanies } from '@/components/related-companies'
 import { TrackingAssetView } from '@/components/tracking-asset-view'
@@ -825,8 +826,7 @@ export default async function TickerPage({ params }: PageProps) {
               </div>
               <MarketSentimentSection
                 ticker={ticker}
-                youtubeAnalysis={serializedYoutubeAnalysis}
-                userIsPremium={canViewFullContent}
+                sentiment={buildMarketSentimentView(serializedYoutubeAnalysis, ticker, canViewFullContent)}
               />
             </section>
 

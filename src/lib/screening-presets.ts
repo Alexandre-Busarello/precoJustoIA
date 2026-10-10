@@ -72,23 +72,23 @@ export const SCREENING_PRESETS: { [S in ScreeningPresetSlug]: ScreeningPreset<S>
       dividaLiquidaEbitdaFilter: { enabled: true, max: 2.5 },
       overallScoreFilter: { enabled: true, min: 50 }, // Score geral mínimo para excluir empresas com fundamentos fracos
       assetTypeFilter: 'b3',
-      sortBy: 'upside_desc', // Maior Upside primeiro (empresas com maior potencial de valorização)
+      sortBy: 'upside_desc', // Maior potencial primeiro
     },
   },
   'oportunidades-desconto-excessivo': {
     slug: 'oportunidades-desconto-excessivo',
     title: 'Desconto vs. preço justo de Graham',
     shortTitle: 'Desconto vs. preço justo',
-    hook: 'Ações com upside de pelo menos 40% até o preço justo estimado pela fórmula de Graham, P/VP abaixo de 0,8, ROE acima de 10% e score geral mínimo de 60. O preço justo é uma estimativa.',
-    description: 'Ações da B3 negociadas com desconto em relação ao preço justo de Graham: upside de pelo menos 40%, P/VP abaixo de 0,8 e ROE acima de 10%.',
-    keywords: ['deep value', 'desconto', 'valor justo', 'upside', 'oportunidades', 'ações baratas'],
+    hook: 'Ações com potencial de pelo menos 40% até o preço justo estimado pela fórmula de Graham, P/VP abaixo de 0,8, ROE acima de 10% e score geral mínimo de 60. O preço justo é uma estimativa.',
+    description: 'Ações da B3 negociadas com desconto em relação ao preço justo de Graham: potencial de pelo menos 40%, P/VP abaixo de 0,8 e ROE acima de 10%.',
+    keywords: ['deep value', 'desconto', 'valor justo', 'potencial', 'oportunidades', 'ações baratas'],
     params: {
       grahamUpsideFilter: { enabled: true, min: 40 }, // Upside > 40%
       pvpFilter: { enabled: true, max: 0.80 },
       roeFilter: { enabled: true, min: 0.10 },
       overallScoreFilter: { enabled: true, min: 60 }, // Score geral mínimo para excluir empresas com fundamentos fracos
       assetTypeFilter: 'b3',
-      sortBy: 'upside_desc', // Maior Upside primeiro
+      sortBy: 'upside_desc', // Maior potencial primeiro
     },
   },
   'ranking-formula-magica-b3': {

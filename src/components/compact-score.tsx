@@ -43,12 +43,13 @@ export default function CompactScore({ overallScore, isPremium, isLoggedIn, tick
         <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
           <Lock className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
           <span>
-            {isLoggedIn ? 'Disponível no Premium.' : 'Disponível com conta grátis.'}{' '}
+            {/* Score geral é do Premium: a conta grátis não libera; o cadastro começa com 1 dia de teste (mesma copy do cabeçalho) */}
+            Disponível no Premium.{' '}
             <Link
               href={isLoggedIn ? '/planos' : '/register'}
               className="whitespace-nowrap py-3 font-medium text-brand underline-offset-4 hover:underline"
             >
-              {isLoggedIn ? 'Ver planos' : 'Criar conta grátis'}
+              {isLoggedIn ? 'Ver planos' : 'Desbloquear com 1 dia grátis'}
             </Link>
           </span>
         </p>

@@ -414,6 +414,7 @@ export const METODOLOGIA_INTRO_SECTIONS = [
 
 export const METODOLOGIA_OUTRO_SECTIONS = [
   { id: 'onde-aportar', label: 'Onde aportar' },
+  { id: 'backtest', label: 'Backtest' },
   { id: 'limitacoes', label: 'Limitações gerais' },
 ] as const
 

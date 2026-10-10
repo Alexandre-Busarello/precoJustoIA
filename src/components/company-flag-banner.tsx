@@ -70,7 +70,7 @@ export function CompanyFlagBanner({ flag, ticker, isPremium }: CompanyFlagBanner
                 estão disponíveis no Premium.
               </p>
               <Button asChild size="sm" variant="outline" className="mt-3">
-                <Link href="/checkout">Ver detalhes no Premium</Link>
+                <Link href="/planos">Ver detalhes no Premium</Link>
               </Button>
             </>
           )}

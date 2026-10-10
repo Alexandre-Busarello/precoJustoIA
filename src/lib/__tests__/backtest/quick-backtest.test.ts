@@ -16,6 +16,7 @@ import {
   quickLandingUrl,
   quickPeriod,
   quickSourceLabel,
+  refreshAutoPeriodName,
   resolveQuickSettings,
   safeReturnPath,
 } from '@/lib/backtest/quick-backtest'
@@ -228,4 +229,15 @@ test('URL de pouso no resultado e na configuração', () => {
   assert.equal(quickLandingUrl({ configId: 'cfg1', view: 'configure', source: 'ranking' }), '/backtest?view=configure&configId=cfg1')
   const unsafe = new URL(quickLandingUrl({ configId: 'c', view: 'results', source: 'asset', returnTo: '//evil.com' }), 'http://x')
   assert.equal(unsafe.searchParams.get('back'), null)
+})
+
+test('refreshAutoPeriodName: o nome automático acompanha o período ajustado', () => {
+  const d = (y: number, m: number) => new Date(Date.UTC(y, m, 1))
+  assert.equal(refreshAutoPeriodName('PETR4 · 5 anos', d(2016, 9), d(2026, 9)), 'PETR4 · 10 anos')
+  assert.equal(refreshAutoPeriodName('PETR4 · 5 anos', d(2021, 9), d(2026, 9)), 'PETR4 · 5 anos')
+  assert.equal(refreshAutoPeriodName('PETR4, VALE3 · 5 anos', d(2024, 3), d(2026, 9)), 'PETR4, VALE3 · 30 meses')
+  assert.equal(refreshAutoPeriodName('Carteira Dividendos · 30 meses', d(2025, 9), d(2026, 9)), 'Carteira Dividendos · 1 ano')
+  // Nome escolhido pelo usuário, sem o sufixo de período, fica como está
+  assert.equal(refreshAutoPeriodName('Minha estratégia', d(2016, 9), d(2026, 9)), 'Minha estratégia')
+  assert.equal(refreshAutoPeriodName('Top 5 · Graham · 09/10/2026', d(2016, 9), d(2026, 9)), 'Top 5 · Graham · 09/10/2026')
 })

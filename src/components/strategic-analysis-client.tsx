@@ -317,7 +317,7 @@ export function StockSummaryHeader({
           fairValue: fairLocked,
           score: scoreLocked,
           cta: isLoggedIn
-            ? { label: 'Desbloquear o score', href: '/checkout' }
+            ? { label: 'Desbloquear o score', href: '/planos' }
             : { label: 'Desbloquear com 1 dia grátis', href: '/register' },
         }}
       />

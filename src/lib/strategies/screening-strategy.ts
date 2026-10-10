@@ -427,7 +427,7 @@ export class ScreeningStrategy extends AbstractStrategy<ScreeningParams> {
       // Se o valor existe, verifica se está no range
       const inRange = grahamUpside !== null ? this.isValueInRange(grahamUpside, params.grahamUpsideFilter) : false;
       criteria.push({
-        label: 'Graham Upside',
+        label: 'Potencial Graham',
         value: inRange,
         description: `${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}${params.grahamUpsideFilter.min !== undefined && params.grahamUpsideFilter.max !== undefined ? ' e ' : ''}${params.grahamUpsideFilter.max !== undefined ? `≤ ${params.grahamUpsideFilter.max.toFixed(0)}%` : ''} (atual: ${grahamUpside !== null ? grahamUpside.toFixed(1) + '%' : 'N/A - reprovado'})`
       });
@@ -801,7 +801,7 @@ Configure ao menos um filtro nas categorias disponíveis para fazer o screening.
       advancedFilters.push(`• **Score Geral**: ${params.overallScoreFilter.min !== undefined ? `≥ ${params.overallScoreFilter.min.toFixed(0)}` : ''}${params.overallScoreFilter.min !== undefined && params.overallScoreFilter.max !== undefined ? ' e ' : ''}${params.overallScoreFilter.max !== undefined ? `≤ ${params.overallScoreFilter.max.toFixed(0)}` : ''}`);
     }
     if (params.grahamUpsideFilter?.enabled) {
-      advancedFilters.push(`• **Graham Upside**: ${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}${params.grahamUpsideFilter.min !== undefined && params.grahamUpsideFilter.max !== undefined ? ' e ' : ''}${params.grahamUpsideFilter.max !== undefined ? `≤ ${params.grahamUpsideFilter.max.toFixed(0)}%` : ''}`);
+      advancedFilters.push(`• **Potencial Graham**: ${params.grahamUpsideFilter.min !== undefined ? `≥ ${params.grahamUpsideFilter.min.toFixed(0)}%` : ''}${params.grahamUpsideFilter.min !== undefined && params.grahamUpsideFilter.max !== undefined ? ' e ' : ''}${params.grahamUpsideFilter.max !== undefined ? `≤ ${params.grahamUpsideFilter.max.toFixed(0)}%` : ''}`);
     }
     if (advancedFilters.length > 0) {
       sections.push({ title: '**Desconto e qualidade**', filters: advancedFilters });

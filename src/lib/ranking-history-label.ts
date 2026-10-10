@@ -203,14 +203,18 @@ function dayKey(date: string | Date): string {
 export type CollapsedRankingHistory<T> = T & {
   /** Quantas execuções iguais a linha representa (1 = sem repetição). */
   repeatCount: number
+  /** A última linha pode continuar além da janela buscada: o total real é "repeatCount ou mais". */
+  repeatCountIsMinimum?: boolean
 }
 
 /**
  * Agrupa execuções consecutivas do mesmo modelo, com os mesmos parâmetros, no mesmo dia (horário de Brasília).
- * Mantém a primeira da sequência (a mais recente, na ordem da API) e soma as repetições.
+ * Mantém a primeira da sequência (a mais recente, na ordem da API) e soma as repetições. Com `hasMore` (a API tem
+ * mais itens do que os buscados), a última linha é marcada como mínimo: a contagem dela pode estar cortada no limite.
  */
 export function collapseRankingHistory<T extends Pick<RankingHistoryEntry, 'model' | 'params' | 'createdAt'>>(
-  entries: readonly T[]
+  entries: readonly T[],
+  options: { hasMore?: boolean } = {}
 ): CollapsedRankingHistory<T>[] {
   const collapsed: CollapsedRankingHistory<T>[] = []
   let lastKey: string | null = null
@@ -224,5 +228,7 @@ export function collapseRankingHistory<T extends Pick<RankingHistoryEntry, 'mode
       lastKey = key
     }
   }
+  const last = collapsed[collapsed.length - 1]
+  if (options.hasMore && last) last.repeatCountIsMinimum = true
   return collapsed
 }

@@ -130,7 +130,7 @@ export default function TechnicalAnalysisSection({ ticker, userIsPremium }: Tech
                   Gráfico de preços em linha e candlestick, RSI e oscilador estocástico fazem parte do Premium.
                 </p>
                 <Button asChild className="shrink-0">
-                  <Link href="/checkout">Assinar o Premium</Link>
+                  <Link href="/planos">Assinar o Premium</Link>
                 </Button>
               </div>
             ) : loading ? (

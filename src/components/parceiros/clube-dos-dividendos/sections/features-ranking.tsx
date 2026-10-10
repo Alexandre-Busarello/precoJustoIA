@@ -125,7 +125,7 @@ export function FeaturesRankingSection() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-lg font-semibold text-foreground tabular-nums">{row.price}</p>
-                  <p className="text-xs font-semibold text-positive">Upside {row.upside}</p>
+                  <p className="text-xs font-semibold text-positive">Potencial {row.upside}</p>
                 </div>
               </div>
 

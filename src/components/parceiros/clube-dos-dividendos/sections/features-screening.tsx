@@ -102,7 +102,7 @@ export function FeaturesScreeningSection() {
                     <th className="px-4 py-3">Ativo</th>
                     <th className="px-4 py-3">Preço</th>
                     <th className="px-4 py-3">P. Justo</th>
-                    <th className="px-4 py-3">Upside</th>
+                    <th className="px-4 py-3">Potencial</th>
                     <th className="px-4 py-3">DY</th>
                     <th className="px-4 py-3">ROE</th>
                   </tr>

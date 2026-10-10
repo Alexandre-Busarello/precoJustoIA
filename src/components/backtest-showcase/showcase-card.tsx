@@ -78,7 +78,13 @@ export function ShowcaseCard({ item, block, viewer, className }: ShowcaseCardPro
             className="bg-card p-3"
             label="Valor final"
             value={formatBRL(item.finalValue, { digits: 0 })}
-            caption={<span className="tabular-nums">aportado {formatBRL(item.totalInvested, { digits: 0 })}</span>}
+            caption={
+              // Curto para caber em 320 px sem cortar o valor (a legenda do Stat trunca): "de R$ 60.000"
+              <span className="tabular-nums">
+                de {formatBRL(item.totalInvested, { digits: 0 })}
+                <span className="sr-only"> aportados</span>
+              </span>
+            }
           />
           <Stat
             size="sm"

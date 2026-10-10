@@ -435,7 +435,25 @@ export class AdaptiveBacktestService {
    */
   async saveBacktestResult(configId: string, result: BacktestResult | AdaptiveBacktestResult): Promise<void> {
     const { safeWrite } = await import('@/lib/prisma-wrapper');
-    // Criar novo resultado sempre (permitir múltiplos resultados por configuração)
+    // Rodar de novo a mesma configuração com os mesmos dados não acumula linhas idênticas: remove os resultados
+    // anteriores desta configuração com as mesmas métricas (na escala das colunas) e grava o mais recente.
+    // Resultados diferentes (outro período, outros valores, dados novos) continuam no histórico.
+    const round = (value: number, digits: number) => Number(Number(value).toFixed(digits));
+    await safeWrite(
+      'prune-duplicate-backtest-results',
+      () => prisma.backtestResult.deleteMany({
+        where: {
+          backtestId: configId,
+          totalMonths: result.monthlyReturns.length,
+          totalReturn: round(result.totalReturn, 4),
+          annualizedReturn: round(result.annualizedReturn, 4),
+          maxDrawdown: round(result.maxDrawdown, 4),
+          totalInvested: round(result.totalInvested, 2),
+          finalValue: round(result.finalValue, 2),
+        }
+      }),
+      ['backtest_results']
+    );
     await safeWrite(
       'save-backtest-result-adaptive',
       () => prisma.backtestResult.create({

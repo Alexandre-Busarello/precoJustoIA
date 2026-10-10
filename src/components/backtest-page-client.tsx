@@ -378,7 +378,7 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
       const response = await fetch('/api/backtest/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(savedId ? { configId: savedId, params } : { params })
+        body: JSON.stringify(savedId ? { configId: savedId, params, name: config.name } : { params })
       });
 
       if (!response.ok) {
@@ -400,8 +400,9 @@ export function BacktestPageClient({ exampleMonth }: BacktestPageClientProps = {
         configId,
       });
 
-      if (configId && configId !== savedIdOf(config)) {
-        setCurrentConfig({ ...config, id: configId } as BacktestConfig);
+      const configName: string | null = typeof data.configName === 'string' ? data.configName : null;
+      if (configId && (configId !== savedIdOf(config) || (configName && configName !== config.name))) {
+        setCurrentConfig({ ...config, id: configId, ...(configName ? { name: configName } : {}) } as BacktestConfig);
       }
 
       const transactions: any[] = [];

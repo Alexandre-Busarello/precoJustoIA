@@ -40,7 +40,7 @@ export function AllocationLocked({ reason, preview, isLoggedIn }: AllocationLock
   const cta =
     reason === 'login' || !isLoggedIn
       ? { label: 'Desbloquear com 1 dia grátis', href: '/register?callbackUrl=/onde-aportar' }
-      : { label: 'Desbloquear no Premium', href: '/checkout' }
+      : { label: 'Desbloquear no Premium', href: '/planos' }
   const rows = Math.max(3, Math.min(5, preview.allocations.length))
   return (
     <section aria-labelledby="bloqueado-titulo" className="space-y-4">

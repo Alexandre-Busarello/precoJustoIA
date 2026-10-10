@@ -274,7 +274,7 @@ export function OndeAportarClient({ isLoggedIn, isPremium, portfolios, radarCoun
                 !isPremium && (
                   <p className="text-xs text-muted-foreground">
                     Limite de {FREE_MAX_TICKERS} ativos no plano gratuito.{' '}
-                    <Link href={isLoggedIn ? '/checkout' : '/register?callbackUrl=/onde-aportar'} className="text-brand underline-offset-4 hover:underline">
+                    <Link href={isLoggedIn ? '/planos' : '/register?callbackUrl=/onde-aportar'} className="text-brand underline-offset-4 hover:underline">
                       Desbloquear com 1 dia grátis
                     </Link>
                   </p>

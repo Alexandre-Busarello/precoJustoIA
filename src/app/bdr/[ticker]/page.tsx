@@ -13,6 +13,7 @@ import FinancialIndicators from '@/components/financial-indicators'
 import ComprehensiveFinancialView from '@/components/comprehensive-financial-view'
 import TechnicalAnalysisLink from '@/components/technical-analysis-link'
 import MarketSentimentSection from '@/components/market-sentiment-section'
+import { buildMarketSentimentView } from '@/lib/market-sentiment-view'
 import { FollowAssetCard } from '@/components/asset/follow-asset-card'
 import { AssetSectionNav, type AssetSection } from '@/components/asset/asset-section-nav'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -707,8 +708,7 @@ export default async function BdrPage({ params }: PageProps) {
               </div>
               <MarketSentimentSection
                 ticker={ticker}
-                youtubeAnalysis={serializedYoutubeAnalysis}
-                userIsPremium={canViewFullContent}
+                sentiment={buildMarketSentimentView(serializedYoutubeAnalysis, ticker, canViewFullContent)}
               />
             </section>
 

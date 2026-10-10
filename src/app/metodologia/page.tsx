@@ -78,12 +78,7 @@ const TOC: TocEntry[] = [
     label: group.tocLabel,
     children: group.docs.map((doc) => ({ id: doc.id, label: doc.name })),
   })),
-  // "Backtest" fica entre "Onde aportar" e "Limitações gerais"
-  ...METODOLOGIA_OUTRO_SECTIONS.flatMap((section) =>
-    section.id === "limitacoes"
-      ? [{ id: "backtest", label: "Backtest" }, { id: section.id, label: section.label }]
-      : [{ id: section.id, label: section.label }]
-  ),
+  ...METODOLOGIA_OUTRO_SECTIONS.map((section) => ({ id: section.id, label: section.label })),
 ]
 
 const tocLinkClass =
